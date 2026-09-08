@@ -9,6 +9,12 @@ export interface TaskLog {
   createdBy: string
 }
 
+export interface Subtask {
+  id: string
+  title: string
+  done: boolean
+}
+
 export interface WorkTask {
   id: string
   title: string
@@ -26,6 +32,8 @@ export interface WorkTask {
   createdAt: string
   ts: number
   completedAt?: string
+  timeSpentMinutes?: number
+  subtasks?: Subtask[]
   history: TaskLog[]
 }
 
@@ -40,6 +48,8 @@ export interface TaskFields {
   category: string
   tags: string[]
   note: string
+  timeSpentMinutes?: number
+  subtasks?: Subtask[]
 }
 
 export interface UserLite {
@@ -55,7 +65,7 @@ export interface TaskFilterState {
   priority: string
   category: string
   sort: string
-  view: 'list' | 'kanban'
+  view: 'list' | 'kanban' | 'gantt'
 }
 
 export const taskStatusLabels: Record<TaskStatus, string> = {

@@ -1,13 +1,116 @@
-export type Status = 'درخواست پرونده' | 'پرونده پرسنلی' | 'کارت عادی' | 'سه‌برگی عادی' | 'تکمیل اطلاعات' | 'پرونده فعال' | 'ارسال به مرکز' | 'بررسی مرکز' | 'تأیید شده' | 'رد شده' | 'ارسال به شرکت' | 'پایان کار'
-export type Page = 'dashboard' | 'persons' | 'workflow' | 'activities' | 'users' | 'reports' | 'settings' | 'tasks'
-export type Permission = 'view_persons' | 'create_person' | 'edit_person' | 'change_status' | 'view_activities' | 'manage_users' | 'view_reports' | 'delete_person'
+export type Status =
+  | 'درخواست پرونده'
+  | 'پرونده پرسنلی'
+  | 'کارت عادی'
+  | 'سه‌برگی عادی'
+  | 'تکمیل اطلاعات'
+  | 'پرونده فعال'
+  | 'ارسال به مرکز'
+  | 'بررسی مرکز'
+  | 'تأیید شده'
+  | 'رد شده'
+  | 'ارسال به شرکت'
+  | 'پایان کار'
+
+export type Page =
+  | 'dashboard'
+  | 'persons'
+  | 'workflow'
+  | 'activities'
+  | 'users'
+  | 'reports'
+  | 'settings'
+  | 'tasks'
+
+export type Permission =
+  | 'view_persons'
+  | 'create_person'
+  | 'edit_person'
+  | 'change_status'
+  | 'view_activities'
+  | 'manage_users'
+  | 'view_reports'
+  | 'delete_person'
+
 export type Role = string
 export type RoleDef = { id: string; title: string; permissions: Permission[]; builtin?: boolean }
 export type PersonFilter = Status | 'همه وضعیت‌ها' | 'ارجاع‌شده به من' | 'سررسید نزدیک'
-export type Person = { id: string; firstName: string; lastName: string; nationalId: string; birthDate: string; fatherName: string; status: Status; updatedAt: string; updatedBy: string; photo?: string; tags?: string[]; ts?: number; assignee?: string; deadline?: string }
-export type Activity = { id: string; personId: string; personName: string; action: string; previousStatus: Status | null; newStatus: Status | null; rejectionReason: string | null; createdAt: string; createdBy: string; createdByRole: Role; ts?: number }
-export type Audit = { id: string; action: string; target: string; createdAt: string; createdBy: string }
-export type User = { name: string; username: string; role: Role; title: string; tone: string; password: string; active: boolean; permissions: Permission[]; photo?: string }
+
+export type Person = {
+  id: string
+  firstName: string
+  lastName: string
+  nationalId: string
+  birthDate: string
+  fatherName: string
+  status: Status
+  updatedAt: string
+  updatedBy: string
+  photo?: string
+  tags?: string[]
+  ts?: number
+  assignee?: string
+  deadline?: string
+}
+
+export type Activity = {
+  id: string
+  personId: string
+  personName: string
+  action: string
+  previousStatus: Status | null
+  newStatus: Status | null
+  rejectionReason: string | null
+  createdAt: string
+  createdBy: string
+  createdByRole: Role
+  ts?: number
+}
+
+export type Audit = {
+  id: string
+  action: string
+  target: string
+  createdAt: string
+  createdBy: string
+}
+
+export type User = {
+  name: string
+  username: string
+  role: Role
+  title: string
+  tone: string
+  password: string
+  active: boolean
+  permissions: Permission[]
+  photo?: string
+}
+
 export type FontKey = 'vazir' | 'estedad' | 'samim' | 'shabnam' | 'lalezar'
-export type AppSettings = { appName: string; twoFactor: boolean; auditLog: boolean; autoLogout: boolean; autoLogoutMins: number; font: FontKey }
-export type Note = { id: string; personId: string; author: string; role: Role; title: string; text: string; createdAt: string; edited?: boolean; replyTo?: { author: string; text: string }; mentions?: string[] }
+export type ThemeMode = 'light' | 'dark' | 'midnight' | 'emerald' | 'cobalt'
+
+export type AppSettings = {
+  appName: string
+  twoFactor: boolean
+  auditLog: boolean
+  autoLogout: boolean
+  autoLogoutMins: number
+  font: FontKey
+  theme?: ThemeMode
+  soundEnabled?: boolean
+  notificationsEnabled?: boolean
+}
+
+export type Note = {
+  id: string
+  personId: string
+  author: string
+  role: Role
+  title: string
+  text: string
+  createdAt: string
+  edited?: boolean
+  replyTo?: { author: string; text: string }
+  mentions?: string[]
+}
