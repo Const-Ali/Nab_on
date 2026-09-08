@@ -1,75 +1,66 @@
-# React + TypeScript + Vite
+# سامانه ناب | مدیریت پرونده‌های سازمانی
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+اپلیکیشن وب تک‌صفحه‌ای (SPA) فارسی و راست‌چین برای مدیریت پرونده‌ها، گردش‌کار (Workflow)، کاربران و دسترسی‌ها، گزارش‌گیری و مدیریت کارهای شخصی.
 
-Currently, two official plugins are available:
+## تکنولوژی‌ها
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **React 19 + TypeScript 6 + Vite 8**
+- **Tailwind CSS 3.4** (دارک‌مود با `[data-theme='dark']`)
+- بدون وابستگی ران‌تایم خارجی — فونت‌های ایرانی به‌صورت خودمیزبان در `public/fonts/`
+- ذخیره‌سازی سمت مرورگر با `localStorage` (بدون بک‌اند)
 
-## React Compiler
+## شروع سریع
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install      # نصب وابستگی‌ها
+npm run dev      # سرور توسعه روی http://localhost:5173
+npm run build    # بیلد production در dist/
+npm run preview  # پیش‌نمایش بیلد
+npm run lint     # بررسی ESLint
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+## ورود دمو
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+| کاربر | نام کاربری | رمز | نقش |
+|------|-----------|------|------|
+| احمد محمدی | `admin` | `admin` | مدیر سیستم (دسترسی کامل) |
+| مریم رضایی | `assistant` | `assistant` | کارشناس پرونده |
+| محمد رضایی | `reviewer` | `reviewer` | کارشناس مرکز |
+| سارا کریمی | `operator` | `1234` | اپراتور (غیرفعال) |
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## ساختار پروژه
 
 ```
+src/
+├── App.tsx                  # شل برنامه: سایدبار، هدر، مسیریابی صفحات، state سراسری
+├── types.ts                 # همه‌ی تایپ‌های مشترک (Person, User, Note, ...)
+├── app-lib.ts               # داده‌ی اولیه + منطق خالص (workflow, گزارش، فونت‌ها)
+├── shared.ts                # توابع کمکی (localStorage, تقویم شمسی, نرمال‌سازی متن)
+├── shared-ui.tsx            # Icon, Avatar, Heading, MiniCalendar, BirthDateField
+├── index.css                # دستورات Tailwind + ریست‌های پایه
+├── components/
+│   ├── ui.ts                # اتم‌های طراحی (رشته‌های یوتیلیتی مشترک تیلویند)
+│   ├── pages/               # Login, Dashboard, Persons, WorkflowBoard,
+│   │                        # Activities, Users, Reports, Settings
+│   ├── modals/              # PersonModal, CreateModal, EditModal, RoleModal,
+│   │                        # AddUserModal, EditUserModal, ProfileModal, SearchModal
+│   └── common/              # Badge, Skeleton, LiveClock, PhotoField, PrintPerson,
+│                            # PrintReport
+└── tasks/                   # ماژول مدیریت کارهای شخصی (ذخیره‌سازی مجزا به‌ازای هر کاربر)
+    ├── WorkManagementPage.tsx
+    ├── types.ts / utils.ts
+    └── components/          # WorkDashboard, TaskFilters, TaskList, TaskKanban,
+                             # TaskCard, TaskDetails, TaskForm
+```
+
+## قابلیت‌ها
+
+- ✅ فارسی/راست‌چین کامل با ۵ فونت ایرانی انتخاب‌پذیر (وزیرمتن، استعداد، سمیم، شبنم، لاله‌زار)
+- ✅ حالت تاریک (تاگل در هدر)
+- ✅ گردش‌کار ۱۲ مرحله‌ای پرونده با کانبان درگ‌اند‌دراپ
+- ✅ نقش‌ها و دسترسی‌های دانه‌ای (۸ سطح مجوز)
+- ✅ یادداشت‌ها، منشن، تاریخچه‌ی تغییرات و Audit Log
+- ✅ تقویم شمسی داخلی (بدون کتابخانه)
+- ✅ گزارش‌ها و خروجی CSV / چاپ
+- ✅ داشبورد کارهای شخصی مستقل برای هر کاربر
+- ✅ PWA (Service Worker + مانیفست)

@@ -1,56 +1,461 @@
-import { useMemo, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { jalaliMonthNames, jalaliParts, load, normalizeText, nowStamp, nowTs, save, uid } from './shared'
+import { Avatar, Icon, MiniCalendar } from './shared-ui'
+import { workflow, nextStatuses, deadlineLeft, initialPeople, initialActivities, initialAudit, initialUsers, initialNotes, defaultRoles, userByRole, defaultSettings, normalizeUser, activityMonth, downloadCsv, applySavedFont } from './app-lib'
+import type { Status, Page, Permission, Role, RoleDef, Person, Activity, Audit, User, Note } from './types'
+import { Login } from './components/pages/Login'
+import { Dashboard } from './components/pages/Dashboard'
+import { Persons } from './components/pages/Persons'
+import { WorkflowBoard } from './components/pages/WorkflowBoard'
+import { Activities } from './components/pages/Activities'
+import { Users } from './components/pages/Users'
+import { Reports } from './components/pages/Reports'
+import { Settings } from './components/pages/Settings'
+import { PersonModal } from './components/modals/PersonModal'
+import { CreateModal } from './components/modals/CreateModal'
+import { RoleModal } from './components/modals/RoleModal'
+import { AddUserModal } from './components/modals/AddUserModal'
+import { EditModal } from './components/modals/EditModal'
+import { EditUserModal } from './components/modals/EditUserModal'
+import { LiveClock } from './components/common/LiveClock'
+import { ProfileModal } from './components/modals/ProfileModal'
+import { SearchModal } from './components/modals/SearchModal'
+import { PrintPerson } from './components/common/PrintPerson'
+import { Skeleton } from './components/common/Skeleton'
+import { PrintReport } from './components/common/PrintReport'
+import WorkManagementPage from './tasks/WorkManagementPage'
 import './App.css'
 
-type Status = 'درخواست پرونده' | 'پرونده پرسنلی' | 'کارت عادی' | 'سه‌برگی عادی' | 'تکمیل اطلاعات' | 'پرونده فعال' | 'ارسال به مرکز' | 'بررسی مرکز' | 'تأیید شده' | 'رد شده' | 'ارسال به شرکت' | 'پایان کار'
-type Page = 'dashboard' | 'persons' | 'workflow' | 'activities' | 'users' | 'reports' | 'settings'
-type Permission = 'view_persons' | 'create_person' | 'change_status' | 'view_activities' | 'manage_users' | 'view_reports'
-type Person = { id:string; firstName:string; lastName:string; nationalId:string; birthDate:string; fatherName:string; status:Status; updatedAt:string; updatedBy:string }
-type Activity = { id:string; personId:string; personName:string; action:string; previousStatus:Status|null; newStatus:Status|null; rejectionReason:string|null; createdAt:string; createdBy:string; createdByUserId:string }
-type Audit = { id:string; action:string; target:string; createdAt:string; createdBy:string }
+export default function App() {
+  const [session, setSession] = useState<{ username: string } | null>(() => {
+    const raw = load<{ username?: string; role?: Role } | null>('nab:session', null)
+    if (!raw) return null
+    if (raw.username) return { username: raw.username }
+    const legacy: Record<string, string> = { admin: 'admin', assistant: 'assistant', reviewer: 'reviewer' }
+    return raw.role && legacy[raw.role] ? { username: legacy[raw.role] } : null
+  })
+  const [page, setPage] = useState<Page>('dashboard')
+  const [people, setPeople] = useState<Person[]>(() => load('nab:people', initialPeople))
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<Status | 'همه وضعیت‌ها' | 'ارجاع‌شده به من' | 'سررسید نزدیک'>('همه وضعیت‌ها')
+  const [tagFilter, setTagFilter] = useState('همه برچسب‌ها')
+  const [sortBy, setSortBy] = useState('default')
+  const [selected, setSelected] = useState<Person | null>(null)
+  const [editing, setEditing] = useState<Person | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [userModalOpen, setUserModalOpen] = useState(false)
+  const [userEditing, setUserEditing] = useState<User | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [notifPermission, setNotifPermission] = useState<string>(() => typeof Notification === 'undefined' ? 'unsupported' : Notification.permission)
+  const [toast, setToast] = useState<{ msg: string; undo?: () => void } | null>(null)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [calOpen, setCalOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => load('nab:collapsed', false))
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [reportPrint, setReportPrint] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => load('nab:theme', 'light'))
+  const [booting, setBooting] = useState(false)
+  const toastTimer = useRef<number | undefined>(undefined)
+  const idleTimer = useRef<number | undefined>(undefined)
+  const prevEventTs = useRef(0)
 
-const workflow:Status[]=['درخواست پرونده','پرونده پرسنلی','کارت عادی','سه‌برگی عادی','تکمیل اطلاعات','پرونده فعال','ارسال به مرکز','بررسی مرکز','تأیید شده','رد شده','ارسال به شرکت','پایان کار']
-const nextStatuses:Partial<Record<Status,Status[]>>={
-  'درخواست پرونده':['پرونده پرسنلی'],'پرونده پرسنلی':['کارت عادی'],'کارت عادی':['سه‌برگی عادی'],'سه‌برگی عادی':['تکمیل اطلاعات'],
-  'تکمیل اطلاعات':['پرونده فعال'],'پرونده فعال':['ارسال به مرکز'],'ارسال به مرکز':['بررسی مرکز'],
-  'بررسی مرکز':['تأیید شده','رد شده'],'تأیید شده':['ارسال به شرکت'],'رد شده':['تکمیل اطلاعات'],'ارسال به شرکت':['پایان کار'],
+  const [activities, setActivities] = useState<Activity[]>(() => load('nab:activities', initialActivities))
+  const [audit, setAudit] = useState<Audit[]>(() => load('nab:audit', initialAudit))
+  const [users, setUsers] = useState<User[]>(() => load<User[]>('nab:users', initialUsers).map(normalizeUser))
+  const [roles, setRoles] = useState<RoleDef[]>(() => load('nab:roles', defaultRoles))
+  const [roleModalOpen, setRoleModalOpen] = useState(false)
+  const [notes, setNotes] = useState<Note[]>(() => load('nab:notes', initialNotes))
+  const [lastSeen, setLastSeen] = useState<Record<string, number>>(() => load('nab:lastseen', {}))
+
+  useEffect(() => save('nab:people', people), [people])
+  useEffect(() => save('nab:activities', activities), [activities])
+  useEffect(() => save('nab:audit', audit), [audit])
+  useEffect(() => save('nab:users', users), [users])
+  useEffect(() => save('nab:roles', roles), [roles])
+  useEffect(() => save('nab:notes', notes), [notes])
+  useEffect(() => save('nab:lastseen', lastSeen), [lastSeen])
+  useEffect(() => { document.documentElement.dataset.theme = theme; save('nab:theme', theme) }, [theme])
+  useEffect(() => applySavedFont(), [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearchOpen(true) } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  useEffect(() => {
+    if (!reportPrint) return
+    const t = window.setTimeout(() => { window.print(); setReportPrint(false) }, 60)
+    return () => window.clearTimeout(t)
+  }, [reportPrint])
+  useEffect(() => {
+    if (!booting) return
+    const t = window.setTimeout(() => setBooting(false), 700)
+    return () => window.clearTimeout(t)
+  }, [booting])
+  useEffect(() => {
+    if (!session?.username) return
+    const autoLogout = { ...defaultSettings, ...load('nab:settings', defaultSettings) }.autoLogout
+    const mins = { ...defaultSettings, ...load('nab:settings', defaultSettings) }.autoLogoutMins
+    if (!autoLogout) return
+    const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart']
+    const reset = () => {
+      window.clearTimeout(idleTimer.current)
+      idleTimer.current = window.setTimeout(() => {
+        setSession(null)
+        setPage('dashboard')
+        localStorage.removeItem('nab:session')
+        setToast({ msg: 'به دلیل عدم فعالیت از سامانه خارج شدید' })
+      }, mins * 60 * 1000)
+    }
+    events.forEach(e => window.addEventListener(e, reset, { passive: true }))
+    reset()
+    return () => { events.forEach(e => window.removeEventListener(e, reset)); window.clearTimeout(idleTimer.current) }
+  }, [session?.username])
+
+  const currentUser = session ? users.find(u => u.username === session.username) ?? null : null
+  const role: Role = currentUser?.role ?? 'admin'
+  const meName = currentUser?.name ?? userByRole[role].name
+  const me = { name: meName, title: currentUser?.title ?? roles.find(r => r.id === role)?.title ?? role }
+  const can = (permission: Permission) => (currentUser?.permissions ?? roles.find(r => r.id === role)?.permissions ?? []).includes(permission)
+  const today = new Date().toLocaleDateString('fa-IR')
+  const todayActivities = useMemo(() => activities.filter(a => a.createdAt.startsWith(today)), [activities, today])
+  const seenAt = lastSeen[role] ?? 0
+  const unread = activities.filter(a => a.ts !== undefined && a.ts > seenAt && a.createdBy !== meName)
+  const unreadIds = new Set(unread.map(a => a.id))
+  const mentionNames = users.map(u => u.name)
+  const activityDayKeys = new Set(activities.filter(a => a.ts).map(a => { const j = jalaliParts(new Date(a.ts as number)); return `${j.y}-${j.m}-${j.d}` }))
+  const trend = useMemo(() => {
+    const todayJ = jalaliParts(new Date())
+    const base = todayJ.y * 12 + (todayJ.m - 1)
+    const months = Array.from({ length: 6 }, (_, i) => { const idx = base - 5 + i; return { y: Math.floor(idx / 12), m: (idx % 12) + 1 } })
+    const labels = months.map(({ m }) => jalaliMonthNames[m - 1])
+    const values = months.map(({ y, m }) => activities.filter(a => { const am = activityMonth(a); return am && am.y === y && am.m === m }).length)
+    return { labels, values }
+  }, [activities])
+  const enableBrowserNotif = async () => { if ('Notification' in window) setNotifPermission(await Notification.requestPermission()) }
+  useEffect(() => {
+    const othersLatest = activities.filter(a => a.ts && a.createdBy !== meName).reduce((m, a) => Math.max(m, a.ts ?? 0), 0)
+    if (othersLatest > prevEventTs.current && prevEventTs.current !== 0 && notifPermission === 'granted' && Date.now() - othersLatest < 15000) {
+      const fresh = activities.find(a => a.ts === othersLatest)
+      if (fresh) new Notification('رویداد جدید در سامانه ناب', { body: `${fresh.action} · ${fresh.personName}` })
+    }
+    prevEventTs.current = othersLatest
+  }, [activities, meName, notifPermission])
+  const markAllRead = () => setLastSeen(cur => ({ ...cur, [role]: Date.now() }))
+  const toggleNotifs = () => { if (notifOpen) markAllRead(); setNotifOpen(open => !open) }
+  const filtered = useMemo(() => {
+    const q = normalizeText(query)
+    const list = people.filter(p => (!q || normalizeText(`${p.firstName} ${p.lastName} ${p.nationalId}`).includes(q)) && (filter === 'سررسید نزدیک' ? (deadlineLeft(p) ?? 99) <= 7 : filter === 'ارجاع‌شده به من' ? p.assignee === session?.username : filter === 'همه وضعیت‌ها' || p.status === filter) && (tagFilter === 'همه برچسب‌ها' || (p.tags ?? []).includes(tagFilter)))
+    const sorted = [...list]
+    if (sortBy === 'name') sorted.sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'fa'))
+    else if (sortBy === 'status') sorted.sort((a, b) => workflow.indexOf(a.status) - workflow.indexOf(b.status))
+    else if (sortBy === 'recent') sorted.sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
+    return sorted
+  }, [people, query, filter, tagFilter, sortBy, session])
+
+  const notify = (message: string, undo?: () => void) => {
+    setToast({ msg: message, undo })
+    window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(null), undo ? 6000 : 2400)
+  }
+  const logAudit = (action: string, target: string, actor?: string) =>
+    setAudit(cur => [{ id: uid('AUD'), action, target, createdAt: nowStamp(), createdBy: actor ?? me.name }, ...cur])
+
+  const handleLogin = (user: User, remember: boolean) => {
+    setSession({ username: user.username })
+    setBooting(true)
+    const nearCount = people.filter(p => { const l = deadlineLeft(p); return l !== null && l <= 3 }).length
+    if (nearCount) window.setTimeout(() => notify(`${nearCount.toLocaleString('fa-IR')} پرونده به سررسید نزدیک یا گذشته‌اند — از فیلتر «سررسید نزدیک» ببینید`), 900)
+    if (remember) save('nab:session', { username: user.username })
+    else localStorage.removeItem('nab:session')
+    logAudit('ورود به سامانه', user.title, user.name)
+  }
+  const handleLogout = () => {
+    logAudit('خروج از سامانه', me.title)
+    setSession(null)
+    setPage('dashboard')
+    localStorage.removeItem('nab:session')
+  }
+
+  const updateStatus = (person: Person, next: Status, reason: string | null) => {
+    const now = nowStamp()
+    const tsNow = nowTs()
+    setPeople(cur => cur.map(p => p.id === person.id ? { ...p, status: next, updatedAt: now, updatedBy: me.name, ts: tsNow } : p))
+    setActivities(cur => [{ id: uid('ACT'), personId: person.id, personName: `${person.firstName} ${person.lastName}`, action: next === 'رد شده' ? 'رد پرونده' : 'تغییر وضعیت پرونده', previousStatus: person.status, newStatus: next, rejectionReason: reason, createdAt: now, createdBy: me.name, createdByRole: role, ts: Date.now() }, ...cur])
+    logAudit(next === 'رد شده' ? 'رد پرونده' : 'تغییر وضعیت پرونده', `${person.firstName} ${person.lastName}`)
+    setSelected(null)
+    notify('وضعیت و تاریخچه پرونده ثبت شد', () => {
+      setPeople(cur => cur.map(p => p.id === person.id ? { ...p, status: person.status, ts: person.ts } : p))
+      logAudit('بازگردانی تغییر وضعیت', `${person.firstName} ${person.lastName} → ${person.status}`)
+    })
+  }
+  const createPerson = (p: Person) => {
+    setPeople(cur => [{ ...p, ts: Date.now() }, ...cur])
+    setActivities(cur => [{ id: uid('ACT'), personId: p.id, personName: `${p.firstName} ${p.lastName}`, action: 'ایجاد پرونده جدید', previousStatus: null, newStatus: p.status, rejectionReason: null, createdAt: nowStamp(), createdBy: me.name, createdByRole: role, ts: Date.now() }, ...cur])
+    logAudit('ایجاد فرد', `${p.firstName} ${p.lastName}`)
+    setCreateOpen(false)
+    notify('فرد جدید با موفقیت ثبت شد')
+  }
+  const updatePerson = (updated: Person, changedFields: string[]) => {
+    const now = nowStamp()
+    const fresh = { ...updated, updatedAt: now, updatedBy: me.name, ts: nowTs() }
+    setPeople(cur => cur.map(p => p.id === fresh.id ? fresh : p))
+    setActivities(cur => [{ id: uid('ACT'), personId: fresh.id, personName: `${fresh.firstName} ${fresh.lastName}`, action: 'ویرایش اطلاعات فرد', previousStatus: null, newStatus: fresh.status, rejectionReason: changedFields.join('، '), createdAt: now, createdBy: me.name, createdByRole: role, ts: Date.now() }, ...cur])
+    logAudit('ویرایش اطلاعات فرد', `${fresh.firstName} ${fresh.lastName} (${changedFields.join('، ')})`)
+    setEditing(null)
+    setSelected(fresh)
+    notify('اطلاعات فرد به‌روزرسانی شد')
+  }
+  const addNote = (personId: string, text: string, replyTo?: { author: string; text: string }) => {
+    const person = people.find(p => p.id === personId)
+    setNotes(cur => [...cur, { id: uid('NOTE'), personId, author: me.name, role, title: me.title, text, createdAt: nowStamp(), replyTo, mentions: mentionNames.filter(n => text.includes(`@${n}`)) }])
+    if (person) setActivities(cur => [{ id: uid('ACT'), personId, personName: `${person.firstName} ${person.lastName}`, action: 'ثبت یادداشت', previousStatus: null, newStatus: person.status, rejectionReason: text.length > 60 ? `${text.slice(0, 60)}…` : text, createdAt: nowStamp(), createdBy: me.name, createdByRole: role, ts: Date.now() }, ...cur])
+    notify('یادداشت شما ثبت شد')
+  }
+  const updateNote = (noteId: string, text: string) => {
+    setNotes(cur => cur.map(n => n.id === noteId ? { ...n, text, edited: true } : n))
+    notify('یادداشت ویرایش شد')
+  }
+  const deleteNote = (noteId: string) => {
+    const note = notes.find(n => n.id === noteId)
+    if (!note || !window.confirm('این یادداشت حذف شود؟')) return
+    setNotes(cur => cur.filter(n => n.id !== noteId))
+    const person = people.find(p => p.id === note.personId)
+    logAudit('حذف یادداشت', person ? `${person.firstName} ${person.lastName}` : note.personId)
+    notify('یادداشت حذف شد')
+  }
+  const saveProfile = (name: string, photo: string, newPassword: string) => {
+    setUsers(cur => cur.map(u => u.username === session?.username ? { ...u, name, photo: photo || undefined, password: newPassword || u.password } : u))
+    logAudit('ویرایش پروفایل', name)
+    setProfileOpen(false)
+    notify('پروفایل ذخیره شد')
+  }
+  const dropPerson = (personId: string, target: Status) => {
+    const person = people.find(p => p.id === personId)
+    if (!person || person.status === target) return
+    const allowed = nextStatuses[person.status] ?? []
+    if (target === 'رد شده' && allowed.includes('رد شده')) { setSelected(person); notify('برای رد پرونده، علت رد را در فرم وارد کنید'); return }
+    if (!allowed.includes(target)) { notify(`انتقال از «${person.status}» به «${target}» مجاز نیست`); return }
+    updateStatus(person, target, null)
+  }
+  const assignPerson = (person: Person, username: string) => {
+    const target = users.find(u => u.username === username)
+    const prevAssignee = person.assignee ? users.find(u => u.username === person.assignee)?.name ?? person.assignee : '—'
+    const assignee = username || undefined
+    setPeople(cur => cur.map(p => (p.id === person.id ? { ...p, assignee } : p)))
+    setSelected(cur => (cur && cur.id === person.id ? { ...cur, assignee } : cur))
+    setActivities(cur => [{ id: uid('ACT'), personId: person.id, personName: `${person.firstName} ${person.lastName}`, action: 'ارجاع پرونده', previousStatus: null, newStatus: person.status, rejectionReason: target ? `ارجاع: ${prevAssignee} ← ${target.name}` : `ارجاع: ${prevAssignee} ← حذف`, createdAt: nowStamp(), createdBy: me.name, createdByRole: role, ts: nowTs() }, ...cur])
+    logAudit('ارجاع پرونده', `${person.firstName} ${person.lastName} ← ${target ? target.name : 'بدون ارجاع'}`)
+    notify(target ? `پرونده به ${target.name} ارجاع شد` : 'ارجاع پرونده حذف شد')
+  }
+  const addRole = (r: RoleDef) => {
+    setRoles(cur => [...cur, r])
+    setRoleModalOpen(false)
+    logAudit('ایجاد نقش', r.title)
+    notify(`نقش «${r.title}» ایجاد شد`)
+  }
+  const deleteRole = (r: RoleDef) => {
+    if (r.builtin) return
+    if (users.some(u => u.role === r.id)) { notify('این نقش به کاربری تخصیص داده شده و قابل حذف نیست'); return }
+    if (!window.confirm(`نقش «${r.title}» حذف شود؟`)) return
+    setRoles(cur => cur.filter(x => x.id !== r.id))
+    logAudit('حذف نقش', r.title)
+    notify('نقش حذف شد')
+  }
+  const bulkStatus = (ids: string[], target: Status) => {
+    let moved = 0
+    ids.forEach(id => {
+      const person = people.find(p => p.id === id)
+      if (person && (nextStatuses[person.status] ?? []).includes(target)) { updateStatus(person, target, null); moved++ }
+    })
+    if (moved) notify(`${moved.toLocaleString('fa-IR')} پرونده به مرحله «${target}» منتقل شد${ids.length - moved ? ` (${(ids.length - moved).toLocaleString('fa-IR')} پرونده در این مرحله مجاز نبود)` : ''}`)
+    else notify('هیچ‌کدام از پرونده‌های انتخابی قابل انتقال به این مرحله نیستند')
+  }
+  const bulkDelete = (ids: string[]) => {
+    if (!window.confirm(`${ids.length.toLocaleString('fa-IR')} پرونده حذف شود؟ تا چند ثانیه قابل بازگردانی است.`)) return
+    const backupPeople = people.filter(p => ids.includes(p.id))
+    const backupNotes = notes.filter(n => ids.includes(n.personId))
+    setPeople(cur => cur.filter(p => !ids.includes(p.id)))
+    setNotes(cur => cur.filter(n => !ids.includes(n.personId)))
+    logAudit('حذف گروهی', `${ids.length.toLocaleString('fa-IR')} پرونده`)
+    notify('پرونده‌های انتخاب‌شده حذف شدند', () => {
+      setPeople(cur => [...backupPeople, ...cur])
+      setNotes(cur => [...cur, ...backupNotes])
+    })
+  }
+  const deletePerson = (person: Person) => {
+    if (!window.confirm(`پرونده «${person.firstName} ${person.lastName}» حذف شود؟ تا چند ثانیه قابل بازگردانی است.`)) return
+    const backupNotes = notes.filter(n => n.personId === person.id)
+    setPeople(cur => cur.filter(p => p.id !== person.id))
+    setNotes(cur => cur.filter(n => n.personId !== person.id))
+    logAudit('حذف پرونده', `${person.firstName} ${person.lastName}`)
+    setSelected(null)
+    notify('پرونده حذف شد', () => {
+      setPeople(cur => [person, ...cur])
+      setNotes(cur => [...cur, ...backupNotes])
+    })
+  }
+  const addUser = (user: User) => {
+    setUsers(cur => [...cur, user])
+    logAudit('ایجاد کاربر', `${user.name} (${user.username})`)
+    setUserModalOpen(false)
+    notify('کاربر جدید ایجاد شد')
+  }
+  const deleteUser = (user: User) => {
+    if (user.username === session?.username) { notify('نمی‌توانید کاربر فعلی را حذف کنید'); return }
+    if (user.role === 'admin' && users.filter(u => u.role === 'admin' && u.active).length <= 1) { notify('حداقل یک مدیر فعال باید باقی بماند'); return }
+    if (!window.confirm(`کاربر «${user.name}» حذف شود؟`)) return
+    setUsers(cur => cur.filter(u => u.username !== user.username))
+    logAudit('حذف کاربر', `${user.name} (${user.username})`)
+    notify('کاربر حذف شد')
+  }
+  const updateUserAccess = (updated: User, changes: string[]) => {
+    const previous = users.find(u => u.username === updated.username)
+    if (!previous) return
+    const activeAdmins = users.filter(u => u.role === 'admin' && u.active)
+    if (previous.role === 'admin' && (updated.role !== 'admin' || !updated.active) && activeAdmins.length <= 1) { notify('حداقل یک مدیر فعال باید باقی بماند'); return }
+    if (updated.username === session?.username && !updated.active) { notify('نمی‌توانید حساب خودتان را غیرفعال کنید'); return }
+    setUsers(cur => cur.map(u => u.username === updated.username ? updated : u))
+    logAudit('ویرایش دسترسی کاربر', `${updated.name} (${changes.join('، ')})`)
+    setUserEditing(null)
+    notify('دسترسی کاربر به‌روزرسانی شد')
+  }
+
+  if (!session || !currentUser) return <Login users={users} onLogin={handleLogin} />
+
+  const nav: [Page, string, string][] = [['dashboard', 'داشبورد', 'grid'], ['persons', 'مدیریت افراد', 'users'], ['workflow', 'گردش‌کار پرونده', 'workflow'], ['activities', 'گزارش فعالیت‌ها', 'activity'], ['users', 'کاربران و دسترسی‌ها', 'shield'], ['reports', 'گزارش‌ها و Audit Log', 'activity'], ['settings', 'تنظیمات', 'settings']]
+  const visibleNav = nav.filter(([id]) => id === 'dashboard' || id === 'persons' || (id === 'workflow' && can('change_status')) || (id === 'activities' && can('view_activities')) || (id === 'users' && can('manage_users')) || (id === 'reports' && can('view_reports')) || id === 'settings')
+  const headerDate = new Date().toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+  // «کارهای من» یک صفحه‌ی کاملاً جداگانه است — بدون سایدبار و بدون هدر اصلی سامانه
+  if (page === 'tasks') {
+    return (
+      <div className="min-h-screen bg-[#f5f7fb] text-ink dark:bg-[#0c1120] dark:text-[#dfe5f2]" dir="rtl">
+        <div className="sticky top-0 z-[4] border-b border-line bg-white dark:border-[#232c45] dark:bg-[#151d30]">
+          <div className="mx-auto flex max-w-[1180px] items-center justify-between gap-[10px] px-[16px] py-[11px]">
+            <div className="flex items-center gap-[10px]">
+              <span className="grid h-[34px] w-[34px] place-items-center rounded-[10px] bg-gradient-to-br from-[#6f82ff] to-[#4357dd] text-[19px] font-extrabold text-white">ن</span>
+              <span>
+                <b className="block text-[13px] text-ink dark:text-[#eef2fb]">کارهای من</b>
+                <small className="mt-[2px] block text-[9px] text-faint">{me.name} — فضای خصوصی کارها</small>
+              </span>
+            </div>
+            <div className="flex items-center gap-[8px]">
+              <button
+                type="button"
+                className="grid h-[34px] w-[34px] place-items-center rounded-[9px] border border-line2 bg-white text-[#8994a8] hover:text-pri dark:border-dkline2 dark:bg-dksurf dark:text-[#c6cede]"
+                onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+                title={theme === 'dark' ? 'حالت روشن' : 'حالت تیره'}
+                aria-label="تغییر تم"
+              >
+                <Icon name={theme === 'dark' ? 'sun' : 'moon'} className="h-[17px] w-[17px]" />
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-[7px] rounded-[9px] bg-pri px-[14px] py-[9px] text-[10.5px] font-semibold text-white shadow-[0_7px_16px_rgba(82,103,245,.2)]"
+                onClick={() => setPage('dashboard')}
+              >
+                بازگشت به سامانه ناب →
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="mx-auto max-w-[1180px] px-[16px] py-[24px]">
+          <WorkManagementPage users={users} sessionUsername={session.username} sessionName={me.name} />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`app ${collapsed ? 'collapsed' : ''}`} dir="rtl">
+      <aside className="sidebar">
+        <div className="brand"><b>ن</b><span><strong>ناب</strong><small>سامانه مدیریت پرونده</small></span></div>
+        <button type="button" className={`collapse-btn ${collapsed ? 'flip' : ''}`} title={collapsed ? 'باز کردن منو' : 'جمع کردن منو'} onClick={() => setCollapsed(c => { save('nab:collapsed', !c); return !c })}>«</button>
+        <small className="menu-title">منوی اصلی</small>
+        {visibleNav.map(([id, label, icon]) => (
+          <button className={`nav ${page === id ? 'active' : ''}`} key={id} onClick={() => { setPage(id); if (id === 'activities') markAllRead() }}>
+            <Icon name={icon} /><span>{label}</span>
+            {id === 'activities' && unread.length > 0 && <em>{unread.length.toLocaleString('fa-IR')}</em>}
+          </button>
+        ))}
+        <div className="side-bottom">
+          <div className="help">؟<span>نیاز به راهنمایی دارید؟<small>راهنمای سامانه را ببینید</small></span></div>
+          <div className="profile-row">
+            <button className="profile" onClick={() => setProfileOpen(true)}><Avatar text={me.name[0]} tone="green" src={currentUser?.photo} /><span><b>{me.name}</b><small>{me.title} · پروفایل</small></span></button>
+            <button className="exit-btn" title="خروج از حساب" onClick={handleLogout}><Icon name="logout" /></button>
+          </div>
+        </div>
+      </aside>
+      <main>
+        <header>
+          <div className="crumb">
+            <span>خانه / <b>{nav.find(item => item[0] === page)?.[1]}</b></span>
+            <div className="cal-wrap">
+              <button type="button" className="date-btn" onClick={() => setCalOpen(open => !open)} title="نمایش تقویم شمسی">
+                <time>{headerDate}</time>
+                <LiveClock />
+              </button>
+              {calOpen && <MiniCalendar activityDays={activityDayKeys} />}
+            </div>
+          </div>
+          <button type="button" className="search-hint" onClick={() => setSearchOpen(true)} title="جستجوی سراسری (Ctrl+K)"><Icon name="search" /> جستجو... <kbd>Ctrl+K</kbd></button>
+          <button
+            type="button"
+            className="flex items-center gap-[7px] rounded-[9px] bg-pri px-[13px] py-[8px] text-[10px] font-semibold text-white shadow-[0_7px_16px_rgba(82,103,245,.18)]"
+            onClick={() => setPage('tasks')}
+            title="ورود به صفحه‌ی جداگانه‌ی کارهای من"
+          >
+            <Icon name="task" className="h-[15px] w-[15px]" />
+            کارهای من
+          </button>
+          <div className="head-user">
+            <button type="button" className="theme-btn" onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} title={theme === 'dark' ? 'حالت روشن' : 'حالت تیره'} aria-label="تغییر تم">
+              <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+            </button>
+            <div className="notif-wrap">
+              <button className="bell-btn" onClick={toggleNotifs} aria-label="اعلان‌ها">
+                <Icon name="bell" />
+                {unread.length > 0 && <span className="badge-count">{unread.length.toLocaleString('fa-IR')}</span>}
+              </button>
+              {notifOpen && (
+                <div className="notif-pop">
+                  <div className="notif-head"><h4>آخرین رویدادها</h4>{unread.length > 0 && <em>{unread.length.toLocaleString('fa-IR')} خوانده‌نشده</em>}{notifPermission === 'default' && <button type="button" className="notif-enable" onClick={() => void enableBrowserNotif()}>🔔 اعلان مرورگر</button>}</div>
+                  {activities.slice(0, 6).map(a => (
+                    <div className={`notif-item ${unreadIds.has(a.id) ? 'unread' : ''}`} key={a.id}>
+                      <b>{a.action}{a.rejectionReason?.includes(`@${meName}`) && <em className="mention-tag">منشن شما</em>}</b>
+                      <small>{a.personName} · {a.createdBy}<br />{a.createdAt}</small>
+                    </div>
+                  ))}
+                  {!activities.length && <div className="notif-empty">رویدادی ثبت نشده است</div>}
+                </div>
+              )}
+            </div>
+            <Avatar text={me.name[0]} tone="green" src={currentUser?.photo} />
+            <span><b>{me.name}</b><small>{me.title}</small></span>
+          </div>
+        </header>
+        <div className="content">
+          {booting && <Skeleton />}
+          {!booting && page === 'dashboard' && <Dashboard people={people} activities={activities} trend={trend} canCreate={can('create_person')} onCreate={() => setCreateOpen(true)} onPersons={() => setPage('persons')} onSelect={setSelected} greeting={`صبح بخیر، ${me.name.split(' ')[0]} 👋`} />}
+          {!booting && page === 'persons' && <Persons people={filtered} query={query} filter={filter} tagFilter={tagFilter} sortBy={sortBy} setQuery={setQuery} setFilter={setFilter} setTagFilter={setTagFilter} setSortBy={setSortBy} canCreate={can('create_person')} canDelete={can('delete_person')} onCreate={() => setCreateOpen(true)} onSelect={setSelected} onBulkStatus={bulkStatus} onBulkDelete={bulkDelete} />}
+          {!booting && page === 'workflow' && <WorkflowBoard people={people} canChange={can('change_status')} onSelect={setSelected} onDropPerson={dropPerson} />}
+          {!booting && page === 'activities' && <Activities activities={activities} onExport={() => { downloadCsv('activities.csv', ['شناسه', 'فرد', 'اقدام', 'وضعیت قبلی', 'وضعیت جدید', 'علت رد', 'زمان', 'کاربر'], activities.map(a => [a.id, a.personName, a.action, a.previousStatus, a.newStatus, a.rejectionReason, a.createdAt, a.createdBy])); notify('خروجی اکسل دانلود شد') }} />}
+          {!booting && page === 'users' && <Users users={users} roles={roles} currentUser={currentUser} selfUsername={session.username} onAdd={() => setUserModalOpen(true)} onEdit={u => setUserEditing(u)} onDelete={deleteUser} onAddRole={() => setRoleModalOpen(true)} onDeleteRole={deleteRole} />}
+          {!booting && page === 'reports' && <Reports people={people} activities={activities} audit={audit} todayCount={todayActivities.length} onExport={() => { downloadCsv('audit-log.csv', ['شناسه', 'اقدام', 'هدف', 'زمان', 'کاربر'], audit.map(a => [a.id, a.action, a.target, a.createdAt, a.createdBy])); notify('خروجی گزارش دانلود شد') }} onPrint={() => setReportPrint(true)} />}
+          {!booting && page === 'settings' && <Settings onSaved={() => { logAudit('ویرایش تنظیمات', 'تنظیمات سامانه'); notify('تنظیمات ذخیره شد'); applySavedFont() }} />}
+        </div>
+      </main>
+      {selected && !editing && <PersonModal person={selected} notes={notes.filter(n => n.personId === selected.id)} history={activities.filter(a => a.personId === selected.id)} meName={me.name} usersList={users} onAssign={assignPerson} onEditNote={updateNote} onDeleteNote={deleteNote} canChange={can('change_status')} canDelete={can('delete_person')} canEdit={can('edit_person')} onClose={() => setSelected(null)} onUpdate={updateStatus} onDelete={deletePerson} onEdit={p => setEditing(p)} onAddNote={addNote} />}
+      {reportPrint && <PrintReport people={people} activities={activities} printedBy={meName} />}
+      {selected && !editing && <PrintPerson person={selected} notes={notes.filter(n => n.personId === selected.id)} history={activities.filter(a => a.personId === selected.id)} />}
+      {editing && <EditModal person={editing} existing={people} onClose={() => setEditing(null)} onSave={updatePerson} />}
+      {createOpen && can('create_person') && <CreateModal existing={people} creatorName={me.name} onClose={() => setCreateOpen(false)} onCreate={createPerson} />}
+      {userModalOpen && <AddUserModal existing={users} roles={roles} onClose={() => setUserModalOpen(false)} onCreate={addUser} />}
+      {roleModalOpen && <RoleModal existing={roles} onClose={() => setRoleModalOpen(false)} onCreate={addRole} />}
+      {userEditing && <EditUserModal user={userEditing} roles={roles} isSelf={session.username === userEditing.username} onClose={() => setUserEditing(null)} onSave={updateUserAccess} />}
+      {profileOpen && currentUser && <ProfileModal user={currentUser} onClose={() => setProfileOpen(false)} onSave={saveProfile} onLogout={handleLogout} />}
+      {searchOpen && <SearchModal people={people} activities={activities} notes={notes} onClose={() => setSearchOpen(false)} onPickPerson={p => { setSearchOpen(false); setPage('persons'); setSelected(p) }} />}
+      {toast && <div className="toast">✓ {toast.msg}{toast.undo && <button type="button" className="toast-undo" onClick={() => { toast.undo?.(); window.clearTimeout(toastTimer.current); setToast(null) }}>بازگردانی</button>}</div>}
+    </div>
+  )
 }
-const tones:Record<Status,string>={'درخواست پرونده':'blue','پرونده پرسنلی':'indigo','کارت عادی':'purple','سه‌برگی عادی':'purple','تکمیل اطلاعات':'amber','پرونده فعال':'green','ارسال به مرکز':'cyan','بررسی مرکز':'orange','تأیید شده':'green','رد شده':'red','ارسال به شرکت':'pink','پایان کار':'slate'}
-const seedNames=[['علی','رضایی','محمد'],['سارا','احمدی','حسن'],['محمد','کریمی','علی'],['نگار','موسوی','رضا'],['امیر','حسینی','کاظم'],['مریم','اکبری','جواد'],['رضا','مرادی','احمد'],['نیلوفر','قاسمی','حسین'],['مهدی','صادقی','علی'],['پریسا','یوسفی','محمود'],['حامد','نوری','حسن'],['الهام','شریفی','رضا'],['سینا','طاهری','کریم'],['فاطمه','نعمتی','محمد'],['یاسر','رستمی','اکبر'],['مهسا','کاظمی','حسین'],['آرمان','مهدوی','رضا'],['سمیه','رحیمی','علی'],['نوید','حیدری','مسعود'],['آتنا','جعفری','حسن']] as const
-const initialPeople:Person[]=seedNames.map(([firstName,lastName,fatherName],i)=>({id:`P-${14001+i}`,firstName,lastName,fatherName,nationalId:`0012345${String(i).padStart(3,'0')}`,birthDate:`۱۳۷${i%10}/${String(i%12+1).padStart(2,'0')}/${String(i%27+1).padStart(2,'0')}`,status:workflow[i%workflow.length],updatedAt:`${i+1} شهریور ۱۴۰۵`,updatedBy:i%2?'مریم رضایی':'احمد محمدی'}))
-const rolePermissions:Record<string,Permission[]>={admin:['view_persons','create_person','change_status','view_activities','manage_users','view_reports'],assistant:['view_persons','create_person'],reviewer:['view_persons','change_status','view_activities']}
-const normalizeId=(value:string)=>value.trim().replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
-const validNationalId=(value:string)=>{if(!/^\d{10}$/.test(value)||/^(\d)\1{9}$/.test(value))return false;const sum=value.slice(0,9).split('').reduce((n,d,i)=>n+Number(d)*(10-i),0)%11;const check=Number(value[9]);return check===(sum<2?sum:11-sum)}
-const validBirthDate=(value:string)=>/^(13|14)\d{2}\/(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])$/.test(value)&&value<='1405/06/12'
-
-function Icon({name}:{name:string}){const p:Record<string,string>={grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87',workflow:'M4 4h6v6H4zM14 14h6v6h-6zM10 7h4a2 2 0 0 1 2 2v5',activity:'M3 12h4l3-8 4 16 3-8h4',shield:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10ZM9 12l2 2 4-4',settings:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19 15l2 2-2 2-2-2',search:'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-4-4',bell:'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9',plus:'M12 5v14M5 12h14',close:'M6 6l12 12M18 6 6 18',check:'m5 12 4 4L19 6'};return <svg viewBox="0 0 24 24"><path d={p[name]??p.grid}/></svg>}
-function Avatar({text,tone='blue'}:{text:string;tone?:string}){return <span className={`avatar ${tone}`}>{text}</span>}
-function Badge({status}:{status:Status}){return <span className={`badge ${tones[status]}`}><i/>{status}</span>}
-function Heading({title,subtitle,action}:{title:string;subtitle:string;action?:ReactNode}){return <div className="heading"><div><small>سامانه ناب</small><h1>{title}</h1><p>{subtitle}</p></div>{action}</div>}
-
-export default function App(){
-  const [authenticated,setAuthenticated]=useState(false),[role,setRole]=useState('admin'),[page,setPage]=useState<Page>('dashboard'),[people,setPeople]=useState(initialPeople),[query,setQuery]=useState(''),[filter,setFilter]=useState('همه وضعیت‌ها'),[selected,setSelected]=useState<Person|null>(null),[createOpen,setCreateOpen]=useState(false),[toast,setToast]=useState('')
-  const [activities,setActivities]=useState<Activity[]>(initialPeople.map((p,i)=>({id:`ACT-${i}`,personId:p.id,personName:`${p.firstName} ${p.lastName}`,action:i%2?'ایجاد پرونده جدید':'تغییر وضعیت پرونده',previousStatus:null,newStatus:p.status,rejectionReason:p.status==='رد شده'?'نقص اطلاعات':null,createdAt:`${p.updatedAt} · ۱۴:۳۲`,createdBy:p.updatedBy,createdByUserId:p.updatedBy==='احمد محمدی'?'admin':'assistant'})))
-  const [audit,setAudit]=useState<Audit[]>([{id:'AUD-1',action:'ورود به سامانه',target:'admin',createdAt:'امروز · ۰۸:۴۵',createdBy:'احمد محمدی'}])
-  const can=(permission:Permission)=>rolePermissions[role].includes(permission)
-  const filtered=useMemo(()=>people.filter(p=>(!query||`${p.firstName} ${p.lastName} ${p.nationalId}`.includes(query))&&(filter==='همه وضعیت‌ها'||p.status===filter)),[people,query,filter])
-  const notify=(message:string)=>{setToast(message);window.setTimeout(()=>setToast(''),2400)}
-  const updateStatus=(person:Person,next:Status,reason:string|null)=>{const now='امروز · ۱۴:۳۲';setPeople(current=>current.map(p=>p.id===person.id?{...p,status:next,updatedAt:now,updatedBy:'احمد محمدی'}:p));setActivities(current=>[{id:`ACT-${Date.now()}`,personId:person.id,personName:`${person.firstName} ${person.lastName}`,action:next==='رد شده'?'رد پرونده':'تغییر وضعیت پرونده',previousStatus:person.status,newStatus:next,rejectionReason:reason,createdAt:now,createdBy:'احمد محمدی',createdByUserId:'admin'},...current]);setAudit(current=>[{id:`AUD-${Date.now()}`,action:next==='رد شده'?'رد پرونده':'تغییر وضعیت پرونده',target:`${person.firstName} ${person.lastName}`,createdAt:now,createdBy:'احمد محمدی'},...current]);setSelected(null);notify('وضعیت و تاریخچه پرونده ثبت شد')}
-  if(!authenticated)return <Login onLogin={(nextRole)=>{setRole(nextRole);setAuthenticated(true)}}/>
-  const nav:[Page,string,string][]=[['dashboard','داشبورد','grid'],['persons','مدیریت افراد','users'],['workflow','گردش‌کار پرونده','workflow'],['activities','گزارش فعالیت‌ها','activity'],['users','کاربران و دسترسی‌ها','shield'],['reports','گزارش‌ها و Audit Log','activity'],['settings','تنظیمات','settings']]
-  return <div className="app" dir="rtl"><aside className="sidebar"><div className="brand"><b>ن</b><span><strong>ناب</strong><small>سامانه مدیریت پرونده</small></span></div><small className="menu-title">منوی اصلی</small>{nav.filter(([id])=>id==='dashboard'||id==='persons'||(id==='workflow'&&can('change_status'))||(id==='activities'&&can('view_activities'))||(id==='users'&&can('manage_users'))||(id==='reports'&&can('view_reports'))||id==='settings').map(([id,label,icon])=><button className={`nav ${page===id?'active':''}`} key={id} onClick={()=>setPage(id)}><Icon name={icon}/><span>{label}</span>{id==='activities'&&<em>۳</em>}</button>)}<div className="side-bottom"><div className="help">؟<span>نیاز به راهنمایی دارید؟<small>راهنمای سامانه را ببینید</small></span></div><button className="profile" onClick={()=>setAuthenticated(false)}><Avatar text="ا" tone="green"/><span><b>احمد محمدی</b><small>مدیر سیستم · خروج</small></span></button></div></aside><main><header><span>خانه / <b>{nav.find(item=>item[0]===page)?.[1]}</b></span><div className="head-user"><button><Icon name="bell"/></button><Avatar text="ا" tone="green"/><span><b>احمد محمدی</b><small>{role==='admin'?'مدیر سیستم':role==='assistant'?'دستیار':'کارشناس مرکز'}</small></span></div></header><div className="content">{page==='dashboard'&&<Dashboard people={people} onPersons={()=>setPage('persons')} onSelect={setSelected}/>} {page==='persons'&&<Persons people={filtered} query={query} filter={filter} setQuery={setQuery} setFilter={setFilter} canCreate={can('create_person')} onCreate={()=>setCreateOpen(true)} onSelect={setSelected}/>} {page==='workflow'&&<WorkflowBoard people={people} canChange={can('change_status')} onSelect={setSelected}/>} {page==='activities'&&<Activities activities={activities}/>} {page==='users'&&<Users/>} {page==='reports'&&<Reports activities={activities} audit={audit}/>} {page==='settings'&&<Settings/>}</div></main>{selected&&<PersonModal person={selected} canChange={can('change_status')} onClose={()=>setSelected(null)} onUpdate={updateStatus}/>} {createOpen&&can('create_person')&&<CreateModal existing={people} onClose={()=>setCreateOpen(false)} onCreate={p=>{setPeople(current=>[p,...current]);setActivities(current=>[{id:`ACT-${Date.now()}`,personId:p.id,personName:`${p.firstName} ${p.lastName}`,action:'ایجاد پرونده جدید',previousStatus:null,newStatus:p.status,rejectionReason:null,createdAt:'همین الان',createdBy:'احمد محمدی',createdByUserId:'admin'},...current]);setAudit(current=>[{id:`AUD-${Date.now()}`,action:'ایجاد فرد',target:`${p.firstName} ${p.lastName}`,createdAt:'همین الان',createdBy:'احمد محمدی'},...current]);setCreateOpen(false);notify('فرد جدید با موفقیت ثبت شد')}}/>}{toast&&<div className="toast">✓ {toast}</div>}</div>
-}
-
-function Login({onLogin}:{onLogin:(role:string)=>void}){const [username,setUsername]=useState('admin'),[password,setPassword]=useState('admin'),[error,setError]=useState(''),[loading,setLoading]=useState(false);return <div className="login" dir="rtl"><section><div className="login-brand">ن</div><h1>مدیریت هوشمند<br/><i>پرونده‌های سازمانی</i></h1><p>همه‌چیز برای مدیریت دقیق، امن و شفاف در یک سامانه.</p><span>✓ دسترسی امن و سطح‌بندی شده</span><span>✓ گزارش‌گیری لحظه‌ای</span></section><form onSubmit={(e:FormEvent)=>{e.preventDefault();if(!username||!password){setError('نام کاربری و رمز عبور الزامی است.');return}setLoading(true);setTimeout(()=>{setLoading(false);if(username==='admin'&&password==='admin')onLogin('admin');else if(username==='assistant'&&password==='assistant')onLogin('assistant');else if(username==='reviewer'&&password==='reviewer')onLogin('reviewer');else setError('نام کاربری یا رمز عبور نادرست است.')},400)}}><div className="form-brand">ن <b>خوش آمدید</b><small>برای ورود به سامانه وارد شوید</small></div><label>نام کاربری<input value={username} onChange={e=>{setUsername(e.target.value);setError('')}}/></label><label>رمز عبور<input type="password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}/></label>{error&&<div className="error">{error}</div>}<div className="login-row"><span>□ مرا به خاطر بسپار</span><a>رمز عبور را فراموش کرده‌اید؟</a></div><button className="primary" disabled={loading}>{loading?'در حال بررسی...':'ورود به سامانه ←'}</button><small className="demo">admin/admin · assistant/assistant · reviewer/reviewer</small></form></div>}
-
-function Dashboard({people,onPersons,onSelect}:{people:Person[];onPersons:()=>void;onSelect:(p:Person)=>void}){const count=(s:Status)=>people.filter(p=>p.status===s).length;return <><Heading title="صبح بخیر، احمد 👋" subtitle="در یک نگاه وضعیت پرونده‌ها و فعالیت‌های سامانه را بررسی کنید." action={<button className="primary" onClick={onPersons}><Icon name="plus"/> ثبت فرد جدید</button>}/><div className="stats">{[['کل افراد',people.length,'blue'],['درخواست‌های جدید',count('درخواست پرونده'),'amber'],['پرونده‌های فعال',count('پرونده فعال'),'green'],['در انتظار بررسی',count('بررسی مرکز'),'purple']].map(([label,value,color])=><div className="stat" key={String(label)}><div className={`stat-icon ${color}`}><Icon name="users"/></div><span>{label}<b>{Number(value).toLocaleString('fa-IR')}</b><small>در سامانه ثبت شده</small></span></div>)}</div><div className="grid2"><section className="panel"><h2>روند پرونده‌ها <small>تعداد پرونده‌های ثبت‌شده در ۶ ماه گذشته</small></h2><div className="chart"><svg viewBox="0 0 600 180" preserveAspectRatio="none"><path d="M0 140 C60 140 80 100 140 125 S210 130 260 90 S330 110 380 80 S440 60 490 72 S540 50 600 18 V180H0Z" fill="#e8ecff"/><path d="M0 140 C60 140 80 100 140 125 S210 130 260 90 S330 110 380 80 S440 60 490 72 S540 50 600 18" fill="none" stroke="#5267f5" strokeWidth="3"/></svg><div>فروردین - اردیبهشت - خرداد - تیر - مرداد - شهریور</div></div></section><section className="panel"><h2>وضعیت پرونده‌ها <small>بر اساس مرحله‌ی گردش‌کار</small></h2><div className="donut"><div><b>{people.length}</b><small>کل پرونده</small></div></div><div className="legend">● فعال {count('پرونده فعال')}<br/>● در انتظار بررسی {count('بررسی مرکز')}<br/>● رد شده {count('رد شده')}<br/>● پایان یافته {count('پایان کار')}</div></section></div><div className="grid2"><section className="panel"><div className="panel-title"><h2>آخرین افراد ثبت‌شده</h2><button onClick={onPersons}>مشاهده همه ←</button></div>{people.slice(0,6).map(p=><div className="mini-row" key={p.id} onClick={()=>onSelect(p)}><span><Avatar text={p.firstName[0]}/><b>{p.firstName} {p.lastName}<small>{p.id}</small></b></span><Badge status={p.status}/><small>{p.updatedAt}</small></div>)}</section><section className="panel"><div className="panel-title"><h2>فعالیت‌های اخیر</h2></div>{people.slice(0,5).map((p,i)=><div className="activity" key={p.id}><i className={`dot d${i}`}/><span><b>{i%2?'ایجاد پرونده جدید':'تغییر وضعیت پرونده'}</b><small>{p.firstName} {p.lastName} · {p.status}</small></span><time>امروز، ۱۴:۳۲</time></div>)}</section></div></>}
-
-function Persons({people,query,filter,setQuery,setFilter,canCreate,onCreate,onSelect}:{people:Person[];query:string;filter:string;setQuery:(v:string)=>void;setFilter:(v:string)=>void;canCreate:boolean;onCreate:()=>void;onSelect:(p:Person)=>void}){return <><Heading title="افراد" subtitle="اطلاعات افراد و وضعیت پرونده‌های آن‌ها را مدیریت کنید." action={canCreate?<button className="primary" onClick={onCreate}><Icon name="plus"/> افزودن فرد</button>:undefined}/><section className="panel people"><div className="toolbar"><div className="search"><Icon name="search"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="جست‌وجو بر اساس نام، نام خانوادگی یا کد ملی..."/></div><select value={filter} onChange={e=>setFilter(e.target.value)}><option>همه وضعیت‌ها</option>{workflow.map(s=><option key={s}>{s}</option>)}</select></div><div className="people-head">فرد | کد ملی | تاریخ تولد | وضعیت پرونده | آخرین فعالیت | ثبت‌کننده</div>{people.map(p=><div className="person-row" key={p.id} onClick={()=>onSelect(p)}><span><Avatar text={p.firstName[0]}/><b>{p.firstName} {p.lastName}<small>{p.id}</small></b></span><span>{p.nationalId}</span><span>{p.birthDate}</span><Badge status={p.status}/><span>{p.updatedAt}</span><span>{p.updatedBy}</span></div>)}{!people.length&&<div className="empty">نتیجه‌ای پیدا نشد</div>}</section></>}
-
-function WorkflowBoard({people,canChange,onSelect}:{people:Person[];canChange:boolean;onSelect:(p:Person)=>void}){return <><Heading title="گردش‌کار پرونده" subtitle="پرونده‌ها را در مسیر مرحله‌ای ثبت تا پایان کار دنبال کنید."/><div className="workflow">{workflow.slice(0,9).map((status,i)=><section key={status}><h3><b>{i+1}</b>{status}<small>{people.filter(p=>p.status===status).length} پرونده</small></h3>{people.filter(p=>p.status===status).map(p=><button disabled={!canChange} key={p.id} onClick={()=>onSelect(p)}><Avatar text={p.firstName[0]}/><span><b>{p.firstName} {p.lastName}</b><small>{p.id}</small></span></button>)}</section>)}</div></>}
-function Activities({activities}:{activities:Activity[]}){return <><Heading title="گزارش فعالیت‌ها" subtitle="Activity Log تاریخچه‌ی دائمی تغییرات پرونده‌هاست و قابل حذف نیست." action={<button className="outline">خروجی اکسل ←</button>}/><section className="panel activity-table">{activities.map(a=><div className="activity-row" key={a.id}><i className="dot d1"/><span><b>{a.action}</b><small>{a.personName}{a.rejectionReason?` · علت رد: ${a.rejectionReason}`:''}</small></span>{a.newStatus&&<Badge status={a.newStatus}/>}<time>{a.createdAt}</time><em>{a.createdBy}</em></div>)}</section></>}
-function Users(){return <><Heading title="کاربران و دسترسی‌ها" subtitle="مدیریت کاربران و Permission-Based Access Control." action={<button className="primary"><Icon name="plus"/> کاربر جدید</button>}/><section className="panel users">{[['احمد محمدی','مدیر سیستم','دسترسی کامل','green'],['مریم رضایی','کارشناس پرونده','مدیریت افراد','blue'],['محمد رضایی','کارشناس مرکز','بررسی پرونده','purple'],['سارا کریمی','اپراتور','مشاهده گزارش‌ها','orange']].map(u=><div className="user" key={u[0]}><Avatar text={u[0][0]} tone={u[3]}/><span><b>{u[0]}</b><small>{u[1]}</small><em>● {u[2]}</em></span><button>•••</button></div>)}</section><section className="panel permission-panel"><h2>مجوزهای نمونه دستیار</h2><p>دستیار فقط به عملیات مجاز پرونده دسترسی دارد.</p><div className="permission-list"><span>✓ مشاهده افراد</span><span>✓ ایجاد فرد</span><span className="disabled">× حذف فرد</span><span className="disabled">× تغییر Permission</span></div></section></>}
-function Reports({activities,audit}:{activities:Activity[];audit:Audit[]}){return <><Heading title="گزارش‌ها و Audit Log" subtitle="گزارش‌های مدیریتی و عملیات حساس ثبت‌شده در سامانه." action={<button className="outline">خروجی گزارش ←</button>}/><div className="stats"><div className="stat"><span>کل Activityها<b>{activities.length}</b><small>رویداد پرونده</small></span></div><div className="stat"><span>Audit Log<b>{audit.length}</b><small>عملیات حساس</small></span></div><div className="stat"><span>پرونده‌های رد شده<b>{activities.filter(a=>a.newStatus==='رد شده').length}</b><small>نیازمند اصلاح</small></span></div><div className="stat"><span>ثبت امروز<b>۲۴</b><small>عملیات ثبت‌شده</small></span></div></div><div className="grid2"><section className="panel"><h2>Audit Log <small>رویدادهای حساس و غیرقابل حذف</small></h2>{audit.map(a=><div className="audit-row" key={a.id}><span><b>{a.action}</b><small>هدف: {a.target}</small></span><time>{a.createdAt}<br/>{a.createdBy}</time></div>)}</section><section className="panel"><h2>خلاصه‌ی وضعیت‌ها</h2><div className="report-bars">{workflow.slice(0,8).map((s,i)=><div key={s}><span>{s}<b>{18-i*2}</b></span><i><em style={{width:`${100-i*9}%`}}/></i></div>)}</div></section></div></>}
-function Settings(){return <><Heading title="تنظیمات" subtitle="تنظیمات عمومی و امنیتی سامانه ناب."/><div className="grid2"><section className="panel settings"><h2>تنظیمات عمومی</h2><p>اطلاعات پایه سامانه</p><label>نام سامانه<input defaultValue="سامانه مدیریت پرونده ناب"/></label><label>منطقه زمانی<select defaultValue="tehran"><option value="tehran">Asia/Tehran (UTC+۳:۳۰)</option></select></label><button className="primary">ذخیره تغییرات</button></section><section className="panel settings"><h2>امنیت و نشست</h2><p>کنترل دسترسی و ورود کاربران</p>{['تأیید دو مرحله‌ای','ثبت رخدادهای امنیتی','خروج خودکار'].map((x,i)=><div className="toggle-row" key={x}><span><b>{x}</b><small>{i===0?'برای مدیران الزامی باشد':i===1?'ذخیره تغییرات حساس در Audit Log':'پس از ۳۰ دقیقه عدم فعالیت'}</small></span><i className={i<2?'on':''}/></div>)}</section></div></>}
-function PersonModal({person,canChange,onClose,onUpdate}:{person:Person;canChange:boolean;onClose:()=>void;onUpdate:(p:Person,s:Status,r:string|null)=>void}){const [status,setStatus]=useState(person.status),[reason,setReason]=useState('');const options=nextStatuses[person.status]??[];return <div className="backdrop"><div className="modal"><button className="x" onClick={onClose}><Icon name="close"/></button><small>جزئیات فرد · {person.id}</small><h2>{person.firstName} {person.lastName}</h2><div className="summary"><Avatar text={person.firstName[0]}/><span><b>{person.firstName} {person.lastName}</b><small>آخرین ثبت: {person.updatedAt} · {person.updatedBy}</small></span><Badge status={person.status}/></div><div className="details"><span>کد ملی<b>{person.nationalId}</b></span><span>تاریخ تولد<b>{person.birthDate}</b></span><span>نام پدر<b>{person.fatherName}</b></span><span>ثبت‌کننده<b>{person.updatedBy}</b></span></div><div className="stepper">{workflow.slice(0,9).map((s,i)=><span className={i<=workflow.indexOf(person.status)?'done':''} key={s}>{i+1}</span>)}</div>{canChange ? options.length?<label>مرحله بعدی<select value={status} onChange={e=>setStatus(e.target.value as Status)}><option value={person.status}>{person.status} (فعلی)</option>{options.map(s=><option key={s}>{s}</option>)}</select></label>:<div className="modal-note">این پرونده در وضعیت نهایی قرار دارد.</div> : <div className="modal-note">شما دسترسی تغییر وضعیت ندارید؛ این صفحه فقط برای مشاهده است.</div>}{canChange && status==='رد شده'&&<label>علت رد اجباری<textarea required value={reason} onChange={e=>setReason(e.target.value)} placeholder="علت رد پرونده را وارد کنید..."/></label>}<div className="modal-actions"><button className="outline" onClick={onClose}>بستن</button>{canChange&&<button className="primary" disabled={status===person.status||(status==='رد شده'&&!reason.trim())} onClick={()=>onUpdate(person,status,status==='رد شده'?reason:null)}><Icon name="check"/> ذخیره تغییرات</button>}</div></div></div>}
-function CreateModal({existing,onClose,onCreate}:{existing:Person[];onClose:()=>void;onCreate:(p:Person)=>void}){const [firstName,setFirstName]=useState(''),[lastName,setLastName]=useState(''),[nationalId,setNationalId]=useState(''),[birthDate,setBirthDate]=useState(''),[fatherName,setFatherName]=useState(''),[error,setError]=useState('');const submit=(e:FormEvent)=>{e.preventDefault();const id=normalizeId(nationalId);if(!firstName.trim()||!lastName.trim()||!fatherName.trim()){setError('نام، نام خانوادگی و نام پدر الزامی هستند.');return}if(!validNationalId(id)){setError('کد ملی معتبر نیست.');return}if(existing.some(p=>normalizeId(p.nationalId)===id)){setError('این کد ملی قبلاً ثبت شده است.');return}if(birthDate&&!validBirthDate(birthDate)){setError('تاریخ تولد معتبر نیست.');return}onCreate({id:`P-${Date.now().toString().slice(-5)}`,firstName:firstName.trim(),lastName:lastName.trim(),nationalId:id,birthDate:birthDate||'—',fatherName:fatherName.trim(),status:'درخواست پرونده',updatedAt:'همین الان',updatedBy:'احمد محمدی'})};return <div className="backdrop"><form className="modal" onSubmit={submit}><button type="button" className="x" onClick={onClose}><Icon name="close"/></button><small>ثبت اطلاعات پایه</small><h2>افزودن فرد جدید</h2><p>فقط اطلاعات متنی ثبت می‌شود؛ هیچ فایل یا مدرکی در سامانه بارگذاری نمی‌شود.</p><div className="form-grid"><label>نام *<input required value={firstName} onChange={e=>setFirstName(e.target.value)}/></label><label>نام خانوادگی *<input required value={lastName} onChange={e=>setLastName(e.target.value)}/></label><label>کد ملی *<input required value={nationalId} onChange={e=>{setNationalId(e.target.value);setError('')}}/></label><label>تاریخ تولد<input value={birthDate} onChange={e=>setBirthDate(e.target.value)} placeholder="۱۳۷۸/۰۲/۱۲"/></label><label>نام پدر *<input required value={fatherName} onChange={e=>setFatherName(e.target.value)}/></label></div>{error&&<div className="error">{error}</div>}<div className="modal-actions"><button type="button" className="outline" onClick={onClose}>انصراف</button><button className="primary"><Icon name="plus"/> ثبت فرد</button></div></form></div>}

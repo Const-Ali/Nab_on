@@ -1,2 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap');
-:root{font-family:'Vazirmatn',Tahoma,Arial,sans-serif;color:#182136;background:#f5f7fb;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}body{margin:0;min-width:320px}button,input,select{font:inherit}button{cursor:pointer}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{font-family:var(--font-main,'Vazirmatn'),Tahoma,Arial,sans-serif;color:#182136;background:#f5f7fb;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+body{margin:0;min-width:320px}
+button,input,select{font:inherit}
+button{cursor:pointer}
+
+/* قواعد موقتی که تیلویند نمی‌تواند بیان کند (شبه‌عنصر/انیمیشن/چاپ/positioning تقویم) */
+.mini-cal{position:absolute;top:calc(100% + 10px);left:0;width:272px;z-index:8}
+.datefield .mini-cal{top:calc(100% + 6px);right:0;left:auto;width:250px;z-index:9}
+@media(max-width:700px){.mini-cal{display:none!important}}
