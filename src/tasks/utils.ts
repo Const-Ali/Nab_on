@@ -1,4 +1,4 @@
-import { jalaliJdn, jalaliParts, load, normalizeText } from '../shared'
+import { jalaliJdn, jalaliParts, load, normalizeDigits, normalizeText } from '../shared'
 import { priorityRank } from './types'
 import type { TaskStatus, TaskPriority, TaskType, WorkTask } from './types'
 
@@ -8,11 +8,17 @@ export const todayJdn = () => {
 }
 
 export const dateJdn = (latin: string): number | null => {
-  const m = latin.match(/^(\d{3,4})\/(\d{1,2})\/(\d{1,2})$/)
+  if (!latin) return null
+  const clean = normalizeDigits(latin.trim())
+  const m = clean.match(/^(\d{3,4})\/(\d{1,2})\/(\d{1,2})$/)
   return m ? jalaliJdn(Number(m[1]), Number(m[2]), Number(m[3])) : null
 }
 
-export const validJalaliDate = (value: string) => /^1[34]\d{2}\/(0?[1-9]|1[0-2])\/(0?[1-9]|[12]\d|3[01])$/.test(value)
+export const validJalaliDate = (value: string) => {
+  if (!value) return false
+  const clean = normalizeDigits(value.trim())
+  return /^1[34]\d{2}\/(0?[1-9]|1[0-2])\/(0?[1-9]|[12]\d|3[01])$/.test(clean)
+}
 
 const isDone = (t: WorkTask) => t.status === 'completed' || t.status === 'cancelled'
 
@@ -40,13 +46,31 @@ export const matchesQuery = (t: WorkTask, q: string): boolean =>
 
 export const sortTasks = (list: WorkTask[], mode: string): WorkTask[] => {
   const arr = [...list]
-  const due = (t: WorkTask) => dateJdn(t.dueDate) ?? Number.MAX_SAFE_INTEGER
   switch (mode) {
-    case 'oldest': return arr.sort((a, b) => a.ts - b.ts)
-    case 'dueAsc': return arr.sort((a, b) => due(a) - due(b))
-    case 'dueDesc': return arr.sort((a, b) => due(b) - due(a))
-    case 'priority': return arr.sort((a, b) => priorityRank[b.priority] - priorityRank[a.priority] || b.ts - a.ts)
-    default: return arr.sort((a, b) => b.ts - a.ts)
+    case 'oldest':
+      return arr.sort((a, b) => a.ts - b.ts)
+    case 'dueAsc':
+      return arr.sort((a, b) => {
+        const da = dateJdn(a.dueDate)
+        const db = dateJdn(b.dueDate)
+        if (da === null && db === null) return b.ts - a.ts
+        if (da === null) return 1
+        if (db === null) return -1
+        return da - db
+      })
+    case 'dueDesc':
+      return arr.sort((a, b) => {
+        const da = dateJdn(a.dueDate)
+        const db = dateJdn(b.dueDate)
+        if (da === null && db === null) return b.ts - a.ts
+        if (da === null) return 1
+        if (db === null) return -1
+        return db - da
+      })
+    case 'priority':
+      return arr.sort((a, b) => priorityRank[b.priority] - priorityRank[a.priority] || b.ts - a.ts)
+    default:
+      return arr.sort((a, b) => b.ts - a.ts)
   }
 }
 

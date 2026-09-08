@@ -3,6 +3,7 @@ export type Page = 'dashboard' | 'persons' | 'workflow' | 'activities' | 'users'
 export type Permission = 'view_persons' | 'create_person' | 'edit_person' | 'change_status' | 'view_activities' | 'manage_users' | 'view_reports' | 'delete_person'
 export type Role = string
 export type RoleDef = { id: string; title: string; permissions: Permission[]; builtin?: boolean }
+export type PersonFilter = Status | 'همه وضعیت‌ها' | 'ارجاع‌شده به من' | 'سررسید نزدیک'
 export type Person = { id: string; firstName: string; lastName: string; nationalId: string; birthDate: string; fatherName: string; status: Status; updatedAt: string; updatedBy: string; photo?: string; tags?: string[]; ts?: number; assignee?: string; deadline?: string }
 export type Activity = { id: string; personId: string; personName: string; action: string; previousStatus: Status | null; newStatus: Status | null; rejectionReason: string | null; createdAt: string; createdBy: string; createdByRole: Role; ts?: number }
 export type Audit = { id: string; action: string; target: string; createdAt: string; createdBy: string }

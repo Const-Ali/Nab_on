@@ -109,6 +109,35 @@
 [data-theme=dark] .wm-task.done .wm-task-main b{color:#6b7280}
 [data-theme=dark] .wm-late{background:#43191d;color:#f19398}
 
+/* ---- custom status button in task row (replacing native checkbox) ---- */
+.wm-status-btn{width:22px;height:22px;flex:0 0 22px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:transparent;border:2px solid #cbd5e1;color:#94a3b8;cursor:pointer;padding:0;transition:all .18s ease;position:relative}
+.wm-status-btn .wm-status-hover-check{opacity:0;transform:scale(.6);transition:all .18s ease}
+.wm-status-btn:hover{border-color:#10b981;background:#ecfdf5;color:#10b981}
+.wm-status-btn:hover .wm-status-hover-check{opacity:1;transform:scale(1)}
+.wm-status-btn.progress{border-color:#3b82f6;background:#eff6ff;color:#3b82f6}
+.wm-status-btn.progress .wm-status-dot{width:7px;height:7px;border-radius:50%;background:#3b82f6;transition:opacity .15s}
+.wm-status-btn.progress:hover .wm-status-dot{display:none}
+.wm-status-btn.done{border-color:#10b981;background:#10b981;color:#fff;box-shadow:0 2px 8px rgba(16,185,129,.3)}
+.wm-status-btn.done .wm-status-hover-check{opacity:1;transform:scale(1)}
+.wm-status-btn.done:hover{background:#059669;border-color:#059669}
+[data-theme=dark] .wm-status-btn{border-color:#334155;color:#64748b}
+[data-theme=dark] .wm-status-btn:hover{background:rgba(16,185,129,.15);border-color:#10b981;color:#34d399}
+[data-theme=dark] .wm-status-btn.progress{border-color:#3b82f6;background:rgba(59,130,246,.18);color:#60a5fa}
+[data-theme=dark] .wm-status-btn.progress .wm-status-dot{background:#60a5fa}
+[data-theme=dark] .wm-status-btn.done{background:#10b981;border-color:#10b981;color:#fff}
+
+/* quick action button on card */
+.wm-quick-btn{display:none;border:1px solid #e2e8f0;background:#fff;border-radius:6px;padding:2px 8px;font-size:8px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+.wm-task:hover .wm-quick-btn{display:inline-flex;align-items:center}
+.wm-quick-btn.complete{color:#059669;border-color:#a7f3d0;background:#ecfdf5}
+.wm-quick-btn.complete:hover{background:#10b981;color:#fff;border-color:#10b981}
+.wm-quick-btn.reopen{color:#64748b;border-color:#cbd5e1;background:#f8fafc}
+.wm-quick-btn.reopen:hover{background:#64748b;color:#fff}
+[data-theme=dark] .wm-quick-btn.complete{background:rgba(16,185,129,.15);border-color:rgba(16,185,129,.35);color:#34d399}
+[data-theme=dark] .wm-quick-btn.complete:hover{background:#10b981;color:#fff}
+[data-theme=dark] .wm-quick-btn.reopen{background:#1e293b;border-color:#334155;color:#94a3b8}
+[data-theme=dark] .wm-quick-btn.reopen:hover{background:#475569;color:#fff}
+
 /* ---- kanban ---- */
 .wm-kanban{display:flex;gap:12px;padding:15px 17px;overflow-x:auto;align-items:flex-start}
 .wm-col{flex:1;min-width:235px;background:#f7f8fc;border:1px solid #eceff5;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;max-height:62vh;overflow-y:auto}

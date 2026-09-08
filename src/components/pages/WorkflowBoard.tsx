@@ -7,7 +7,10 @@ export function WorkflowBoard({ people, canChange, onSelect, onDropPerson }: { p
   const [over, setOver] = useState<Status | null>(null)
   return (
     <>
-      <Heading title="گردش‌کار پرونده" subtitle="پرونده‌ها را با موس بین مراحل بکشید و رها کنید؛ فقط انتقال‌های مجاز انجام می‌شود." />
+      <Heading
+        title="گردش‌کار پرونده"
+        subtitle={canChange ? 'پرونده‌ها را با موس بین مراحل بکشید و رها کنید؛ فقط انتقال‌های مجاز انجام می‌شود.' : 'نمای کلی وضعیت پرونده‌ها در مراحل گردش‌کار.'}
+      />
       <div className="workflow">
         {workflow.map((status, i) => (
           <section
@@ -20,11 +23,23 @@ export function WorkflowBoard({ people, canChange, onSelect, onDropPerson }: { p
             <h3><b>{(i + 1).toLocaleString('fa-IR')}</b>{status}<small>{people.filter(p => p.status === status).length.toLocaleString('fa-IR')} پرونده</small></h3>
             {people.filter(p => p.status === status).map(p => (
               <button
-                type="button" disabled={!canChange} key={p.id} onClick={() => onSelect(p)}
+                type="button"
+                key={p.id}
+                onClick={() => onSelect(p)}
                 draggable={canChange}
-                onDragStart={e => { e.dataTransfer.setData('text/person', p.id); e.dataTransfer.effectAllowed = 'move' }}
+                title={canChange ? 'برای جابه‌جایی بکشید یا برای مشاهده جزئیات کلیک کنید' : 'مشاهده جزئیات پرونده'}
+                onDragStart={e => {
+                  if (canChange) {
+                    e.dataTransfer.setData('text/person', p.id)
+                    e.dataTransfer.effectAllowed = 'move'
+                  }
+                }}
               >
-                <Avatar text={p.firstName[0]} src={p.photo} /><span><b>{p.firstName} {p.lastName}</b><small>{p.id}</small></span>
+                <Avatar text={p.firstName[0]} src={p.photo} />
+                <span>
+                  <b>{p.firstName} {p.lastName}</b>
+                  <small>{p.id}</small>
+                </span>
               </button>
             ))}
           </section>
