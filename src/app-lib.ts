@@ -1,4 +1,5 @@
 import { jalaliJdn, jalaliMonthNames, jalaliParts, jalaliToday, load, normalizeDigits } from './shared'
+import { validJalaliDate } from './tasks/utils'
 import type { Status, Permission, Role, RoleDef, Person, Activity, Audit, User, AppSettings, Note, FontKey } from './types'
 
 export const workflow: Status[] = ['درخواست پرونده', 'پرونده پرسنلی', 'کارت عادی', 'سه‌برگی عادی', 'تکمیل اطلاعات', 'پرونده فعال', 'ارسال به مرکز', 'بررسی مرکز', 'تأیید شده', 'رد شده', 'ارسال به شرکت', 'پایان کار']
@@ -12,6 +13,7 @@ export const personTags: Record<string, string> = { 'فوری': 'red', 'مهم':
 export const STALE_LIMIT = 7
 export const deadlineLeft = (p: Person): number | null => {
   if (!p.deadline || p.status === 'پایان کار' || p.status === 'رد شده' || p.status === 'تأیید شده') return null
+  if (!validJalaliDate(p.deadline)) return null
   const m = p.deadline.match(/^(\d{3,4})\/(\d{1,2})\/(\d{1,2})$/)
   if (!m) return null
   const tj = jalaliParts(new Date())
@@ -78,7 +80,7 @@ export const normalizeUser = (raw: unknown): User => {
     role,
     title: u.title ?? userByRole[role]?.title ?? role,
     tone: u.tone ?? 'blue',
-    password: typeof u.password === 'string' && u.password ? u.password : username,
+    password: typeof u.password === 'string' && u.password ? u.password : '',
     active: typeof u.active === 'boolean' ? u.active : true,
     permissions: Array.isArray(u.permissions) ? (u.permissions as Permission[]) : [...(rolePermissions[role] ?? [])],
   }
