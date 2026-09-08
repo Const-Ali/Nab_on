@@ -88,13 +88,14 @@ export interface TaskSummary {
 
 export const taskStoreSummary = (username: string): TaskSummary => {
   const tasks = load<unknown[]>(`nab:tasks:${username}`, []).map(normalizeTask)
-  const dueToday = tasks.filter(t => t.status !== 'cancelled' && dateJdn(t.dueDate) === todayJdn())
+  const dueToday = tasks.filter(t => dateJdn(t.dueDate) === todayJdn())
+  const completedToday = tasks.filter(t => dateJdn(t.dueDate) === todayJdn() && t.status === 'completed')
   return {
     total: tasks.length,
     active: tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length,
     today: dueToday.filter(t => t.status !== 'completed').length,
     overdue: tasks.filter(isOverdue).length,
-    doneToday: dueToday.filter(t => t.status === 'completed').length,
-    totalToday: dueToday.length,
+    doneToday: completedToday.length,
+    totalToday: dueToday.length + completedToday.length,
   }
 }

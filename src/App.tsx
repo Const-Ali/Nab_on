@@ -37,7 +37,7 @@ export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
   const [people, setPeople] = useState<Person[]>(() => load('nab:people', initialPeople))
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<Status | 'همه وضعیت‌ها' | 'ارجاع‌شده به من' | 'سررسید نزدیک'>('همه وضعیت‌ها')
+  const [filter, setFilter] = useState<Status | 'همه وضعیت‌ها' | 'سررسید نزدیک'>('همه وضعیت‌ها')
   const [tagFilter, setTagFilter] = useState('همه برچسب‌ها')
   const [sortBy, setSortBy] = useState('default')
   const [selected, setSelected] = useState<Person | null>(null)
@@ -144,7 +144,7 @@ export default function App() {
   const toggleNotifs = () => { if (notifOpen) markAllRead(); setNotifOpen(open => !open) }
   const filtered = useMemo(() => {
     const q = normalizeText(query)
-    const list = people.filter(p => (!q || normalizeText(`${p.firstName} ${p.lastName} ${p.nationalId}`).includes(q)) && (filter === 'سررسید نزدیک' ? (deadlineLeft(p) ?? 99) <= 7 : filter === 'ارجاع‌شده به من' ? p.assignee === session?.username : filter === 'همه وضعیت‌ها' || p.status === filter) && (tagFilter === 'همه برچسب‌ها' || (p.tags ?? []).includes(tagFilter)))
+    const list = people.filter(p => (!q || normalizeText(`${p.firstName} ${p.lastName} ${p.nationalId}`).includes(q)) && (filter === 'سررسید نزدیک' ? (deadlineLeft(p) ?? 99) <= 7 : filter === "همه وضعیت‌ها" || p.status === filter) && (tagFilter === 'همه برچسب‌ها' || (p.tags ?? []).includes(tagFilter)))
     const sorted = [...list]
     if (sortBy === 'name') sorted.sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'fa'))
     else if (sortBy === 'status') sorted.sort((a, b) => workflow.indexOf(a.status) - workflow.indexOf(b.status))
@@ -235,17 +235,14 @@ export default function App() {
     const allowed = nextStatuses[person.status] ?? []
     if (target === 'رد شده' && allowed.includes('رد شده')) { setSelected(person); notify('برای رد پرونده، علت رد را در فرم وارد کنید'); return }
     if (!allowed.includes(target)) { notify(`انتقال از «${person.status}» به «${target}» مجاز نیست`); return }
-    updateStatus(person, target, null)
+    updateStatus(person, 'در حال تغییر وضعیت' as Status, null)
   }
   const assignPerson = (person: Person, username: string) => {
-    const target = users.find(u => u.username === username)
-    const prevAssignee = person.assignee ? users.find(u => u.username === person.assignee)?.name ?? person.assignee : '—'
     const assignee = username || undefined
     setPeople(cur => cur.map(p => (p.id === person.id ? { ...p, assignee } : p)))
     setSelected(cur => (cur && cur.id === person.id ? { ...cur, assignee } : cur))
-    setActivities(cur => [{ id: uid('ACT'), personId: person.id, personName: `${person.firstName} ${person.lastName}`, action: 'ارجاع پرونده', previousStatus: null, newStatus: person.status, rejectionReason: target ? `ارجاع: ${prevAssignee} ← ${target.name}` : `ارجاع: ${prevAssignee} ← حذف`, createdAt: nowStamp(), createdBy: me.name, createdByRole: role, ts: nowTs() }, ...cur])
-    logAudit('ارجاع پرونده', `${person.firstName} ${person.lastName} ← ${target ? target.name : 'بدون ارجاع'}`)
-    notify(target ? `پرونده به ${target.name} ارجاع شد` : 'ارجاع پرونده حذف شد')
+    setPeople(cur => cur.map(p => (p.id === person.id ? { ...p, assignee } : p)))
+    setSelected(cur => (cur && cur.id === person.id ? { ...cur, assignee } : cur))
   }
   const addRole = (r: RoleDef) => {
     setRoles(cur => [...cur, r])
@@ -265,7 +262,7 @@ export default function App() {
     let moved = 0
     ids.forEach(id => {
       const person = people.find(p => p.id === id)
-      if (person && (nextStatuses[person.status] ?? []).includes(target)) { updateStatus(person, target, null); moved++ }
+      if (person && (nextStatuses[person.status] ?? []).includes(target)) { updateStatus(person, 'در حال تغییر وضعیت' as Status, null); moved++ }
     })
     if (moved) notify(`${moved.toLocaleString('fa-IR')} پرونده به مرحله «${target}» منتقل شد${ids.length - moved ? ` (${(ids.length - moved).toLocaleString('fa-IR')} پرونده در این مرحله مجاز نبود)` : ''}`)
     else notify('هیچ‌کدام از پرونده‌های انتخابی قابل انتقال به این مرحله نیستند')
