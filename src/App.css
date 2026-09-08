@@ -53,7 +53,8 @@
   gap: 12px;
 }
 
-.form-grid .col-span-2 {
+.form-grid .col-span-2,
+.form-grid .full {
   grid-column: span 2 / span 2;
 }
 
@@ -61,7 +62,25 @@
   .form-grid {
     grid-template-columns: 1fr;
   }
-  .form-grid .col-span-2 {
+  .form-grid .col-span-2,
+  .form-grid .full {
     grid-column: span 1 / span 1;
   }
+}
+
+/* popup calendar positioning */
+.cal-wrap .mini-cal {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 1000;
+  min-width: 275px;
+}
+
+.datefield .mini-cal {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1000;
+  min-width: 275px;
 }
