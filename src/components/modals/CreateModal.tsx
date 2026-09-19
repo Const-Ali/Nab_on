@@ -5,6 +5,7 @@ import { BirthDateField, Icon } from '../../shared-ui'
 import { validNationalId, validBirthDate, validDeadlineDate } from '../../app-lib'
 import type { Person } from '../../types'
 import { PhotoField } from '../common/PhotoField'
+import { backdropCls, btnOutline, btnPrimary, errorBox, formGrid, inputCls, labelCls, modalActions, modalBox, modalH2, modalP, modalSmall, modalX } from '../ui'
 
 export function CreateModal({ existing, creatorName, onClose, onCreate }: { existing: Person[]; creatorName: string; onClose: () => void; onCreate: (p: Person) => void }) {
   const [firstName, setFirstName] = useState('')
@@ -58,25 +59,25 @@ export function CreateModal({ existing, creatorName, onClose, onCreate }: { exis
   }
 
   return (
-    <div className="backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className="modal" onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose} aria-label="بستن"><Icon name="close" /></button>
-        <small>ثبت اطلاعات پایه</small>
-        <h2>افزودن فرد جدید</h2>
-        <p>اطلاعات متنی و عکس پرسنلی (اختیاری) ثبت می‌شود؛ مدرک دیگری بارگذاری نمی‌شود.</p>
+    <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <form className={modalBox} onSubmit={submit}>
+        <button type="button" className={modalX} onClick={onClose} aria-label="بستن"><Icon name="close" /></button>
+        <small className={modalSmall}>ثبت اطلاعات پایه</small>
+        <h2 className={modalH2}>افزودن فرد جدید</h2>
+        <p className={modalP}>اطلاعات متنی و عکس پرسنلی (اختیاری) ثبت می‌شود؛ مدرک دیگری بارگذاری نمی‌شود.</p>
         <PhotoField value={photo} fallbackInitial={firstName.trim()[0] ?? 'ن'} onChange={setPhoto} />
-        <div className="form-grid">
-          <label>نام *<input required value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="مثلاً علی" /></label>
-          <label>نام خانوادگی *<input required value={lastName} onChange={e => setLastName(e.target.value)} placeholder="مثلاً محمدی" /></label>
-          <label>کد ملی *<input required inputMode="numeric" dir="ltr" value={nationalId} onChange={e => { setNationalId(e.target.value); setError('') }} placeholder="۱۰ رقم بدون خط تیره" /></label>
-          <label>تاریخ تولد<BirthDateField value={birthDate} onChange={setBirthDate} placeholder="۱۳۷۵/۰۴/۱۰" /></label>
-          <label>نام پدر *<input required value={fatherName} onChange={e => setFatherName(e.target.value)} placeholder="مثلاً رضا" /></label>
-          <label>مهلت پیگیری (اختیاری)<BirthDateField value={deadline} onChange={setDeadline} placeholder="۱۴۰۵/۰۷/۱۵" /></label>
+        <div className={formGrid}>
+          <label className={labelCls}>نام *<input className={inputCls} required value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="مثلاً علی" /></label>
+          <label className={labelCls}>نام خانوادگی *<input className={inputCls} required value={lastName} onChange={e => setLastName(e.target.value)} placeholder="مثلاً محمدی" /></label>
+          <label className={labelCls}>کد ملی *<input className={inputCls} required inputMode="numeric" dir="ltr" value={nationalId} onChange={e => { setNationalId(e.target.value); setError('') }} placeholder="۱۰ رقم بدون خط تیره" /></label>
+          <label className={labelCls}>تاریخ تولد<BirthDateField value={birthDate} onChange={setBirthDate} placeholder="۱۳۷۵/۰۴/۱۰" /></label>
+          <label className={labelCls}>نام پدر *<input className={inputCls} required value={fatherName} onChange={e => setFatherName(e.target.value)} placeholder="مثلاً رضا" /></label>
+          <label className={labelCls}>مهلت پیگیری (اختیاری)<BirthDateField value={deadline} onChange={setDeadline} placeholder="۱۴۰۵/۰۷/۱۵" /></label>
         </div>
-        {error && <div className="error">{error}</div>}
-        <div className="modal-actions">
-          <button type="button" className="outline" onClick={onClose}>انصراف</button>
-          <button type="submit" className="primary"><Icon name="plus" /> ثبت فرد</button>
+        {error && <div className={errorBox}>{error}</div>}
+        <div className={modalActions}>
+          <button type="button" className={btnOutline} onClick={onClose}>انصراف</button>
+          <button type="submit" className={btnPrimary}><Icon name="plus" /> ثبت فرد</button>
         </div>
       </form>
     </div>

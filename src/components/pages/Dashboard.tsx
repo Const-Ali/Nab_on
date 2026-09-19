@@ -1,6 +1,7 @@
 import { Avatar, Heading, Icon } from '../../shared-ui'
 import type { Status, Person, Activity } from '../../types'
 import { Badge } from '../common/Badge'
+import { btnOutline, btnPrimary, cn, emptyBox, panelBox, panelH2 } from '../ui'
 
 export function Dashboard({
   people,
@@ -21,25 +22,9 @@ export function Dashboard({
   onSelect: (p: Person) => void
   greeting: string
 }) {
-  const ACTIVITY_DOTS = ['#5267f5', '#28b77a', '#f1a83a', '#ed6a6a', '#8b5cf6']
+  const ACTIVITY_DOTS = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-violet-500']
   const count = (s: Status) => people.filter(p => p.status === s).length
   const otherCount = people.length - count('پرونده فعال') - count('بررسی مرکز') - count('رد شده')
-  const segments: [number, string][] = [
-    [count('پرونده فعال'), '#28b77a'],
-    [count('بررسی مرکز'), '#f1a83a'],
-    [count('رد شده'), '#ed6a6a'],
-    [Math.max(0, otherCount), '#99a3b5'],
-  ]
-  let acc = 0
-  const total = Math.max(people.length, 1)
-  const donutGradient = segments
-    .map(([value, color]) => {
-      const from = acc
-      acc += (value / total) * 100
-      return `${color} ${from}% ${acc}%`
-    })
-    .join(',')
-
   return (
     <>
       <Heading
@@ -47,17 +32,17 @@ export function Dashboard({
         subtitle="در یک نگاه وضعیت پرونده‌ها و فعالیت‌های سامانه را بررسی کنید."
         action={
           canCreate ? (
-            <button className="primary" onClick={onCreate}>
+            <button className={btnPrimary} onClick={onCreate}>
               <Icon name="plus" /> ثبت فرد جدید
             </button>
           ) : (
-            <button className="outline" onClick={onPersons}>
+            <button className={btnOutline} onClick={onPersons}>
               مشاهده افراد ←
             </button>
           )
         }
       />
-      <div className="stats">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {(
           [
             ['کل افراد', people.length, 'blue'],
@@ -66,24 +51,24 @@ export function Dashboard({
             ['در انتظار بررسی', count('بررسی مرکز'), 'purple'],
           ] as const
         ).map(([label, value, color]) => (
-          <div className="stat" key={label}>
-            <div className={`stat-icon ${color}`}>
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900" key={label}>
+            <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', color === 'blue' && 'bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300', color === 'amber' && 'bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-300', color === 'green' && 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300', color === 'purple' && 'bg-violet-50 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300')}>
               <Icon name="users" />
             </div>
-            <span>
+            <span className="min-w-0 text-sm text-slate-500 dark:text-slate-400">
               {label}
-              <b>{Number(value).toLocaleString('fa-IR')}</b>
-              <small>در سامانه ثبت شده</small>
+              <b className="mt-1 block text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{Number(value).toLocaleString('fa-IR')}</b>
+              <small className="mt-1 block text-xs">در سامانه ثبت شده</small>
             </span>
           </div>
         ))}
       </div>
-      <div className="grid2">
-        <section className="panel">
-          <h2>
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <section className={cn(panelBox, 'p-4 sm:p-5 xl:col-span-2')}>
+          <h2 className={panelH2}>
             روند پرونده‌ها <small>رویدادهای ثبت‌شده در ۶ ماه گذشته · داده واقعی</small>
           </h2>
-          <div className="chart">
+          <div className="mt-5 overflow-x-auto rounded-xl bg-slate-50 p-3 dark:bg-slate-950/50">
             <svg viewBox="0 0 600 180" preserveAspectRatio="none">
               {(() => {
                 const max = Math.max(...trend.values, 1)
@@ -113,20 +98,20 @@ export function Dashboard({
                 )
               })()}
             </svg>
-            <div>{trend.labels.join(' - ')}</div>
+            <div className="mt-2 text-center text-xs text-slate-500 dark:text-slate-400">{trend.labels.join(' - ')}</div>
           </div>
         </section>
-        <section className="panel">
-          <h2>
+        <section className={cn(panelBox, 'p-4 sm:p-5')}>
+          <h2 className={panelH2}>
             وضعیت پرونده‌ها <small>بر اساس مرحله‌ی گردش‌کار</small>
           </h2>
-          <div className="donut" style={{ background: `conic-gradient(${donutGradient})` }}>
-            <div>
-              <b>{people.length.toLocaleString('fa-IR')}</b>
-              <small>کل پرونده</small>
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/50">
+            <div className="flex items-end gap-2">
+              <b className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white">{people.length.toLocaleString('fa-IR')}</b>
+              <small className="pb-1 text-sm text-slate-500 dark:text-slate-400">کل پرونده</small>
             </div>
           </div>
-          <div className="legend">
+          <div className="mt-4 space-y-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
             ● فعال {count('پرونده فعال').toLocaleString('fa-IR')}
             <br />● در انتظار بررسی {count('بررسی مرکز').toLocaleString('fa-IR')}
             <br />● رد شده {count('رد شده').toLocaleString('fa-IR')}
@@ -134,44 +119,44 @@ export function Dashboard({
           </div>
         </section>
       </div>
-      <div className="grid2">
-        <section className="panel">
-          <div className="panel-title">
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <section className={cn(panelBox, 'p-4 sm:p-5')}>
+          <div className="mb-4 flex items-center justify-between gap-3">
             <h2>آخرین افراد ثبت‌شده</h2>
             <button onClick={onPersons}>مشاهده همه ←</button>
           </div>
           {people.slice(0, 6).map(p => (
-            <div className="mini-row" key={p.id} onClick={() => onSelect(p)}>
-              <span>
+            <button type="button" className="flex w-full items-center justify-between gap-3 border-t border-slate-100 py-3 text-right first:border-t-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id} onClick={() => onSelect(p)}>
+              <span className="flex min-w-0 items-center gap-3">
                 <Avatar text={p.firstName[0]} src={p.photo} />
-                <b>
+                <b className="min-w-0 text-sm text-slate-800 dark:text-slate-100">
                   {p.firstName} {p.lastName}
-                  <small>{p.id}</small>
+                  <small className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">{p.id}</small>
                 </b>
               </span>
               <Badge status={p.status} />
-              <small>{p.updatedAt}</small>
-            </div>
+              <small className="hidden text-xs text-slate-500 sm:block dark:text-slate-400">{p.updatedAt}</small>
+            </button>
           ))}
         </section>
-        <section className="panel">
-          <div className="panel-title">
+        <section className={cn(panelBox, 'p-4 sm:p-5')}>
+          <div className="mb-4 flex items-center justify-between gap-3">
             <h2>فعالیت‌های اخیر</h2>
           </div>
           {activities.slice(0, 5).map((a, i) => (
-            <div className="activity" key={a.id}>
-              <i className="mt-[5px] h-[9px] w-[9px] flex-[0_0_9px] rounded-full" style={{ background: ACTIVITY_DOTS[i % 5] }} />
-              <span>
-                <b>{a.action}</b>
-                <small>
+            <div className="flex gap-3 border-t border-slate-100 py-3 first:border-t-0 dark:border-slate-800" key={a.id}>
+              <i className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', ACTIVITY_DOTS[i % 5])} />
+              <span className="min-w-0 flex-1">
+                <b className="block text-sm text-slate-800 dark:text-slate-100">{a.action}</b>
+                <small className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
                   {a.personName}
                   {a.newStatus ? ` · ${a.newStatus}` : ''}
                 </small>
               </span>
-              <time>{a.createdAt}</time>
+              <time className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{a.createdAt}</time>
             </div>
           ))}
-          {!activities.length && <div className="empty">فعالیتی ثبت نشده است</div>}
+          {!activities.length && <div className={emptyBox}>فعالیتی ثبت نشده است</div>}
         </section>
       </div>
     </>

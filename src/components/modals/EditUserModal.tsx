@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Icon } from '../../shared-ui'
 import { permissionLabels, allPermissions } from '../../app-lib'
 import type { Permission, Role, RoleDef, User } from '../../types'
+import { backdropCls, modalBox } from '../ui'
 
 export function EditUserModal({ user, roles, isSelf, onClose, onSave }: { user: User; roles: RoleDef[]; isSelf: boolean; onClose: () => void; onSave: (u: User, changes: string[]) => void }) {
   const [name, setName] = useState(user.name)
@@ -30,8 +31,8 @@ export function EditUserModal({ user, roles, isSelf, onClose, onSave }: { user: 
     onSave(next, changes)
   }
   return (
-    <div className="backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className="modal" onSubmit={submit}>
+    <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <form className={modalBox} onSubmit={submit}>
         <button type="button" className="x" onClick={onClose}><Icon name="close" /></button>
         <small>تنظیم دسترسی · {user.username}@</small>
         <h2>سطح دسترسی کاربر</h2>

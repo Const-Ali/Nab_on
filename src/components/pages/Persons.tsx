@@ -3,6 +3,7 @@ import { Avatar, Heading, Icon } from '../../shared-ui'
 import { workflow, personTags, STALE_LIMIT, deadlineLeft, PAGE_SIZE, staleDays, downloadCsv } from '../../app-lib'
 import type { Status, Person, PersonFilter } from '../../types'
 import { Badge } from '../common/Badge'
+import { btnMini, btnMiniOn, btnPrimary, cn, dangerLiteTxt, emptyBox, panelBox, rowCheck, searchBox, searchIcon, searchInput, selectCls } from '../ui'
 
 export function Persons({
   people,
@@ -80,29 +81,30 @@ export function Persons({
       <Heading
         title="افراد"
         subtitle="اطلاعات افراد و وضعیت پرونده‌های آن‌ها را مدیریت کنید."
-        action={canCreate ? <button className="primary" onClick={onCreate}><Icon name="plus" /> افزودن فرد</button> : undefined}
+        action={canCreate ? <button className={btnPrimary} onClick={onCreate}><Icon name="plus" /> افزودن فرد</button> : undefined}
       />
-      <section className="panel people">
-        <div className="toolbar">
-          <div className="search">
-            <Icon name="search" />
+      <section className={cn(panelBox, 'overflow-hidden')}>
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:p-5 lg:flex-row dark:border-slate-800">
+          <div className={searchBox}>
+            <Icon name="search" className={searchIcon} />
             <input
               value={query}
               onChange={e => reset(setQuery)(e.target.value)}
+              className={searchInput}
               placeholder="جست‌وجو بر اساس نام، نام خانوادگی، نام پدر یا کد ملی..."
             />
           </div>
-          <select value={filter} onChange={e => reset(setFilter)(e.target.value as PersonFilter)}>
+          <select className={cn(selectCls, 'mt-0 w-full lg:w-48')} value={filter} onChange={e => reset(setFilter)(e.target.value as PersonFilter)}>
             <option value="همه وضعیت‌ها">همه وضعیت‌ها</option>
             <option value="ارجاع‌شده به من">ارجاع‌شده به من</option>
             <option value="سررسید نزدیک">سررسید نزدیک</option>
             {workflow.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select value={tagFilter} onChange={e => reset(setTagFilter)(e.target.value)}>
+          <select className={cn(selectCls, 'mt-0 w-full lg:w-40')} value={tagFilter} onChange={e => reset(setTagFilter)(e.target.value)}>
             <option value="همه برچسب‌ها">همه برچسب‌ها</option>
             {Object.keys(personTags).map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={sortBy} onChange={e => reset(setSortBy)(e.target.value)}>
+          <select className={cn(selectCls, 'mt-0 w-full lg:w-40')} value={sortBy} onChange={e => reset(setSortBy)(e.target.value)}>
             <option value="default">ترتیب پیش‌فرض</option>
             <option value="recent">جدیدترین تغییر</option>
             <option value="name">نام خانوادگی</option>
@@ -110,9 +112,9 @@ export function Persons({
           </select>
         </div>
         {selectedIds.size > 0 && (
-          <div className="bulk-bar">
-            <b>{selectedIds.size.toLocaleString('fa-IR')} پرونده انتخاب شده</b>
-            <select
+          <div className="flex flex-col gap-3 border-b border-indigo-100 bg-indigo-50 p-4 sm:flex-row sm:items-center dark:border-indigo-900/60 dark:bg-indigo-950/30">
+            <b className="text-sm text-indigo-800 dark:text-indigo-200">{selectedIds.size.toLocaleString('fa-IR')} پرونده انتخاب شده</b>
+            <select className={cn(selectCls, 'mt-0 sm:w-52')}
               defaultValue=""
               onChange={e => {
                 if (!e.target.value) return
@@ -123,11 +125,11 @@ export function Persons({
               <option value="" disabled>تغییر وضعیت گروهی...</option>
               {workflow.filter(s => s !== 'رد شده').map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button type="button" className="mini-btn" onClick={exportSelected}><Icon name="download" /> خروجی اکسل</button>
+            <button type="button" className={btnMini} onClick={exportSelected}><Icon name="download" /> خروجی اکسل</button>
             {canDelete && (
               <button
                 type="button"
-                className="mini-btn danger-lite"
+                className={cn(btnMini, dangerLiteTxt)}
                 onClick={() => {
                   onBulkDelete([...selectedIds])
                   setSelectedIds(new Set())
@@ -136,11 +138,11 @@ export function Persons({
                 حذف گروهی
               </button>
             )}
-            <button type="button" className="mini-btn" onClick={() => setSelectedIds(new Set())}>لغو انتخاب</button>
+            <button type="button" className={btnMini} onClick={() => setSelectedIds(new Set())}>لغو انتخاب</button>
           </div>
         )}
-        <div className="people-head">
-          <span><input type="checkbox" className="row-check" checked={allSelected} onChange={toggleAll} aria-label="انتخاب همه" /> فرد</span>
+        <div className="hidden grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-500 lg:grid dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400">
+          <span><input type="checkbox" className={rowCheck} checked={allSelected} onChange={toggleAll} aria-label="انتخاب همه" /> فرد</span>
           <span>کد ملی</span>
           <span>تاریخ تولد</span>
           <span>وضعیت پرونده</span>
@@ -148,46 +150,46 @@ export function Persons({
           <span>ثبت‌کننده</span>
         </div>
         {pageItems.map(p => (
-          <div className="person-row" key={p.id} onClick={() => onSelect(p)}>
-            <span>
+          <button type="button" className="grid w-full grid-cols-1 gap-3 border-b border-slate-100 px-4 py-4 text-right hover:bg-slate-50 sm:px-5 lg:grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] lg:items-center lg:gap-4 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id} onClick={() => onSelect(p)}>
+            <span className="flex min-w-0 items-center gap-3">
               <input
                 type="checkbox"
-                className="row-check"
+                className={rowCheck}
                 checked={selectedIds.has(p.id)}
                 onClick={e => e.stopPropagation()}
                 onChange={() => toggleId(p.id)}
                 aria-label={`انتخاب ${p.firstName} ${p.lastName}`}
               />
               <Avatar text={p.firstName[0]} src={p.photo} />
-              <b>{p.firstName} {p.lastName}<small>{p.id}</small></b>
-              {(p.tags ?? []).map(t => <span className={`tag-chip sm ${personTags[t]}`} key={t}>{t}</span>)}
+              <b className="min-w-0 text-sm text-slate-800 dark:text-slate-100">{p.firstName} {p.lastName}<small className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">{p.id}</small></b>
+              {(p.tags ?? []).map(t => <span className={cn('hidden rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 sm:inline-flex dark:bg-slate-800 dark:text-slate-300', personTags[t])} key={t}>{t}</span>)}
             </span>
-            <span>{p.nationalId}</span>
-            <span>{p.birthDate}</span>
-            <span className="status-cell">
+            <span className="text-sm text-slate-600 dark:text-slate-300"><small className="ml-2 inline lg:hidden">کد ملی:</small>{p.nationalId}</span>
+            <span className="text-sm text-slate-600 dark:text-slate-300"><small className="ml-2 inline lg:hidden">تولد:</small>{p.birthDate}</span>
+            <span className="flex flex-wrap gap-1.5">
               <Badge status={p.status} />
-              {staleDays(p) >= STALE_LIMIT && <i className="stale-chip">{staleDays(p).toLocaleString('fa-IR')} روز توقف</i>}
+              {staleDays(p) >= STALE_LIMIT && <i className="inline-flex rounded-md bg-rose-50 px-2 py-1 text-xs font-medium not-italic text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{staleDays(p).toLocaleString('fa-IR')} روز توقف</i>}
               {(() => {
                 const l = deadlineLeft(p)
                 return l !== null
-                  ? <i className={`dl-chip ${l < 0 ? 'over' : l <= 3 ? 'warn' : 'ok'}`}>{l < 0 ? `${Math.abs(l).toLocaleString('fa-IR')} روز گذشته` : l === 0 ? 'سررسید امروز' : `${l.toLocaleString('fa-IR')} روز مانده`}</i>
+                  ? <i className={cn('inline-flex rounded-md px-2 py-1 text-xs font-medium not-italic', l < 0 && 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300', l >= 0 && l <= 3 && 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300', l > 3 && 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300')}>{l < 0 ? `${Math.abs(l).toLocaleString('fa-IR')} روز گذشته` : l === 0 ? 'سررسید امروز' : `${l.toLocaleString('fa-IR')} روز مانده`}</i>
                   : null
               })()}
             </span>
-            <span>{p.updatedAt}</span>
-            <span>{p.updatedBy}</span>
-          </div>
+            <span className="text-sm text-slate-500 dark:text-slate-400"><small className="ml-2 inline lg:hidden">فعالیت:</small>{p.updatedAt}</span>
+            <span className="text-sm text-slate-500 dark:text-slate-400"><small className="ml-2 inline lg:hidden">کاربر:</small>{p.updatedBy}</span>
+          </button>
         ))}
-        {!people.length && <div className="empty">نتیجه‌ای پیدا نشد</div>}
+        {!people.length && <div className={cn(emptyBox, 'm-4')}>نتیجه‌ای پیدا نشد</div>}
         {people.length > PAGE_SIZE && (
-          <div className="pager">
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 dark:border-slate-800 dark:text-slate-400">
             <span>{people.length.toLocaleString('fa-IR')} پرونده · صفحه {(safePage + 1).toLocaleString('fa-IR')} از {pageCount.toLocaleString('fa-IR')}</span>
-            <div className="pager-btns">
-              <button type="button" className="mini-btn" disabled={safePage === 0} onClick={() => setPageNo(safePage - 1)}>قبلی</button>
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" className={btnMini} disabled={safePage === 0} onClick={() => setPageNo(safePage - 1)}>قبلی</button>
               {Array.from({ length: pageCount }, (_, i) => i).filter(i => pageCount <= 7 || Math.abs(i - safePage) <= 2 || i === 0 || i === pageCount - 1).map(i => (
-                <button type="button" key={i} className={`mini-btn ${i === safePage ? 'on' : ''}`} onClick={() => setPageNo(i)}>{(i + 1).toLocaleString('fa-IR')}</button>
+                <button type="button" key={i} className={cn(btnMini, i === safePage && btnMiniOn)} onClick={() => setPageNo(i)}>{(i + 1).toLocaleString('fa-IR')}</button>
               ))}
-              <button type="button" className="mini-btn" disabled={safePage >= pageCount - 1} onClick={() => setPageNo(safePage + 1)}>بعدی</button>
+              <button type="button" className={btnMini} disabled={safePage >= pageCount - 1} onClick={() => setPageNo(safePage + 1)}>بعدی</button>
             </div>
           </div>
         )}

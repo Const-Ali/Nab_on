@@ -12,7 +12,7 @@ export default function TasksApp() {
 
   const session = load<{ username?: string } | null>('nab:session', null)
   useEffect(() => {
-    if (!session?.username) window.location.replace('./index.html')
+    if (!session?.username) window.location.replace('/')
   }, [session?.username])
   if (!session?.username) return null
 
@@ -26,7 +26,7 @@ export default function TasksApp() {
     <div className="tasks-app" dir="rtl">
       <header className="tasks-topbar">
         <div className="tasks-topbar-right">
-          <a className="tasks-back" href="./index.html" title="بازگشت به سامانه ناب"><Icon name="logout" /> بازگشت به ناب</a>
+          <a className="tasks-back" href="/" onClick={event => { event.preventDefault(); window.history.pushState({}, '', '/'); window.dispatchEvent(new PopStateEvent('popstate')) }} title="بازگشت به سامانه ناب"><Icon name="logout" /> بازگشت به ناب</a>
           <span className="tasks-brand"><b>مدیریت کارهای من</b><small>داشبورد خصوصی {meName} · سامانه ناب</small></span>
         </div>
         <button

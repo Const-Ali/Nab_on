@@ -1,276 +1,35 @@
 import { useMemo, useState } from 'react'
 import { nowTs, toPersianDigits } from '../../shared'
 import { Heading, Icon } from '../../shared-ui'
-import { workflow, computeUserStats, computeBottlenecks, rangeDefs } from '../../app-lib'
-import type { Person, Activity, Audit } from '../../types'
+import { computeBottlenecks, computeUserStats, rangeDefs, workflow } from '../../app-lib'
+import type { Activity, Audit, Person } from '../../types'
+import { btnMini, btnMiniOn, btnOutline, btnPrimary, cn, emptyBox, panelBox, panelH2, panelH2Small, panelPad } from '../ui'
 
-export function Reports({
-  people,
-  activities,
-  audit,
-  todayCount,
-  onExport,
-  onPrint,
-}: {
-  people: Person[]
-  activities: Activity[]
-  audit: Audit[]
-  todayCount: number
-  onExport: () => void
-  onPrint: () => void
-}) {
-  const counts = workflow.map(s => ({ status: s, count: people.filter(p => p.status === s).length }))
-  const maxCount = Math.max(...counts.map(c => c.count), 1)
+const bar = (value: number) => {
+  if (value >= 95) return 'w-full'; if (value >= 80) return 'w-10/12'; if (value >= 65) return 'w-8/12'; if (value >= 50) return 'w-6/12'; if (value >= 35) return 'w-4/12'; if (value >= 15) return 'w-2/12'; return value ? 'w-1/12' : 'w-0'
+}
+const Metric = ({ label, value, note, tone }: { label: string; value: string; note: string; tone: string }) => <article className={cn(panelBox, panelPad)}><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-semibold', tone)}>{label}</span><b className="mt-4 block text-3xl font-bold tracking-tight text-slate-950 dark:text-white">{value}</b><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{note}</p></article>
+
+export function Reports({ people, activities, audit, todayCount, onExport, onPrint }: { people: Person[]; activities: Activity[]; audit: Audit[]; todayCount: number; onExport: () => void; onPrint: () => void }) {
   const [range, setRange] = useState('month')
+  const days = (rangeDefs.find(item => item[0] === range) ?? rangeDefs[2])[1]
+  const current = useMemo(() => activities.filter(item => (item.ts ?? 0) >= nowTs() - days * 86400000), [activities, days])
+  const previous = useMemo(() => { const end = nowTs() - days * 86400000; return activities.filter(item => (item.ts ?? 0) >= end - days * 86400000 && (item.ts ?? 0) < end) }, [activities, days])
+  const users = computeUserStats(current)
+  const bottlenecks = computeBottlenecks(current)
+  const statuses = workflow.map(status => ({ status, count: people.filter(person => person.status === status).length }))
+  const maxStatus = Math.max(...statuses.map(item => item.count), 1)
+  const maxUser = Math.max(...users.map(([, item]) => item.total), 1)
+  const maxBottleneck = Math.max(...bottlenecks.map(item => item.count), 1)
+  const change = previous.length ? Math.round(((current.length - previous.length) / previous.length) * 100) : current.length ? 100 : 0
+  const approved = people.filter(person => person.status === 'تأیید شده' || person.status === 'پایان کار').length
+  const approvedRate = people.length ? Math.round((approved / people.length) * 100) : 0
 
-  const rangeAct = useMemo(() => {
-    const d = (rangeDefs.find(r => r[0] === range) ?? rangeDefs[2])[1]
-    const start = nowTs() - d * 86400000
-    return activities.filter(a => (a.ts ?? 0) >= start)
-  }, [activities, range])
-
-  const prevAct = useMemo(() => {
-    const d = (rangeDefs.find(r => r[0] === range) ?? rangeDefs[2])[1]
-    const end = nowTs() - d * 86400000
-    return activities.filter(a => (a.ts ?? 0) >= end - d * 86400000 && (a.ts ?? 0) < end)
-  }, [activities, range])
-
-  const stats = computeUserStats(rangeAct)
-  const bn = computeBottlenecks(rangeAct)
-  const delta =
-    prevAct.length === 0
-      ? rangeAct.length
-        ? 100
-        : 0
-      : Math.round(((rangeAct.length - prevAct.length) / prevAct.length) * 100)
-
-  // Personnel comparative metrics
-  const maxTotalScore = Math.max(...stats.map(([, s]) => s.total), 1)
-
-  return (
-    <>
-      <Heading
-        title="گزارش‌ها و تحلیل هوشمند عملکرد"
-        subtitle="داشبورد مقایسه‌ای پرسنل، تحلیل گلوگاه‌ها و لاگ امنیتی سامانه."
-        action={
-          <div className="btn-group">
-            <button className="outline" onClick={onExport}>
-              <Icon name="download" /> خروجی اکسل
-            </button>
-            <button className="primary" onClick={onPrint}>
-              <Icon name="printer" /> چاپ رسمی گزارش
-            </button>
-          </div>
-        }
-      />
-
-      <div className="range-bar">
-        <span>بازه زمانی گزارش:</span>
-        {rangeDefs.map(([v, , labelStr]) => (
-          <button
-            type="button"
-            key={v}
-            className={`mini-btn ${range === v ? 'on' : ''}`}
-            onClick={() => setRange(v)}
-          >
-            {labelStr}
-          </button>
-        ))}
-        <em className="range-cmp">
-          {rangeAct.length.toLocaleString('fa-IR')} رویداد در این بازه · {prevAct.length.toLocaleString('fa-IR')} در بازه قبل{' '}
-          {delta !== 0 && (
-            <b className={delta > 0 ? 'up' : 'down'}>
-              {delta > 0 ? '↑' : '↓'} {Math.abs(delta).toLocaleString('fa-IR')}٪
-            </b>
-          )}
-        </em>
-      </div>
-
-      <div className="stats">
-        <div className="stat">
-          <span>
-            کل رویدادهای ثبت‌شده
-            <b>{activities.length.toLocaleString('fa-IR')}</b>
-            <small>فعالیت پرونده‌ها</small>
-          </span>
-        </div>
-        <div className="stat">
-          <span>
-            Audit Log امنیتی
-            <b>{audit.length.toLocaleString('fa-IR')}</b>
-            <small>عملیات حساس</small>
-          </span>
-        </div>
-        <div className="stat">
-          <span>
-            پرونده‌های نیازمند اصلاح
-            <b>{people.filter(p => p.status === 'رد شده').length.toLocaleString('fa-IR')}</b>
-            <small>رد شده یا متوقف</small>
-          </span>
-        </div>
-        <div className="stat">
-          <span>
-            ثبت‌های امروز
-            <b>{todayCount.toLocaleString('fa-IR')}</b>
-            <small>عملیات ۲۴ ساعت اخیر</small>
-          </span>
-        </div>
-      </div>
-
-      {/* بخش جدید: داشبورد مقایسه‌ای جامع عملکرد پرسنل */}
-      <section className="panel mb-[18px]">
-        <h2>
-          داشبورد مقایسه‌ای و رتبه‌بندی عملکرد پرسنل
-          <small>مقایسه حجم کار، سرعت عمل و کیفیت رسیدگی کارشناسان در بازه انتخابی</small>
-        </h2>
-        {stats.length === 0 ? (
-          <div className="empty">داده‌ای در این بازه زمانی ثبت نشده است.</div>
-        ) : (
-          <div className="grid grid-cols-3 gap-[14px] max-[900px]:grid-cols-1">
-            {stats.map(([name, s], rank) => {
-              const scorePercent = Math.round((s.total / maxTotalScore) * 100)
-              const badgeMedal = rank === 0 ? '🥇 رتبه اول' : rank === 1 ? '🥈 رتبه دوم' : rank === 2 ? '🥉 رتبه سوم' : `رتبه ${toPersianDigits(rank + 1)}`
-              return (
-                <div key={name} className="flex flex-col rounded-[12px] border border-[#e3e8f0] bg-[#f8fafc] p-[14px] dark:border-[#232c45] dark:bg-[#101827]">
-                  <div className="flex items-center justify-between mb-[10px]">
-                    <div className="flex items-center gap-[8px]">
-                      <span className="grid h-[32px] w-[32px] place-items-center rounded-[9px] bg-pri text-[12px] font-bold text-white shadow-[0_2px_8px_rgba(82,103,245,.25)]">
-                        {name[0]}
-                      </span>
-                      <div>
-                        <b className="text-[12px] text-soft dark:text-[#dbe2f2]">{name}</b>
-                        <small className="block text-[9px] text-mut">کارشناس پرونده</small>
-                      </div>
-                    </div>
-                    <span className={`text-[9px] font-extrabold px-[8px] py-[3px] rounded-[6px] ${rank === 0 ? 'bg-amber-100 text-amber-700 dark:bg-[#40350f] dark:text-[#f5cf6e]' : 'bg-slate-200 text-slate-700 dark:bg-[#1c2650] dark:text-[#aebaff]'}`}>
-                      {badgeMedal}
-                    </span>
-                  </div>
-
-                  <div className="space-y-[6px] text-[10px] text-soft dark:text-[#c6cede] my-[6px]">
-                    <div className="flex justify-between">
-                      <span>پرونده‌های جدید ثبت‌شده:</span>
-                      <b>{toPersianDigits(s.creates)}</b>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>تغییر وضعیت و پیشبرد گردش‌کار:</span>
-                      <b>{toPersianDigits(s.changes)}</b>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>مکاتبات و یادداشت‌های تخصصی:</span>
-                      <b>{toPersianDigits(s.notes)}</b>
-                    </div>
-                  </div>
-
-                  <div className="mt-auto pt-[10px] border-t border-[#e8ecf4] dark:border-[#20294a]">
-                    <div className="flex justify-between text-[10px] mb-[4px]">
-                      <span className="text-mut">امتیاز بهره‌وری کل:</span>
-                      <b className="text-pri">{toPersianDigits(scorePercent)}٪</b>
-                    </div>
-                    <div className="h-[6px] w-full rounded-full bg-[#e2e8f0] dark:bg-[#1c2650] overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-pri transition-all duration-500"
-                        style={{ width: `${scorePercent}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
-
-      <div className="grid2">
-        <section className="panel">
-          <h2>
-            Audit Log امنیتی <small>رویدادهای حساس و غیرقابل تغییر سامانه</small>
-          </h2>
-          {audit.slice(0, 8).map(a => (
-            <div className="audit-row" key={a.id}>
-              <span>
-                <b>{a.action}</b>
-                <small>هدف: {a.target}</small>
-              </span>
-              <time>
-                {a.createdAt}
-                <br />
-                {a.createdBy}
-              </time>
-            </div>
-          ))}
-          {audit.length === 0 && <div className="empty">لاگی ثبت نشده است.</div>}
-        </section>
-
-        <section className="panel">
-          <h2>
-            توزیع مراحل گردش‌کار <small>بر اساس داده‌های واقعی سامانه</small>
-          </h2>
-          <div className="report-bars">
-            {counts.map(({ status, count }) => (
-              <div key={status}>
-                <span>
-                  {status}
-                  <b>{count.toLocaleString('fa-IR')}</b>
-                </span>
-                <i>
-                  <em style={{ width: `${(count / maxCount) * 100}%` }} />
-                </i>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <div className="grid2">
-        <section className="panel">
-          <h2>
-            گلوگاه‌های زمانی گردش‌کار <small>میانگین زمان توقف پرونده در هر مرحله</small>
-          </h2>
-          <div className="report-bars">
-            {bn.filter(b => b.count > 0).length === 0 && (
-              <div className="empty">پس از چند انتقال پرونده در این بازه، این گزارش پر می‌شود.</div>
-            )}
-            {bn
-              .filter(b => b.count > 0)
-              .map(b => (
-                <div key={b.status}>
-                  <span>
-                    {b.status}
-                    <b>
-                      {b.label} <small>({b.count.toLocaleString('fa-IR')} پرونده)</small>
-                    </b>
-                  </span>
-                  <i>
-                    <em style={{ width: `${Math.min(100, (b.count / Math.max(...bn.map(x => x.count), 1)) * 100)}%` }} />
-                  </i>
-                </div>
-              ))}
-          </div>
-        </section>
-
-        <section className="panel">
-          <h2>
-            خلاصه آمار تجمیعی <small>وضعیت کلی سیستم</small>
-          </h2>
-          <div className="space-y-[12px] pt-[8px]">
-            <div className="flex items-center justify-between rounded-[9px] bg-[#f8fafc] p-[10px_14px] dark:bg-[#101827]">
-              <span className="text-[11px] text-soft dark:text-[#c6cede]">میانگین زمان انجام هر مرحله:</span>
-              <b className="text-[12px] text-pri">۲٫۳ روز کاری</b>
-            </div>
-            <div className="flex items-center justify-between rounded-[9px] bg-[#f8fafc] p-[10px_14px] dark:bg-[#101827]">
-              <span className="text-[11px] text-soft dark:text-[#c6cede]">نرخ موفقیت تأیید پرونده‌ها:</span>
-              <b className="text-[12px] text-emerald-600 dark:text-emerald-400">
-                {people.length > 0 ? toPersianDigits(Math.round((people.filter(p => p.status === 'تأیید شده' || p.status === 'پایان کار').length / people.length) * 100)) : '۰'}٪
-              </b>
-            </div>
-            <div className="flex items-center justify-between rounded-[9px] bg-[#f8fafc] p-[10px_14px] dark:bg-[#101827]">
-              <span className="text-[11px] text-soft dark:text-[#c6cede]">درصد رضایت‌مندی و پاسخگویی:</span>
-              <b className="text-[12px] text-pri">۹۸٫۴٪</b>
-            </div>
-          </div>
-        </section>
-      </div>
-    </>
-  )
+  return <>
+    <Heading title="گزارش‌ها و تحلیل عملکرد" subtitle="نمایی روشن از حجم فعالیت‌ها، گردش پرونده‌ها، عملکرد کارشناسان و رویدادهای حساس." action={<div className="flex flex-col gap-2 sm:flex-row"><button className={btnOutline} onClick={onExport}><Icon name="download" /> خروجی اکسل</button><button className={btnPrimary} onClick={onPrint}><Icon name="printer" /> چاپ گزارش</button></div>} />
+    <section className={cn(panelBox, panelPad, 'mb-5')}><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><h2 className={panelH2}>بازه تحلیل</h2><p className={panelH2Small}>داده‌ها با بازه قبل مقایسه می‌شوند.</p></div><div className="flex flex-wrap gap-2">{rangeDefs.map(([value, , label]) => <button type="button" key={value} onClick={() => setRange(value)} className={cn(btnMini, range === value && btnMiniOn)}>{label}</button>)}</div></div><div className="mt-4 flex flex-col justify-between gap-1 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-600 sm:flex-row dark:bg-slate-950/50 dark:text-slate-300"><span>{current.length.toLocaleString('fa-IR')} رویداد در بازه انتخاب‌شده</span><span>بازه قبل: {previous.length.toLocaleString('fa-IR')} {change !== 0 && <b className={cn('mr-2', change > 0 ? 'text-emerald-600' : 'text-rose-600')}>{change > 0 ? '↑' : '↓'} {Math.abs(change).toLocaleString('fa-IR')}٪</b>}</span></div></section>
+    <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="کل رویدادها" value={activities.length.toLocaleString('fa-IR')} note="همه فعالیت‌های ثبت‌شده" tone="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300" /><Metric label="رویداد امنیتی" value={audit.length.toLocaleString('fa-IR')} note="رکوردهای Audit Log" tone="bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300" /><Metric label="نیازمند پیگیری" value={people.filter(person => person.status === 'رد شده').length.toLocaleString('fa-IR')} note="پرونده‌های ردشده" tone="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" /><Metric label="ثبت امروز" value={todayCount.toLocaleString('fa-IR')} note="عملیات ۲۴ ساعت اخیر" tone="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" /></div>
+    <section className={cn(panelBox, panelPad, 'mb-5')}><h2 className={panelH2}>عملکرد کارشناسان</h2><p className={panelH2Small}>ایجاد پرونده، پیشبرد گردش‌کار و یادداشت‌های ثبت‌شده در بازه انتخابی.</p>{users.length === 0 ? <div className={cn(emptyBox, 'mt-5')}>در این بازه داده‌ای برای تحلیل عملکرد ثبت نشده است.</div> : <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">{users.map(([name, item], index) => { const score = Math.round((item.total / maxUser) * 100); return <article key={name} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/50"><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-600 text-sm font-bold text-white">{name[0]}</span><div><b className="block text-sm text-slate-900 dark:text-white">{name}</b><small className="text-xs text-slate-500">کارشناس پرونده</small></div></div><span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">رتبه {toPersianDigits(index + 1)}</span></div><dl className="my-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-lg bg-white p-2 dark:bg-slate-900"><dt className="text-[11px] text-slate-500">ثبت</dt><dd className="mt-1 font-bold text-slate-900 dark:text-white">{toPersianDigits(item.creates)}</dd></div><div className="rounded-lg bg-white p-2 dark:bg-slate-900"><dt className="text-[11px] text-slate-500">پیگیری</dt><dd className="mt-1 font-bold text-slate-900 dark:text-white">{toPersianDigits(item.changes)}</dd></div><div className="rounded-lg bg-white p-2 dark:bg-slate-900"><dt className="text-[11px] text-slate-500">یادداشت</dt><dd className="mt-1 font-bold text-slate-900 dark:text-white">{toPersianDigits(item.notes)}</dd></div></dl><div className="flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div className={cn('h-full rounded-full bg-indigo-600', bar(score))} /></div><b className="text-xs text-indigo-700 dark:text-indigo-300">{toPersianDigits(score)}٪</b></div></article> })}</div>}</section>
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2"><section className={cn(panelBox, panelPad)}><h2 className={panelH2}>توزیع مراحل گردش‌کار</h2><p className={panelH2Small}>تعداد پرونده‌ها در هر مرحله.</p><div className="mt-5 space-y-4">{statuses.map(item => <div key={item.status}><div className="mb-1.5 flex justify-between gap-3 text-sm"><span className="truncate text-slate-700 dark:text-slate-200">{item.status}</span><b className="text-slate-950 dark:text-white">{item.count.toLocaleString('fa-IR')}</b></div><div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className={cn('h-full rounded-full bg-indigo-600', bar(item.count / maxStatus * 100))} /></div></div>)}</div></section><section className={cn(panelBox, panelPad)}><h2 className={panelH2}>گلوگاه‌های زمانی</h2><p className={panelH2Small}>مراحل دارای بیشترین پرونده در انتظار رسیدگی.</p>{bottlenecks.filter(item => item.count > 0).length === 0 ? <div className={cn(emptyBox, 'mt-5')}>هنوز داده کافی برای تشخیص گلوگاه وجود ندارد.</div> : <div className="mt-5 space-y-4">{bottlenecks.filter(item => item.count > 0).map(item => <div key={item.status}><div className="mb-1.5 flex justify-between gap-3 text-sm"><span className="truncate text-slate-700 dark:text-slate-200">{item.status}</span><b className="text-amber-700 dark:text-amber-300">{item.label} · {item.count.toLocaleString('fa-IR')}</b></div><div className="h-2 overflow-hidden rounded-full bg-amber-100 dark:bg-amber-950/50"><div className={cn('h-full rounded-full bg-amber-500', bar(item.count / maxBottleneck * 100))} /></div></div>)}</div>}</section><section className={cn(panelBox, panelPad)}><h2 className={panelH2}>رویدادهای امنیتی اخیر</h2><p className={panelH2Small}>آخرین عملیات حساس ثبت‌شده در سامانه.</p>{audit.length === 0 ? <div className={cn(emptyBox, 'mt-5')}>رویداد امنیتی ثبت نشده است.</div> : <div className="mt-5 divide-y divide-slate-100 dark:divide-slate-800">{audit.slice(0, 8).map(item => <div className="flex gap-3 py-3 first:pt-0" key={item.id}><span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-violet-500" /><div className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-800 dark:text-slate-100">{item.action}</b><small className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">هدف: {item.target}</small></div><time className="shrink-0 text-left text-[11px] leading-5 text-slate-500 dark:text-slate-400">{item.createdAt}<br />{item.createdBy}</time></div>)}</div>}</section><section className={cn(panelBox, panelPad)}><h2 className={panelH2}>خلاصه مدیریتی</h2><p className={panelH2Small}>شاخص‌های کلیدی قابل استفاده در تصمیم‌گیری.</p><div className="mt-5 space-y-3"><div className="flex justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-950/50"><span className="text-sm text-slate-600 dark:text-slate-300">نرخ تأیید پرونده‌ها</span><b className="text-lg text-emerald-700 dark:text-emerald-300">{toPersianDigits(approvedRate)}٪</b></div><div className="flex justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-950/50"><span className="text-sm text-slate-600 dark:text-slate-300">پرونده‌های فعال</span><b className="text-lg text-indigo-700 dark:text-indigo-300">{people.length.toLocaleString('fa-IR')}</b></div><div className="flex justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-950/50"><span className="text-sm text-slate-600 dark:text-slate-300">رویدادهای بازه انتخاب‌شده</span><b className="text-lg text-violet-700 dark:text-violet-300">{current.length.toLocaleString('fa-IR')}</b></div></div></section></div>
+  </>
 }

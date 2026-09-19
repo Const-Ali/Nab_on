@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Icon } from '../../shared-ui'
 import type { User } from '../../types'
 import { PhotoField } from '../common/PhotoField'
+import { backdropCls, modalBox } from '../ui'
 
 export function ProfileModal({ user, onClose, onSave, onLogout }: { user: User; onClose: () => void; onSave: (name: string, photo: string, newPassword: string) => void; onLogout: () => void }) {
   const [name, setName] = useState(user.name)
@@ -22,8 +23,8 @@ export function ProfileModal({ user, onClose, onSave, onLogout }: { user: User; 
     onSave(name.trim(), photo, next)
   }
   return (
-    <div className="backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className="modal" onSubmit={submit}>
+    <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <form className={modalBox} onSubmit={submit}>
         <button type="button" className="x" onClick={onClose}><Icon name="close" /></button>
         <small>پروفایل من · {user.username}@</small>
         <h2>حساب کاربری</h2>

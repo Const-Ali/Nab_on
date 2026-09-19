@@ -1,59 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { Activity, Bell, CalendarDays, Camera, Check, Download, LayoutDashboard, ListTodo, LogOut, Moon, Pencil, Plus, Printer, Search, Settings2, ShieldCheck, Sun, UsersRound, Workflow, X, type LucideIcon } from 'lucide-react'
 import { jalaliJdn, jalaliMonthNames, jalaliParts, jdnToDate, normalizeDigits } from './shared'
-import { avatarBase, avatarTones } from './components/ui'
+import { avatarBase, avatarSize, avatarTones, cn, focusRing, transition } from './components/ui'
 
 export function Icon({ name, className }: { name: string; className?: string }) {
-  const paths: Record<string, string> = {
-    grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
-    users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87',
-    workflow: 'M4 4h6v6H4zM14 14h6v6h-6zM10 7h4a2 2 0 0 1 2 2v5',
-    activity: 'M3 12h4l3-8 4 16 3-8h4',
-    shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10ZM9 12l2 2 4-4',
-    settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19 15l2 2-2 2-2-2',
-    search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-4-4',
-    bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9',
-    plus: 'M12 5v14M5 12h14',
-    close: 'M6 6l12 12M18 6 6 18',
-    check: 'm5 12 4 4L19 6',
-    download: 'M12 3v12m0 0 4-4m-4 4-4-4M4 21h16',
-    edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z',
-    sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
-    moon: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z',
-    camera: 'M4 7h3l2-2h6l2 2h3v12H4zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7',
-    logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
-    printer: 'M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z',
-    cal: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
-    task: 'M9 6h12M9 12h12M9 18h12M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2',
-  }
-  return (
-    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}>
-      <path d={paths[name] ?? paths.grid} />
-    </svg>
-  )
+  const icons: Record<string, LucideIcon> = { grid: LayoutDashboard, users: UsersRound, workflow: Workflow, activity: Activity, shield: ShieldCheck, settings: Settings2, search: Search, bell: Bell, plus: Plus, close: X, check: Check, download: Download, edit: Pencil, sun: Sun, moon: Moon, camera: Camera, logout: LogOut, printer: Printer, cal: CalendarDays, task: ListTodo }
+  const Component = icons[name] ?? LayoutDashboard
+  return <Component aria-hidden="true" className={cn('h-4 w-4 shrink-0', className)} strokeWidth={1.8} />
 }
 
 export function Avatar({ text, tone = 'blue', src, size }: { text: string; tone?: string; src?: string; size?: number }) {
-  const style = size ? { width: size, height: size, flex: `0 0 ${size}px` } : undefined
+  const sizing = size ? (avatarSize[size] ?? avatarBase) : avatarBase
   return src
-    ? <span className={`${avatarBase} p-0 overflow-hidden`} style={style}><img className="block h-full w-full object-cover" src={src} alt="" /></span>
-    : <span className={`${avatarBase} ${avatarTones[tone] ?? avatarTones.blue}`} style={style}>{text}</span>
+    ? <span className={cn(avatarBase, sizing, 'p-0')}><img className="block h-full w-full object-cover" src={src} alt="" /></span>
+    : <span className={cn(avatarBase, sizing, avatarTones[tone] ?? avatarTones.blue)}>{text}</span>
 }
 
 export function Heading({ title, subtitle, action }: { title: string; subtitle: string; action?: ReactNode }) {
   return (
-    <div className="mb-[25px] flex items-end justify-between max-[700px]:flex-col max-[700px]:items-start max-[700px]:gap-[13px]">
+    <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <small className="text-[10px] text-[#9aa4b6]">سامانه ناب</small>
-        <h1 className="m-[6px_0_3px] text-[27px] text-[#1d2942] dark:text-[#eef2fb] max-[700px]:text-[23px]">{title}</h1>
-        <p className="m-0 text-[11px] text-[#9aa4b5]">{subtitle}</p>
+        <small className="text-xs font-medium text-slate-500 dark:text-slate-400">سامانه ناب</small>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl dark:text-white">{title}</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">{subtitle}</p>
       </div>
       {action}
     </div>
   )
 }
 
-const calNavBtn = 'h-[26px] w-[26px] flex-[0_0_26px] rounded-[7px] border border-[#e3e8f0] bg-white text-[13px] leading-none text-[#69758b] hover:border-[#c3cdf7] hover:text-pri dark:border-dkline2 dark:bg-dksurf dark:text-[#c6cede]'
+const calNavBtn = cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm leading-none text-slate-600 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-200', focusRing, transition)
 
 export function MiniCalendar({
   activityDays,
@@ -117,18 +94,18 @@ export function MiniCalendar({
 
   return (
     <div
-      className="mini-cal rounded-[14px] border border-line bg-white p-[14px] shadow-[0_18px_45px_rgba(39,50,83,.22)] dark:border-[#232c45] dark:bg-[#151d30]"
+      className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[17rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl shadow-slate-950/10 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/30"
       dir="rtl"
       onClick={e => e.stopPropagation()}
       onMouseDown={e => e.stopPropagation()}
     >
-      <div className="mb-[10px] flex items-center justify-between gap-[6px]">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <button type="button" className={calNavBtn} onClick={() => move(1)} title="ماه بعد" aria-label="ماه بعد">‹</button>
-        <div className="flex items-center gap-[4px]">
+        <div className="flex items-center gap-1">
           <select
             value={view.m}
             onChange={e => changeMonth(Number(e.target.value))}
-            className="cursor-pointer rounded-[6px] border border-[#e3e8f0] bg-white px-[4px] py-[3px] text-[10px] font-bold text-soft outline-none dark:border-dkline2 dark:bg-dksurf dark:text-[#dbe2f2]"
+            className={cn('cursor-pointer rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-[11px] font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200', focusRing)}
           >
             {jalaliMonthNames.map((name, idx) => (
               <option key={name} value={idx + 1}>{name}</option>
@@ -152,28 +129,28 @@ export function MiniCalendar({
           ? (
             <button
               type="button"
-              className={`relative flex h-[28px] w-full items-center justify-center rounded-[7px] text-[10px] font-semibold transition-colors ${
+              className={`relative flex h-8 w-full items-center justify-center rounded-lg text-[11px] font-semibold ${transition} ${
                 cell.isSelected
-                  ? 'bg-pri font-extrabold text-white shadow-[0_2px_8px_rgba(82,103,245,.35)]'
+                  ? 'bg-indigo-600 font-extrabold text-white shadow-sm shadow-indigo-600/30'
                   : cell.isToday
-                    ? 'border border-pri bg-[#eef2ff] font-extrabold text-pri dark:bg-[#1a2444] dark:text-[#9fb0ff]'
-                    : 'border-0 bg-transparent text-[#3d4658] hover:bg-[#edf1ff] dark:text-[#dbe2f2] dark:hover:bg-[#1c2650]'
+                    ? 'border border-indigo-300 bg-indigo-50 font-extrabold text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-200'
+                    : 'bg-transparent text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
               key={i}
               onClick={() => onPick?.(view.y, view.m, cell.d)}
             >
               {cell.d.toLocaleString('fa-IR')}
               {activityDays.has(`${view.y}-${view.m}-${cell.d}`) && (
-                <i className={`absolute bottom-[2px] right-1/2 h-[4px] w-[4px] translate-x-1/2 rounded-full ${cell.isSelected ? 'bg-white' : 'bg-pri'}`} />
+                <i className={`absolute bottom-0.5 right-1/2 h-1 w-1 translate-x-1/2 rounded-full ${cell.isSelected ? 'bg-white' : 'bg-indigo-500'}`} />
               )}
             </button>
           )
           : <span key={i} />)}
       </div>
-      <div className="mt-[10px] flex items-center justify-between gap-[6px]">
+      <div className="mt-3 flex items-center justify-between gap-2">
         <button
           type="button"
-          className="flex-1 rounded-[7px] bg-[#eef1ff] py-[5px] text-[9px] font-bold text-pri transition-colors hover:bg-[#e0e7ff] dark:bg-[#1c2650] dark:text-[#9fb0ff]"
+          className={cn('flex-1 rounded-lg bg-indigo-50 py-1.5 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-200 dark:hover:bg-indigo-900', transition, focusRing)}
           onClick={() => {
             setView({ y: todayJ.y, m: todayJ.m })
             onPick?.(todayJ.y, todayJ.m, todayJ.d)
@@ -222,15 +199,15 @@ export function BirthDateField({
   }, [value])
 
   return (
-    <div className="datefield relative mt-[6px]" ref={containerRef}>
+    <div className="relative mt-1.5" ref={containerRef}>
       <div
-        className="flex cursor-pointer items-center justify-between rounded-[9px] border border-[#d0d7e5] bg-[#fcfdfe] p-[3px_5px] shadow-[0_1px_2px_rgba(0,0,0,.03)] transition-all hover:border-[#9fb0ff] focus-within:border-pri focus-within:shadow-[0_0_0_2px_rgba(82,103,245,.14)] dark:border-[#2a3552] dark:bg-[#0f1628] dark:hover:border-[#3e4d82]"
+        className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-300 bg-white p-1 shadow-sm transition-all duration-200 hover:border-indigo-300 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/15 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-indigo-700"
         onClick={() => setOpen(true)}
       >
         <input
           type="text"
           dir="ltr"
-          className="flex-1 !m-0 !border-0 bg-transparent !p-[7px_8px] text-[10px] font-medium text-soft outline-0 dark:text-[#dfe5f2]"
+          className="m-0 flex-1 border-0 bg-transparent px-2 py-1.5 text-xs font-medium text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-100"
           value={value}
           placeholder={placeholder}
           onFocus={() => setOpen(true)}
@@ -240,7 +217,7 @@ export function BirthDateField({
           {value && (
             <button
               type="button"
-              className="flex h-[24px] w-[24px] items-center justify-center rounded-[5px] !border-0 !bg-transparent text-[11px] text-mut hover:bg-[#f0f2f7] hover:text-red-500 dark:hover:bg-[#1b233a]"
+              className={cn('flex h-6 w-6 items-center justify-center rounded-md border-0 bg-transparent text-sm text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800', focusRing, transition)}
               onClick={e => {
                 e.stopPropagation()
                 onChange('')
@@ -253,7 +230,7 @@ export function BirthDateField({
           )}
           <button
             type="button"
-            className="flex h-[28px] w-[28px] items-center justify-center rounded-[7px] !border-0 bg-[#eef2ff] text-pri transition-all hover:bg-pri hover:text-white dark:bg-[#1c2650] dark:text-[#9fb0ff] dark:hover:bg-pri dark:hover:text-white"
+            className={cn('flex h-7 w-7 items-center justify-center rounded-lg border-0 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white dark:bg-indigo-950 dark:text-indigo-200 dark:hover:bg-indigo-600', focusRing, transition)}
             onClick={e => {
               e.stopPropagation()
               setOpen(o => !o)

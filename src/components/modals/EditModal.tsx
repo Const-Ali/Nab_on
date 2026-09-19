@@ -5,6 +5,7 @@ import { BirthDateField, Icon } from '../../shared-ui'
 import { personTags, validNationalId, validBirthDate, validDeadlineDate } from '../../app-lib'
 import type { Person } from '../../types'
 import { PhotoField } from '../common/PhotoField'
+import { backdropCls, modalBox } from '../ui'
 
 export function EditModal({ person, existing, onClose, onSave }: { person: Person; existing: Person[]; onClose: () => void; onSave: (p: Person, changed: string[]) => void }) {
   const [firstName, setFirstName] = useState(person.firstName)
@@ -80,8 +81,8 @@ export function EditModal({ person, existing, onClose, onSave }: { person: Perso
   }
 
   return (
-    <div className="backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className="modal" onSubmit={submit}>
+    <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <form className={modalBox} onSubmit={submit}>
         <button type="button" className="x" onClick={onClose} aria-label="بستن"><Icon name="close" /></button>
         <small>ویرایش پرونده · {person.id}</small>
         <h2>ویرایش اطلاعات فرد</h2>

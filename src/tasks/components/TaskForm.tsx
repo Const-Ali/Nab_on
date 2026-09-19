@@ -5,6 +5,7 @@ import { normalizeDigits } from '../../shared'
 import { validJalaliDate } from '../utils'
 import { taskPriorityLabels, taskPriorityOrder, taskStatusLabels, taskStatusOrder, taskTypeLabels } from '../types'
 import type { TaskFields, TaskPriority, TaskStatus, TaskType, WorkTask } from '../types'
+import { backdropCls, errorBox, formGrid, inputCls, modalActions, modalBox, modalH2, modalP, modalSmall, selectCls, textareaCls } from '../../components/ui'
 
 interface Props {
   initial: WorkTask | null
@@ -59,17 +60,18 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
   }
 
   return (
-    <div className="backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className="modal wm-modal" onSubmit={submit}>
+    <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <form className={`${modalBox} max-w-3xl`} onSubmit={submit}>
         <button type="button" className="x" onClick={onClose} aria-label="بستن"><Icon name="close" /></button>
-        <small>{initial ? 'ویرایش کار' : 'کار جدید'}</small>
-        <h2>{initial ? `ویرایش «${initial.title}»` : 'ایجاد کار جدید'}</h2>
-        <p>کارهای شخصی فقط برای شما قابل مشاهده است؛ کارهای سازمانی بین ایجادکننده و مسئول مشترک می‌شود.</p>
+        <small className={modalSmall}>{initial ? 'ویرایش کار' : 'کار جدید'}</small>
+        <h2 className={modalH2}>{initial ? `ویرایش «${initial.title}»` : 'ایجاد کار جدید'}</h2>
+        <p className={modalP}>کارهای شخصی فقط برای شما قابل مشاهده است؛ کارهای سازمانی بین ایجادکننده و مسئول مشترک می‌شود.</p>
 
-        <div className="form-grid">
+        <div className={formGrid}>
           <label className="col-span-2 max-[700px]:col-span-1">
             عنوان کار *
             <input
+              className={inputCls}
               autoFocus
               required
               value={title}
@@ -80,6 +82,7 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
           <label className="col-span-2 max-[700px]:col-span-1">
             توضیحات
             <textarea
+              className={textareaCls}
               value={description}
               onChange={e => setDescription(e.target.value)}
               rows={2}
@@ -88,26 +91,27 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
           </label>
           <label>
             نوع کار
-            <select value={type} onChange={e => setType(e.target.value as TaskType)}>
+            <select className={selectCls} value={type} onChange={e => setType(e.target.value as TaskType)}>
               <option value="personal">{taskTypeLabels.personal}</option>
               <option value="organizational">{taskTypeLabels.organizational}</option>
             </select>
           </label>
           <label>
             وضعیت
-            <select value={status} onChange={e => setStatus(e.target.value as TaskStatus)}>
+            <select className={selectCls} value={status} onChange={e => setStatus(e.target.value as TaskStatus)}>
               {taskStatusOrder.map(s => <option key={s} value={s}>{taskStatusLabels[s]}</option>)}
             </select>
           </label>
           <label>
             اولویت
-            <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)}>
+            <select className={selectCls} value={priority} onChange={e => setPriority(e.target.value as TaskPriority)}>
               {taskPriorityOrder.map(p => <option key={p} value={p}>{taskPriorityLabels[p]}</option>)}
             </select>
           </label>
           <label>
             دسته‌بندی
             <input
+              className={inputCls}
               value={category}
               onChange={e => setCategory(e.target.value)}
               list="wm-cats"
@@ -125,6 +129,7 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
           <label className="col-span-2 max-[700px]:col-span-1">
             برچسب‌ها
             <input
+              className={inputCls}
               value={tagsText}
               onChange={e => setTagsText(e.target.value)}
               placeholder="با «،» جدا کنید: فوری، پیگیری"
@@ -133,6 +138,7 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
           <label className="col-span-2 max-[700px]:col-span-1">
             توضیحات تکمیلی
             <textarea
+              className={textareaCls}
               value={note}
               onChange={e => setNote(e.target.value)}
               rows={2}
@@ -141,8 +147,8 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
           </label>
         </div>
         <datalist id="wm-cats">{categories.map(c => <option key={c} value={c} />)}</datalist>
-        {error && <div className="error">{error}</div>}
-        <div className="modal-actions">
+        {error && <div className={errorBox}>{error}</div>}
+        <div className={modalActions}>
           <button type="button" className="outline" onClick={onClose}>انصراف</button>
           <button type="submit" className="primary"><Icon name={initial ? 'check' : 'plus'} /> {initial ? 'ذخیره تغییرات' : 'ایجاد کار'}</button>
         </div>

@@ -4,6 +4,7 @@ import { nowTs } from '../../shared'
 import { Icon } from '../../shared-ui'
 import { permissionLabels, allPermissions } from '../../app-lib'
 import type { Permission, RoleDef } from '../../types'
+import { backdropCls, modalBox } from '../ui'
 
 export function RoleModal({ existing, onClose, onCreate }: { existing: RoleDef[]; onClose: () => void; onCreate: (r: RoleDef) => void }) {
   const [title, setTitle] = useState('')
@@ -21,8 +22,8 @@ export function RoleModal({ existing, onClose, onCreate }: { existing: RoleDef[]
     onCreate({ id: cleanId, title: title.trim(), permissions })
   }
   return (
-    <div className="backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className="modal" onSubmit={submit}>
+    <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <form className={modalBox} onSubmit={submit}>
         <button type="button" className="x" onClick={onClose}><Icon name="close" /></button>
         <small>نقش سازمانی جدید</small>
         <h2>تعریف نقش سفارشی</h2>

@@ -50,8 +50,7 @@ export function QRCodeSvg({ value, size = 96, className }: { value: string; size
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}
-      className={className}
-      style={{ display: 'inline-block', background: '#ffffff' }}
+      className={`inline-block bg-white ${className ?? ''}`}
       aria-label={`QR Code: ${value}`}
     >
       <rect width={size} height={size} fill="#ffffff" />

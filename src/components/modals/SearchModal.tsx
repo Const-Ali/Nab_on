@@ -3,6 +3,7 @@ import { normalizeText, playChime } from '../../shared'
 import { Avatar, Icon } from '../../shared-ui'
 import type { Person, Activity, Note, ThemeMode } from '../../types'
 import { Badge } from '../common/Badge'
+import { backdropCls, cn, modalX, searchBox, searchIcon, searchInput } from '../ui'
 
 interface CommandItem {
   id: string
@@ -238,18 +239,19 @@ export function SearchModal({
   }
 
   return (
-    <div className="backdrop search-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="search-modal" onClick={e => e.stopPropagation()} dir="rtl">
-        <div className="search-input-row">
-          <Icon name="search" />
+    <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className={cn(searchBox, 'max-h-[min(42rem,calc(100vh-2rem))] overflow-y-auto')} onClick={e => e.stopPropagation()} dir="rtl">
+        <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+          <Icon name="search" className={searchIcon} />
           <input
             autoFocus
+            className={searchInput}
             value={q}
             onChange={e => setQ(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="دستور یا جستجو را تایپ کنید (مثلاً: ثبت فرد، تم تاریک، کد ملی)..."
           />
-          <kbd onClick={onClose} style={{ cursor: 'pointer' }}>
+          <kbd className={cn(modalX, 'static shrink-0')} onClick={onClose}>
             Esc
           </kbd>
         </div>

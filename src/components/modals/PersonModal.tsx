@@ -3,6 +3,7 @@ import { Avatar, Icon } from '../../shared-ui'
 import { workflow, nextStatuses, personTags, STALE_LIMIT, deadlineLeft, staleDays, timelineTone } from '../../app-lib'
 import type { Status, Person, Activity, User, Note } from '../../types'
 import { Badge } from '../common/Badge'
+import { backdropCls, modalBox } from '../ui'
 
 export function PersonModal({
   person,
@@ -84,8 +85,8 @@ export function PersonModal({
   const assignedUser = usersList.find(u => u.username === person.assignee)
 
   return (
-    <div className="backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal">
+    <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className={`${modalBox} max-w-5xl`} onClick={e => e.stopPropagation()}>
         <button type="button" className="x" onClick={onClose} aria-label="بستن"><Icon name="close" /></button>
         <small>جزئیات فرد · {person.id}</small>
         <h2>{person.firstName} {person.lastName}</h2>

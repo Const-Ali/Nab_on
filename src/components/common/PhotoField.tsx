@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Avatar, Icon } from '../../shared-ui'
 import { imageToDataUrl } from '../../app-lib'
+import { btnDanger, btnMini, cn, errorBox } from '../ui'
 
 export function PhotoField({
   value,
@@ -49,32 +50,31 @@ export function PhotoField({
 
   return (
     <div
-      className={`photo-field ${isDragging ? 'drag-over' : ''}`}
+      className={cn('flex cursor-pointer flex-col items-center gap-4 rounded-2xl border border-dashed p-4 text-center transition-all duration-200 sm:flex-row sm:text-right', isDragging ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/30' : 'border-slate-300 bg-slate-50/70 hover:border-indigo-300 hover:bg-indigo-50/40 dark:border-slate-700 dark:bg-slate-900/50 dark:hover:bg-slate-900')}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={() => fileRef.current?.click()}
       title="برای انتخاب فایل کلیک کنید یا عکس را اینجا بکشید و رها کنید"
-      style={{ cursor: 'pointer' }}
     >
       <Avatar text={fallbackInitial || 'ن'} src={value} size={64} />
-      <div className="photo-actions" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center gap-[7px]">
-          <button type="button" className="mini-btn" onClick={() => fileRef.current?.click()}>
+      <div className="min-w-0 flex-1" onClick={e => e.stopPropagation()}>
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+          <button type="button" className={btnMini} onClick={() => fileRef.current?.click()}>
             <Icon name="camera" /> {value ? 'تغییر عکس' : 'انتخاب یا رها کردن عکس'}
           </button>
           {value && (
-            <button type="button" className="mini-btn text-red-500" onClick={() => onChange('')}>
+            <button type="button" className={cn(btnDanger, 'px-3 py-1.5 text-xs')} onClick={() => onChange('')}>
               حذف عکس
             </button>
           )}
         </div>
-        <small>
+        <small className="mt-2 block text-xs leading-5 text-slate-500 dark:text-slate-400">
           {isDragging
             ? '📂 تصویر را اینجا رها کنید...'
             : 'عکس را اینجا بکشید و رها کنید (Drag & Drop) یا کلیک کنید · JPG یا PNG تا ۲ مگابایت'}
         </small>
-        {photoError && <em className="photo-error">{photoError}</em>}
+        {photoError && <em className={cn(errorBox, 'mt-3 block text-right not-italic')}>{photoError}</em>}
       </div>
       <input
         ref={fileRef}
