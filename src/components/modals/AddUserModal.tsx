@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Icon } from '../../shared-ui'
 import { permissionLabels } from '../../app-lib'
 import type { Role, RoleDef, User } from '../../types'
 import { backdropCls, cn, errorBox, formGrid, modalActions, modalBox, modalFormLayout } from '../ui'
@@ -25,7 +24,7 @@ export function AddUserModal({ existing, roles, onClose, onCreate }: { existing:
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <form className={cn(modalBox, modalFormLayout)} onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن"><Icon name="close" /></button>
+        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</button>
         <small>کاربر جدید</small>
         <h2>ایجاد حساب ورود</h2>
         <p>کاربر با همین نام کاربری و رمز عبور وارد سامانه می‌شود؛ سطح دسترسی را مشخص کنید.</p>
@@ -37,12 +36,12 @@ export function AddUserModal({ existing, roles, onClose, onCreate }: { existing:
         </div>
         <h3 className="modal-h">مجوزهای این نقش <small>— بعداً برای هر کاربر قابل ویرایش است</small></h3>
         <div className="permission-list">
-          {(roles.find(r => r.id === role)?.permissions ?? []).map(p => <span key={p}><Icon name="check" className="inline-block h-3.5 w-3.5" /> {permissionLabels[p]}</span>)}
+          {(roles.find(r => r.id === role)?.permissions ?? []).map(p => <span key={p}>{permissionLabels[p]}</span>)}
         </div>
         {error && <div className={errorBox}>{error}</div>}
         <div className={modalActions}>
-          <button type="button" className="outline" onClick={onClose}><Icon name="close" /> انصراف</button>
-          <button type="submit" className="primary"><Icon name="plus" /> ایجاد کاربر</button>
+          <button type="button" className="outline" onClick={onClose}> انصراف</button>
+          <button type="submit" className="primary"> ایجاد کاربر</button>
         </div>
       </form>
     </div>

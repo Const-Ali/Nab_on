@@ -1,5 +1,5 @@
-const CACHE = 'nab-v3'
-const SHELL = ['./', './index.html', './favicon.svg', './manifest.webmanifest', './icon-192.png', './icon-512.png']
+const CACHE = 'nab-v4'
+const SHELL = ['./', './index.html', './manifest.webmanifest']
 
 self.addEventListener('install', event => {
   event.waitUntil(

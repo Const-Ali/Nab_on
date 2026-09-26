@@ -15,7 +15,7 @@ import {
   fetchAllFromServer,
   syncSave,
 } from './api-client'
-import { Avatar, Icon, MiniCalendar } from './shared-ui'
+import { Avatar, MiniCalendar } from './shared-ui'
 import {
   deadlineLeft,
   initialPeople,
@@ -361,15 +361,16 @@ export default function App() {
     )
   }
 
-  const navItems: [Page, string, string, Permission?][] = [
-    ['dashboard', 'داشبورد', 'grid'],
-    ['persons', 'افراد و پرونده‌ها', 'users', 'view_persons'],
-    ['workflow', 'گردش‌کار', 'workflow', 'view_persons'],
-    ['activities', 'رویدادها', 'activity', 'view_activities'],
-    ['users', 'کاربران و دسترسی', 'shield', 'manage_users'],
-    ['reports', 'گزارش‌ها و تحلیل', 'activity', 'view_reports'],
-    ['settings', 'تنظیمات', 'settings'],
+  const navItems: [Page, string, Permission?][] = [
+    ['dashboard', 'داشبورد'],
+    ['persons', 'افراد و پرونده‌ها', 'view_persons'],
+    ['workflow', 'گردش‌کار', 'view_persons'],
+    ['activities', 'رویدادها', 'view_activities'],
+    ['users', 'کاربران و دسترسی', 'manage_users'],
+    ['reports', 'گزارش‌ها و تحلیل', 'view_reports'],
+    ['settings', 'تنظیمات'],
   ]
+  const compactNavLabels: Record<Page, string> = { dashboard: 'داشبورد', persons: 'افراد', workflow: 'گردش‌کار', activities: 'رویدادها', users: 'کاربران', reports: 'گزارش‌ها', settings: 'تنظیمات', tasks: 'کارها' }
 
   const todayJ = jalaliParts(new Date())
   const headerDate = `${todayJ.d} ${jalaliMonthNames[todayJ.m - 1]} ${todayJ.y}`
@@ -393,12 +394,12 @@ export default function App() {
       <aside className={cn('fixed inset-y-0 right-0 z-40 hidden w-72 flex-col border-l border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 lg:flex dark:border-slate-800 dark:bg-slate-900', collapsed && 'w-20')}>
         <button
           type="button"
-          className={cn('absolute -left-4 top-8 grid h-8 w-8 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-950 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800', focusRing, transition, collapsed && 'rotate-180')}
+          className={cn('absolute -left-4 top-8 flex h-8 -translate-x-full items-center justify-center rounded-full border border-slate-200 bg-white px-2 text-xs text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-950 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800', focusRing, transition)}
           onClick={() => setCollapsed(c => !c)}
           title="جمع / باز کردن نوار کناری"
           aria-label="جمع / باز کردن نوار کناری"
         >
-          <Icon name="previous" />
+          {collapsed ? 'باز کردن' : 'جمع کردن'}
         </button>
         <div className="flex items-center gap-3 px-2 py-3">
           <b className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-600 text-lg font-black text-white shadow-sm">ن</b>
@@ -409,13 +410,13 @@ export default function App() {
         </div>
         <div className={cn('mb-2 mt-6 px-3 text-xs font-semibold text-slate-400', collapsed && 'sr-only')}>منوی اصلی</div>
         <nav className="flex-1 space-y-1">
-          {navItems.map(([key, label, iconName, perm]) => {
+          {navItems.map(([key, label, perm]) => {
             if (perm && !has(perm)) return null
             return (
               <button
                 type="button"
                 key={key}
-                className={cn('flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-right text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white', focusRing, transition, page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300', collapsed && 'justify-center px-2')}
+                className={cn('flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-right text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white', focusRing, transition, page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300', collapsed && 'justify-center px-1 text-center text-[10px]')}
                 onClick={() => {
                   setPage(key)
                   setCalOpen(false)
@@ -423,8 +424,7 @@ export default function App() {
                 title={collapsed ? label : undefined}
                 aria-label={collapsed ? label : undefined}
               >
-                <Icon name={iconName} />
-                <span className={collapsed ? 'hidden' : ''}>{label}</span>
+                <span>{collapsed ? compactNavLabels[key] : label}</span>
               </button>
             )
           })}
@@ -441,7 +441,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-300', focusRing, transition, collapsed && 'hidden')}
+              className={cn('grid h-9 shrink-0 place-items-center rounded-xl px-2 text-xs text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-300', focusRing, transition, collapsed && 'hidden')}
               onClick={() => {
                 setSession(null)
                 playChime('alert')
@@ -449,7 +449,7 @@ export default function App() {
               title="خروج از حساب"
               aria-label="خروج از حساب"
             >
-              <Icon name="logout" />
+              خروج
             </button>
           </div>
         </div>
@@ -478,7 +478,6 @@ export default function App() {
                 className="mr-2 hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 sm:inline-flex dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
                 title={isServerConnected ? 'داده‌ها روی هاست ذخیره و همگام می‌شوند' : 'اتصال هاست برقرار نیست؛ ذخیره در مرورگر'}
               >
-                <i className={`h-[6px] w-[6px] rounded-full ${isServerConnected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 {isServerConnected ? 'ذخیره در هاست فعال' : 'حالت محلی'}
               </span>
             )}
@@ -490,7 +489,7 @@ export default function App() {
             onClick={() => setSearchOpen(true)}
             title="پالت دستورات سریع و جستجو (Ctrl+K)"
           >
-            <Icon name="search" /> جستجو یا دستور... <kbd>Ctrl+K</kbd>
+            جستجو یا دستور... <kbd>Ctrl+K</kbd>
           </button>
 
           <div className="flex items-center gap-2">
@@ -498,12 +497,12 @@ export default function App() {
             <div className="relative">
               <button
                 type="button"
-                className={cn('grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800', focusRing, transition)}
+                className={cn('grid h-10 place-items-center rounded-xl border border-slate-200 bg-white px-2 text-xs text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800', focusRing, transition)}
                 onClick={() => setThemeMenuOpen(o => !o)}
                 title="انتخاب تم رنگی"
                 aria-label="انتخاب تم رنگی"
               >
-                {theme === 'light' ? <Icon name="sun" /> : <Icon name="moon" />}
+                انتخاب تم
               </button>
               {themeMenuOpen && (
                 <div className="absolute left-0 top-full z-50 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={() => setThemeMenuOpen(false)}>
@@ -514,7 +513,6 @@ export default function App() {
                       className={cn('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-right text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800', focusRing, transition, theme === t && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
                       onClick={() => setTheme(t)}
                     >
-                      <span className="h-3 w-3 rounded-full bg-slate-400" />
                       <span>{themeLabels[t].label}</span>
                     </button>
                   ))}
@@ -531,7 +529,6 @@ export default function App() {
               }}
               title="ورود به بخش کارهای من"
             >
-              <Icon name="task" className="h-[15px] w-[15px]" />
               کارهای من
             </button>
           </div>
@@ -777,7 +774,7 @@ export default function App() {
       )}
 
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-slate-200 bg-white/95 px-2 py-2 backdrop-blur lg:hidden dark:border-slate-800 dark:bg-slate-900/95">
-        {navItems.slice(0, 5).map(([key, label, iconName, perm]) => !perm || has(perm) ? <button key={key} type="button" onClick={() => setPage(key)} className={cn('flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[10px] text-slate-500 dark:text-slate-400', focusRing, transition, page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}><Icon name={iconName} /><span className="truncate">{label}</span></button> : null)}
+        {navItems.slice(0, 5).map(([key, label, perm]) => !perm || has(perm) ? <button key={key} type="button" onClick={() => setPage(key)} className={cn('flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[10px] text-slate-500 dark:text-slate-400', focusRing, transition, page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}><span className="truncate">{label}</span></button> : null)}
       </nav>
       {toast && <div className="fixed bottom-20 left-4 z-[60] max-w-sm rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-xl lg:bottom-6">{toast}</div>}
     </div>

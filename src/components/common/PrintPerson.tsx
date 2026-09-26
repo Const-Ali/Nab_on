@@ -1,5 +1,4 @@
 import { nowStamp, toPersianDigits } from '../../shared'
-import { Icon } from '../../shared-ui'
 import { workflow } from '../../app-lib'
 import type { Person, Activity, Note } from '../../types'
 import { QRCodeSvg } from './QRCodeSvg'
@@ -81,7 +80,7 @@ export function PrintPerson({ person, notes, history }: { person: Person; notes:
       <ol className="print-steps">
         {workflow.map((s, i) => (
           <li key={s} className={i < currentIndex ? 'd' : i === currentIndex ? 'c' : ''}>
-            {s} {i === currentIndex && <><Icon name="back" className="inline-block h-3.5 w-3.5" /> (مرحله جاری)</>}
+            {s} {i === currentIndex && '(مرحله جاری)'}
           </li>
         ))}
       </ol>
@@ -90,7 +89,7 @@ export function PrintPerson({ person, notes, history }: { person: Person; notes:
       <div className="print-log">
         {history.slice(0, 10).map(a => (
           <p key={a.id}>
-            <Icon name="history" className="inline-block h-3.5 w-3.5" /> <b>{a.action}</b> {a.previousStatus && a.newStatus ? ` (از «${a.previousStatus}» به «${a.newStatus}»)` : ''} — {a.createdBy} ({a.createdAt})
+            <b>{a.action}</b> {a.previousStatus && a.newStatus ? ` (از «${a.previousStatus}» به «${a.newStatus}»)` : ''} — {a.createdBy} ({a.createdAt})
           </p>
         ))}
         {!history.length && <p>رویدادی ثبت نشده است.</p>}
@@ -102,7 +101,7 @@ export function PrintPerson({ person, notes, history }: { person: Person; notes:
           <div className="print-notes">
             {notes.slice(0, 8).map(n => (
               <p key={n.id}>
-                <Icon name="message" className="inline-block h-3.5 w-3.5" /> <b>{n.author} ({n.title}):</b> {n.text} — <small>{n.createdAt}</small>
+                <b>{n.author} ({n.title}):</b> {n.text} — <small>{n.createdAt}</small>
               </p>
             ))}
           </div>

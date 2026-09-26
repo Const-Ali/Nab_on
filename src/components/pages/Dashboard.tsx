@@ -1,4 +1,4 @@
-import { Avatar, Heading, Icon } from '../../shared-ui'
+import { Avatar, Heading } from '../../shared-ui'
 import type { Status, Person, Activity } from '../../types'
 import { Badge } from '../common/Badge'
 import { btnOutline, btnPrimary, cn, emptyBox, panelBox, panelH2 } from '../ui'
@@ -22,7 +22,6 @@ export function Dashboard({
   onSelect: (p: Person) => void
   greeting: string
 }) {
-  const ACTIVITY_DOTS = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-violet-500']
   const count = (s: Status) => people.filter(p => p.status === s).length
   const otherCount = people.length - count('پرونده فعال') - count('بررسی مرکز') - count('رد شده')
   return (
@@ -33,11 +32,11 @@ export function Dashboard({
         action={
           canCreate ? (
             <button className={btnPrimary} onClick={onCreate}>
-              <Icon name="plus" /> ثبت فرد جدید
+               ثبت فرد جدید
             </button>
           ) : (
             <button className={btnOutline} onClick={onPersons}>
-              <Icon name="forward" /> مشاهده افراد
+               مشاهده افراد
             </button>
           )
         }
@@ -45,16 +44,13 @@ export function Dashboard({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {(
           [
-            ['کل افراد', people.length, 'blue'],
-            ['درخواست‌های جدید', count('درخواست پرونده'), 'amber'],
-            ['پرونده‌های فعال', count('پرونده فعال'), 'green'],
-            ['در انتظار بررسی', count('بررسی مرکز'), 'purple'],
+            ['کل افراد', people.length],
+            ['درخواست‌های جدید', count('درخواست پرونده')],
+            ['پرونده‌های فعال', count('پرونده فعال')],
+            ['در انتظار بررسی', count('بررسی مرکز')],
           ] as const
-        ).map(([label, value, color]) => (
+        ).map(([label, value]) => (
           <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900" key={label}>
-            <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', color === 'blue' && 'bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300', color === 'amber' && 'bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-300', color === 'green' && 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300', color === 'purple' && 'bg-violet-50 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300')}>
-              <Icon name="users" />
-            </div>
             <span className="min-w-0 text-sm text-slate-500 dark:text-slate-400">
               {label}
               <b className="mt-1 block text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{Number(value).toLocaleString('fa-IR')}</b>
@@ -112,10 +108,10 @@ export function Dashboard({
             </div>
           </div>
           <div className="mt-4 space-y-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
-            ● فعال {count('پرونده فعال').toLocaleString('fa-IR')}
-            <br />● در انتظار بررسی {count('بررسی مرکز').toLocaleString('fa-IR')}
-            <br />● رد شده {count('رد شده').toLocaleString('fa-IR')}
-            <br />● سایر {Math.max(0, otherCount).toLocaleString('fa-IR')}
+            فعال {count('پرونده فعال').toLocaleString('fa-IR')}
+            <br />در انتظار بررسی {count('بررسی مرکز').toLocaleString('fa-IR')}
+            <br />رد شده {count('رد شده').toLocaleString('fa-IR')}
+            <br />سایر {Math.max(0, otherCount).toLocaleString('fa-IR')}
           </div>
         </section>
       </div>
@@ -123,7 +119,7 @@ export function Dashboard({
         <section className={cn(panelBox, 'p-4 sm:p-5')}>
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2>آخرین افراد ثبت‌شده</h2>
-            <button onClick={onPersons} className="inline-flex items-center gap-1"><Icon name="forward" /> مشاهده همه</button>
+            <button onClick={onPersons} className="inline-flex items-center"> مشاهده همه</button>
           </div>
           {people.slice(0, 6).map(p => (
             <button type="button" className="flex w-full items-center justify-between gap-3 border-t border-slate-100 py-3 text-right first:border-t-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id} onClick={() => onSelect(p)}>
@@ -143,9 +139,8 @@ export function Dashboard({
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2>فعالیت‌های اخیر</h2>
           </div>
-          {activities.slice(0, 5).map((a, i) => (
+          {activities.slice(0, 5).map(a => (
             <div className="flex gap-3 border-t border-slate-100 py-3 first:border-t-0 dark:border-slate-800" key={a.id}>
-              <i className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', ACTIVITY_DOTS[i % 5])} />
               <span className="min-w-0 flex-1">
                 <b className="block text-sm text-slate-800 dark:text-slate-100">{a.action}</b>
                 <small className="mt-1 block text-xs text-slate-500 dark:text-slate-400">

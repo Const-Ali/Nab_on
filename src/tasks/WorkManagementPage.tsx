@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { load, nowStamp, nowTs, playChime, save, uid } from '../shared'
-import { Heading, Icon } from '../shared-ui'
+import { Heading } from '../shared-ui'
 import WorkDashboard from './components/WorkDashboard'
 import TaskFilters from './components/TaskFilters'
 import TaskList from './components/TaskList'
@@ -237,7 +237,7 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
               }}
               title="تایمر تمرکز پومودورو"
             >
-              <Icon name="timer" /> تایمر پومودورو
+               تایمر پومودورو
             </button>
             <button
               type="button"
@@ -247,7 +247,7 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
                 setFormOpen(true)
               }}
             >
-              <Icon name="plus" /> ایجاد کار جدید
+               ایجاد کار جدید
             </button>
           </div>
         }

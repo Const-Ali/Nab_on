@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { nowTs } from '../../shared'
-import { Icon } from '../../shared-ui'
 import { permissionLabels, allPermissions } from '../../app-lib'
 import type { Permission, RoleDef } from '../../types'
 import { backdropCls, cn, modalBox, modalFormLayout } from '../ui'
@@ -24,7 +23,7 @@ export function RoleModal({ existing, onClose, onCreate }: { existing: RoleDef[]
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <form className={cn(modalBox, modalFormLayout)} onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن"><Icon name="close" /></button>
+        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</button>
         <small>نقش سازمانی جدید</small>
         <h2>تعریف نقش سفارشی</h2>
         <p>کاربرانی که این نقش را بگیرند، مجوزهای زیر را خواهند داشت؛ بعداً برای هر کاربر قابل تنظیم است.</p>
@@ -38,8 +37,8 @@ export function RoleModal({ existing, onClose, onCreate }: { existing: RoleDef[]
         </div>
         {error && <div className="error">{error}</div>}
         <div className="modal-actions">
-          <button type="button" className="outline" onClick={onClose}><Icon name="close" /> انصراف</button>
-          <button type="submit" className="primary"><Icon name="plus" /> ایجاد نقش</button>
+          <button type="button" className="outline" onClick={onClose}> انصراف</button>
+          <button type="submit" className="primary"> ایجاد نقش</button>
         </div>
       </form>
     </div>

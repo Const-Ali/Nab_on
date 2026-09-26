@@ -1,6 +1,5 @@
-import { Icon } from '../../shared-ui'
 import { isOverdue, overdueDays } from '../utils'
-import { taskPriorityLabels, taskPriorityTones, taskStatusLabels, taskTypeLabels } from '../types'
+import { taskPriorityLabels, taskStatusLabels, taskTypeLabels } from '../types'
 import type { UserLite, WorkTask } from '../types'
 import { backdropCls, cn, modalBox, modalFormLayout } from '../../components/ui'
 
@@ -31,9 +30,7 @@ export default function TaskDetails({
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className={cn(modalBox, modalFormLayout, 'max-w-4xl')} onClick={e => e.stopPropagation()}>
-        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن">
-          <Icon name="close" />
-        </button>
+        <button type="button" className="x" onClick={onClose} title="بستن">بستن</button>
         <div className="wm-details-head">
           <span>
             <small>{taskTypeLabels[task.type]} · {task.id}</small>
@@ -44,7 +41,7 @@ export default function TaskDetails({
 
         {late && (
           <div className="wm-late-banner">
-            <Icon name="warning" className="inline-block align-middle" /> این کار {overdueDays(task).toLocaleString('fa-IR')} روز از موعد خود گذشته است
+             این کار {overdueDays(task).toLocaleString('fa-IR')} روز از موعد خود گذشته است
           </div>
         )}
 
@@ -52,7 +49,7 @@ export default function TaskDetails({
           <div>
             <small>اولویت</small>
             <b>
-              <i className={`wm-dot pr-${taskPriorityTones[task.priority]}`} /> {taskPriorityLabels[task.priority]}
+              {taskPriorityLabels[task.priority]}
             </b>
           </div>
           <div>
@@ -106,7 +103,6 @@ export default function TaskDetails({
         <div className="wm-history">
           {[...task.history].reverse().map(h => (
             <div className="wm-hrow" key={h.id}>
-              <i className="wm-hdot" />
               <span>
                 <b>{h.action}</b>
                 <small>
@@ -120,7 +116,7 @@ export default function TaskDetails({
 
         <div className="modal-actions wm-detail-actions">
           <button type="button" className="outline danger-lite" onClick={() => onDelete(task)}>
-            <Icon name="trash" /> حذف کار
+             حذف کار
           </button>
           {onStartPomo && (
             <button
@@ -132,15 +128,15 @@ export default function TaskDetails({
               }}
               title="آغاز تایمر پومودورو برای این کار"
             >
-              <Icon name="timer" /> فوکوس پومودورو
+               فوکوس پومودورو
             </button>
           )}
           <span className="wm-spacer" />
           <button type="button" className="outline" onClick={() => onEdit(task)}>
-            <Icon name="edit" /> ویرایش
+             ویرایش
           </button>
           <button type="button" className="primary" onClick={() => onToggle(task)}>
-            <Icon name="check" /> {done ? 'بازگشایی کار' : 'تکمیل کار'}
+             {done ? 'بازگشایی کار' : 'تکمیل کار'}
           </button>
         </div>
       </div>

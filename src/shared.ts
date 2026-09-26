@@ -163,13 +163,13 @@ export function playChime(type: 'complete' | 'success' | 'alert' | 'timer_done' 
 export async function sendBrowserNotification(title: string, options?: NotificationOptions) {
   if (typeof window === 'undefined' || !('Notification' in window)) return false
   if (Notification.permission === 'granted') {
-    new Notification(title, { icon: '/favicon.svg', ...options })
+    new Notification(title, options)
     return true
   }
   if (Notification.permission !== 'denied') {
     const permission = await Notification.requestPermission()
     if (permission === 'granted') {
-      new Notification(title, { icon: '/favicon.svg', ...options })
+      new Notification(title, options)
       return true
     }
   }

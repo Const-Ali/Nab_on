@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Avatar, Heading, Icon } from '../../shared-ui'
+import { Avatar, Heading } from '../../shared-ui'
 import { workflow, personTags, STALE_LIMIT, deadlineLeft, PAGE_SIZE, staleDays, downloadCsv } from '../../app-lib'
 import type { Status, Person, PersonFilter } from '../../types'
 import { Badge } from '../common/Badge'
-import { btnMini, btnMiniOn, btnPrimary, cn, dangerLiteTxt, emptyBox, panelBox, rowCheck, searchBox, searchIcon, searchInput, selectCls } from '../ui'
+import { btnMini, btnMiniOn, btnPrimary, cn, dangerLiteTxt, emptyBox, panelBox, rowCheck, searchBox, searchInput, selectCls } from '../ui'
 
 export function Persons({
   people,
@@ -81,12 +81,11 @@ export function Persons({
       <Heading
         title="افراد"
         subtitle="اطلاعات افراد و وضعیت پرونده‌های آن‌ها را مدیریت کنید."
-        action={canCreate ? <button className={btnPrimary} onClick={onCreate}><Icon name="plus" /> افزودن فرد</button> : undefined}
+        action={canCreate ? <button className={btnPrimary} onClick={onCreate}> افزودن فرد</button> : undefined}
       />
       <section className={cn(panelBox, 'overflow-hidden')}>
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:p-5 lg:flex-row dark:border-slate-800">
           <div className={searchBox}>
-            <Icon name="search" className={searchIcon} />
             <input
               value={query}
               onChange={e => reset(setQuery)(e.target.value)}
@@ -125,7 +124,7 @@ export function Persons({
               <option value="" disabled>تغییر وضعیت گروهی...</option>
               {workflow.filter(s => s !== 'رد شده').map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button type="button" className={btnMini} onClick={exportSelected}><Icon name="download" /> خروجی اکسل</button>
+            <button type="button" className={btnMini} onClick={exportSelected}> خروجی اکسل</button>
             {canDelete && (
               <button
                 type="button"
@@ -135,10 +134,10 @@ export function Persons({
                   setSelectedIds(new Set())
                 }}
               >
-                <Icon name="trash" /> حذف گروهی
+                 حذف گروهی
               </button>
             )}
-            <button type="button" className={btnMini} onClick={() => setSelectedIds(new Set())}><Icon name="close" /> لغو انتخاب</button>
+            <button type="button" className={btnMini} onClick={() => setSelectedIds(new Set())}> لغو انتخاب</button>
           </div>
         )}
         <div className="hidden grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-500 lg:grid dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400">
@@ -185,11 +184,11 @@ export function Persons({
           <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 dark:border-slate-800 dark:text-slate-400">
             <span>{people.length.toLocaleString('fa-IR')} پرونده · صفحه {(safePage + 1).toLocaleString('fa-IR')} از {pageCount.toLocaleString('fa-IR')}</span>
             <div className="flex flex-wrap gap-1.5">
-              <button type="button" className={btnMini} disabled={safePage === 0} onClick={() => setPageNo(safePage - 1)}><Icon name="previous" /> قبلی</button>
+              <button type="button" className={btnMini} disabled={safePage === 0} onClick={() => setPageNo(safePage - 1)}> قبلی</button>
               {Array.from({ length: pageCount }, (_, i) => i).filter(i => pageCount <= 7 || Math.abs(i - safePage) <= 2 || i === 0 || i === pageCount - 1).map(i => (
                 <button type="button" key={i} className={cn(btnMini, i === safePage && btnMiniOn)} onClick={() => setPageNo(i)}>{(i + 1).toLocaleString('fa-IR')}</button>
               ))}
-              <button type="button" className={btnMini} disabled={safePage >= pageCount - 1} onClick={() => setPageNo(safePage + 1)}><Icon name="next" /> بعدی</button>
+              <button type="button" className={btnMini} disabled={safePage >= pageCount - 1} onClick={() => setPageNo(safePage + 1)}> بعدی</button>
             </div>
           </div>
         )}

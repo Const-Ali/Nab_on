@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { load, save } from '../shared'
-import { Icon } from '../shared-ui'
 import WorkManagementPage from './WorkManagementPage'
 import type { UserLite } from './types'
 
@@ -26,7 +25,7 @@ export default function TasksApp() {
     <div className="tasks-app" dir="rtl">
       <header className="tasks-topbar">
         <div className="tasks-topbar-right">
-          <a className="tasks-back" href="/" onClick={event => { event.preventDefault(); window.history.pushState({}, '', '/'); window.dispatchEvent(new PopStateEvent('popstate')) }} title="بازگشت به سامانه ناب"><Icon name="back" /> بازگشت به ناب</a>
+          <a className="tasks-back" href="/" onClick={event => { event.preventDefault(); window.history.pushState({}, '', '/'); window.dispatchEvent(new PopStateEvent('popstate')) }} title="بازگشت به سامانه ناب">بازگشت به ناب</a>
           <span className="tasks-brand"><b>مدیریت کارهای من</b><small>داشبورد خصوصی {meName} · سامانه ناب</small></span>
         </div>
         <button
@@ -36,7 +35,7 @@ export default function TasksApp() {
           title={theme === 'dark' ? 'حالت روشن' : 'حالت تیره'}
           aria-label="تغییر تم"
         >
-          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+          {theme === 'dark' ? 'حالت روشن' : 'حالت تیره'}
         </button>
       </header>
       <main className="tasks-content">

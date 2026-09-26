@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { isOverdue, overdueDays } from '../utils'
-import { taskPriorityTones, taskStatusLabels } from '../types'
+import { taskPriorityLabels, taskStatusLabels } from '../types'
 import type { TaskStatus, WorkTask } from '../types'
 
 const columns: TaskStatus[] = ['todo', 'in_progress', 'completed']
@@ -46,10 +46,9 @@ export default function TaskKanban({ tasks, onOpen, onMove }: Props) {
                   onClick={() => onOpen(t)}
                 >
                   <div className="wm-kcard-top">
-                    <i className={`wm-dot pr-${taskPriorityTones[t.priority]}`} />
                     <b>{t.title}</b>
                   </div>
-                  {t.category && <small className="wm-kcard-cat">{t.category}</small>}
+                  <small className="wm-kcard-cat">اولویت: {taskPriorityLabels[t.priority]}{t.category ? ` · ${t.category}` : ''}</small>
                   <div className="wm-kcard-bottom">
                     {t.dueDate && <time className={late ? 'late' : ''}>{late ? `${overdueDays(t).toLocaleString('fa-IR')} روز تأخیر` : t.dueDate.replace(/(\d)/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])}</time>}
                   </div>

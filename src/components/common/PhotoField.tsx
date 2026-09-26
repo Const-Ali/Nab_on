@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Avatar, Icon } from '../../shared-ui'
+import { Avatar } from '../../shared-ui'
 import { imageToDataUrl } from '../../app-lib'
 import { btnDanger, btnMini, cn, errorBox } from '../ui'
 
@@ -61,17 +61,17 @@ export function PhotoField({
       <div className="min-w-0 flex-1" onClick={e => e.stopPropagation()}>
         <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
           <button type="button" className={btnMini} onClick={() => fileRef.current?.click()}>
-            <Icon name="camera" /> {value ? 'تغییر عکس' : 'انتخاب یا رها کردن عکس'}
+            {value ? 'تغییر عکس' : 'انتخاب یا رها کردن عکس'}
           </button>
           {value && (
             <button type="button" className={cn(btnDanger, 'px-3 py-1.5 text-xs')} onClick={() => onChange('')}>
-              <Icon name="trash" /> حذف عکس
+              حذف عکس
             </button>
           )}
         </div>
         <small className="mt-2 block text-xs leading-5 text-slate-500 dark:text-slate-400">
           {isDragging
-            ? <><Icon name="folder" className="inline-block" /> تصویر را اینجا رها کنید...</>
+            ? 'تصویر را اینجا رها کنید...'
             : 'عکس را اینجا بکشید و رها کنید (Drag & Drop) یا کلیک کنید · JPG یا PNG تا ۲ مگابایت'}
         </small>
         {photoError && <em className={cn(errorBox, 'mt-3 block text-right not-italic')}>{photoError}</em>}

@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { jalaliMonthNames, jalaliParts, toPersianDigits } from '../../shared'
-import { Icon } from '../../shared-ui'
-import { taskPriorityTones, taskStatusLabels } from '../types'
+import { taskPriorityLabels, taskPriorityTones, taskStatusLabels } from '../types'
 import type { WorkTask } from '../types'
 
 interface Props {
@@ -50,7 +49,7 @@ export default function TaskGantt({ tasks, onOpen }: Props) {
   return (
     <div className="wm-gantt-wrap" dir="rtl">
       <div className="wm-gantt-header-banner">
-        <b><Icon name="chart" className="inline-block align-middle" /> تایم‌لاین و گانت‌چارت کارها · {jalaliMonthNames[todayJ.m - 1]} {toPersianDigits(todayJ.y)}</b>
+        <b> تایم‌لاین و گانت‌چارت کارها · {jalaliMonthNames[todayJ.m - 1]} {toPersianDigits(todayJ.y)}</b>
         <small>نمایش بازه زمانی، مهلت انجام و پیشرفت تسک‌ها روی خط زمان</small>
       </div>
 
@@ -65,7 +64,7 @@ export default function TaskGantt({ tasks, onOpen }: Props) {
               onClick={() => onOpen(t)}
               title={`${t.title} (${taskStatusLabels[t.status]})`}
             >
-              <i className={`wm-dot pr-${taskPriorityTones[t.priority]}`} />
+              <small>اولویت: {taskPriorityLabels[t.priority]}</small>
               <span className={`wm-gantt-task-name ${t.status === 'completed' ? 'done' : ''}`}>
                 {t.title}
               </span>
