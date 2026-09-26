@@ -65,13 +65,13 @@ export function PhotoField({
           </button>
           {value && (
             <button type="button" className={cn(btnDanger, 'px-3 py-1.5 text-xs')} onClick={() => onChange('')}>
-              حذف عکس
+              <Icon name="trash" /> حذف عکس
             </button>
           )}
         </div>
         <small className="mt-2 block text-xs leading-5 text-slate-500 dark:text-slate-400">
           {isDragging
-            ? '📂 تصویر را اینجا رها کنید...'
+            ? <><Icon name="folder" className="inline-block" /> تصویر را اینجا رها کنید...</>
             : 'عکس را اینجا بکشید و رها کنید (Drag & Drop) یا کلیک کنید · JPG یا PNG تا ۲ مگابایت'}
         </small>
         {photoError && <em className={cn(errorBox, 'mt-3 block text-right not-italic')}>{photoError}</em>}

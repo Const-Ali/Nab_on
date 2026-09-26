@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { Icon } from '../../shared-ui'
 import { permissionLabels, allPermissions } from '../../app-lib'
 import type { Permission, Role, RoleDef, User } from '../../types'
-import { backdropCls, modalBox } from '../ui'
+import { backdropCls, cn, modalBox, modalFormLayout } from '../ui'
 
 export function EditUserModal({ user, roles, isSelf, onClose, onSave }: { user: User; roles: RoleDef[]; isSelf: boolean; onClose: () => void; onSave: (u: User, changes: string[]) => void }) {
   const [name, setName] = useState(user.name)
@@ -32,8 +32,8 @@ export function EditUserModal({ user, roles, isSelf, onClose, onSave }: { user: 
   }
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className={modalBox} onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose}><Icon name="close" /></button>
+      <form className={cn(modalBox, modalFormLayout)} onSubmit={submit}>
+        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن"><Icon name="close" /></button>
         <small>تنظیم دسترسی · {user.username}@</small>
         <h2>سطح دسترسی کاربر</h2>
         <div className="form-grid">
@@ -51,8 +51,8 @@ export function EditUserModal({ user, roles, isSelf, onClose, onSave }: { user: 
         </div>
         {error && <div className="error">{error}</div>}
         <div className="modal-actions">
-          <button type="button" className="outline" onClick={onClose}>انصراف</button>
-          <button type="submit" className="primary"><Icon name="check" /> ذخیره دسترسی</button>
+          <button type="button" className="outline" onClick={onClose}><Icon name="close" /> انصراف</button>
+          <button type="submit" className="primary"><Icon name="save" /> ذخیره دسترسی</button>
         </div>
       </form>
     </div>

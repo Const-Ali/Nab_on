@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { load, save } from '../../shared'
+import { Icon } from '../../shared-ui'
 import type { User } from '../../types'
 import { btnPrimary, errorBox, inputCls, labelCls } from '../ui'
 
@@ -42,7 +43,7 @@ export function Login({ onLogin, users }: { onLogin: (user: User, remember: bool
         <div>
           <h1 className="text-4xl font-bold leading-tight tracking-tight">مدیریت هوشمند<br /><i className="font-normal text-indigo-300">پرونده‌های سازمانی</i></h1>
           <p className="mt-5 max-w-md text-base leading-7 text-slate-300">همه‌چیز برای مدیریت دقیق، امن و شفاف در یک سامانه.</p>
-          <div className="mt-8 flex flex-col gap-3 text-sm text-slate-200"><span>✓ دسترسی امن و سطح‌بندی شده</span><span>✓ گزارش‌گیری لحظه‌ای</span></div>
+          <div className="mt-8 flex flex-col gap-3 text-sm text-slate-200"><span><Icon name="check" className="inline-block" /> دسترسی امن و سطح‌بندی شده</span><span><Icon name="check" className="inline-block" /> گزارش‌گیری لحظه‌ای</span></div>
         </div>
       </section>
       <main className="flex items-center justify-center p-5 sm:p-8">
@@ -55,7 +56,7 @@ export function Login({ onLogin, users }: { onLogin: (user: User, remember: bool
           <label className="flex items-center gap-2 text-slate-600 dark:text-slate-300"><input className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} /> مرا به خاطر بسپار</label>
           <span className="text-xs text-slate-500 dark:text-slate-400">فراموشی رمز؟ با مدیر سیستم تماس بگیرید</span>
         </div>
-        <button className={`${btnPrimary} mt-6 w-full`} disabled={loading}>{loading ? 'در حال بررسی...' : 'ورود به سامانه ←'}</button>
+        <button className={`${btnPrimary} mt-6 w-full`} disabled={loading}><Icon name="login" /> {loading ? 'در حال بررسی...' : 'ورود به سامانه'}</button>
         <small className="mt-4 block text-center text-xs leading-5 text-slate-500 dark:text-slate-400">حساب مدیر: admin / admin — سایر حساب‌ها را مدیر سیستم ایجاد می‌کند</small>
       </form>
       </main>

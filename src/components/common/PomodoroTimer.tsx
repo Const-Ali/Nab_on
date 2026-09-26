@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { playChime, sendBrowserNotification, toPersianDigits } from '../../shared'
+import { Icon } from '../../shared-ui'
 
 interface Props {
   taskTitle?: string
@@ -94,19 +95,19 @@ export function PomodoroTimer({ taskTitle, onTimeLogged, onClose }: Props) {
     <div className="pomo-widget" dir="rtl">
       <div className="pomo-header">
         <div className="pomo-title">
-          <span className="pomo-icon">🍅</span>
+          <span className="pomo-icon"><Icon name="timer" /></span>
           <div>
             <b>تایمر پومودورو و تمرکز</b>
             {taskTitle && <small title={taskTitle}>کار: {taskTitle.length > 25 ? `${taskTitle.slice(0, 25)}…` : taskTitle}</small>}
           </div>
         </div>
         <div className="pomo-head-actions">
-          <button type="button" className="pomo-min-btn" onClick={() => setMinimized(true)} title="کوچک‌نمایی">
-            —
+          <button type="button" className="pomo-min-btn" onClick={() => setMinimized(true)} title="کوچک‌نمایی" aria-label="کوچک‌نمایی">
+            <Icon name="minimize" />
           </button>
           {onClose && (
-            <button type="button" className="pomo-min-btn" onClick={onClose} title="بستن">
-              ✕
+            <button type="button" className="pomo-min-btn" onClick={onClose} title="بستن" aria-label="بستن">
+              <Icon name="close" />
             </button>
           )}
         </div>
@@ -153,10 +154,10 @@ export function PomodoroTimer({ taskTitle, onTimeLogged, onClose }: Props) {
           className={`pomo-start-btn ${isRunning ? 'pause' : 'start'}`}
           onClick={toggleRun}
         >
-          {isRunning ? 'توقف موقت ⏸' : 'شروع تمرکز ▶'}
+          <Icon name={isRunning ? 'pause' : 'play'} className="inline-block align-middle" /> {isRunning ? 'توقف موقت' : 'شروع تمرکز'}
         </button>
-        <button type="button" className="pomo-reset-btn" onClick={reset} title="شروع مجدد">
-          ↺
+        <button type="button" className="pomo-reset-btn" onClick={reset} title="شروع مجدد" aria-label="شروع مجدد">
+          <Icon name="reset" />
         </button>
       </div>
 

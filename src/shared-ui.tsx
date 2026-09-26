@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Activity, Bell, CalendarDays, Camera, Check, Download, LayoutDashboard, ListTodo, LogOut, Moon, Pencil, Plus, Printer, Search, Settings2, ShieldCheck, Sun, UsersRound, Workflow, X, type LucideIcon } from 'lucide-react'
+import { Activity, AlarmClock, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, CalendarDays, Camera, ChartNoAxesCombined, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Columns3, Download, FileSpreadsheet, Filter, FolderOpen, History, LayoutDashboard, List, ListTodo, LogIn, LogOut, MessageSquare, Minimize2, Moon, Palette, Pause, Pencil, Play, Plus, Printer, Reply, RotateCcw, Save, Search, Send, Settings2, ShieldCheck, Sun, Timer, Trash2, TriangleAlert, UserRoundPlus, UsersRound, Workflow, X, Zap, type LucideIcon } from 'lucide-react'
 import { jalaliJdn, jalaliMonthNames, jalaliParts, jdnToDate, normalizeDigits } from './shared'
 import { avatarBase, avatarSize, avatarTones, cn, focusRing, transition } from './components/ui'
 
 export function Icon({ name, className }: { name: string; className?: string }) {
-  const icons: Record<string, LucideIcon> = { grid: LayoutDashboard, users: UsersRound, workflow: Workflow, activity: Activity, shield: ShieldCheck, settings: Settings2, search: Search, bell: Bell, plus: Plus, close: X, check: Check, download: Download, edit: Pencil, sun: Sun, moon: Moon, camera: Camera, logout: LogOut, printer: Printer, cal: CalendarDays, task: ListTodo }
+  const icons: Record<string, LucideIcon> = { grid: LayoutDashboard, users: UsersRound, workflow: Workflow, activity: Activity, shield: ShieldCheck, settings: Settings2, search: Search, bell: Bell, plus: Plus, close: X, check: Check, download: Download, edit: Pencil, sun: Sun, moon: Moon, palette: Palette, camera: Camera, logout: LogOut, printer: Printer, trash: Trash2, cal: CalendarDays, task: ListTodo, back: ArrowRight, forward: ArrowLeft, next: ChevronLeft, previous: ChevronRight, save: Save, history: History, filter: Filter, list: List, kanban: Columns3, chart: ChartNoAxesCombined, file: FileSpreadsheet, folder: FolderOpen, message: MessageSquare, reply: Reply, send: Send, timer: Timer, alarm: AlarmClock, clock: Clock3, reset: RotateCcw, minimize: Minimize2, play: Play, pause: Pause, login: LogIn, userPlus: UserRoundPlus, checked: CheckCircle2, warning: TriangleAlert, quick: Zap, up: ArrowUp, down: ArrowDown }
   const Component = icons[name] ?? LayoutDashboard
   return <Component aria-hidden="true" className={cn('h-4 w-4 shrink-0', className)} strokeWidth={1.8} />
 }
@@ -100,7 +100,7 @@ export function MiniCalendar({
       onMouseDown={e => e.stopPropagation()}
     >
       <div className="mb-3 flex items-center justify-between gap-2">
-        <button type="button" className={calNavBtn} onClick={() => move(1)} title="ماه بعد" aria-label="ماه بعد">‹</button>
+        <button type="button" className={calNavBtn} onClick={() => move(1)} title="ماه بعد" aria-label="ماه بعد"><Icon name="next" /></button>
         <div className="flex items-center gap-1">
           <select
             value={view.m}
@@ -121,7 +121,7 @@ export function MiniCalendar({
             ))}
           </select>
         </div>
-        <button type="button" className={calNavBtn} onClick={() => move(-1)} title="ماه قبل" aria-label="ماه قبل">›</button>
+        <button type="button" className={calNavBtn} onClick={() => move(-1)} title="ماه قبل" aria-label="ماه قبل"><Icon name="previous" /></button>
       </div>
       <div className="grid grid-cols-7 gap-[3px] text-center">
         {['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'].map(w => <span className="py-[3px] text-[8px] font-bold text-faint" key={w}>{w}</span>)}
@@ -225,7 +225,7 @@ export function BirthDateField({
               title="پاک کردن تاریخ"
               aria-label="پاک کردن تاریخ"
             >
-              ✕
+              <Icon name="close" className="h-3.5 w-3.5" />
             </button>
           )}
           <button

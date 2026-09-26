@@ -3,7 +3,7 @@ import { normalizeText, playChime } from '../../shared'
 import { Avatar, Icon } from '../../shared-ui'
 import type { Person, Activity, Note, ThemeMode } from '../../types'
 import { Badge } from '../common/Badge'
-import { backdropCls, cn, modalX, searchBox, searchIcon, searchInput } from '../ui'
+import { backdropCls, cn, modalSearchLayout, modalX, searchBox, searchIcon, searchInput } from '../ui'
 
 interface CommandItem {
   id: string
@@ -47,7 +47,7 @@ export function SearchModal({
         id: 'cmd-create-person',
         title: 'ثبت فرد جدید',
         subtitle: 'باز کردن فرم ثبت پرونده پرسنلی جدید',
-        icon: '👤+',
+        icon: 'userPlus',
         category: 'فرمان‌های سریع',
         keywords: ['ثبت', 'فرد', 'جدید', 'پرونده', 'افزودن', 'create', 'person', 'add'],
         action: () => {
@@ -59,7 +59,7 @@ export function SearchModal({
         id: 'cmd-create-task',
         title: 'ایجاد کار جدید',
         subtitle: 'ایجاد تسک کاری در بخش مدیریت کارها',
-        icon: '📝+',
+        icon: 'plus',
         category: 'فرمان‌های سریع',
         keywords: ['کار', 'جدید', 'تسک', 'ایجاد', 'task', 'create'],
         action: () => {
@@ -71,7 +71,7 @@ export function SearchModal({
         id: 'cmd-export',
         title: 'خروجی اکسل از پرونده‌ها',
         subtitle: 'دریافت فایل داده‌های پرسنلی در قالب CSV/Excel',
-        icon: '📊',
+        icon: 'file',
         category: 'فرمان‌های سریع',
         keywords: ['خروجی', 'اکسل', 'دانلود', 'csv', 'excel', 'export'],
         action: () => {
@@ -83,7 +83,7 @@ export function SearchModal({
         id: 'cmd-nav-tasks',
         title: 'رفتن به مدیریت کارهای من',
         subtitle: 'مشاهده لیست تسک‌ها، کانبان و تایم‌لاین گانت',
-        icon: '📋',
+        icon: 'task',
         category: 'پیمایش صفحات',
         keywords: ['کارها', 'کارهای من', 'تسک', 'کانبان', 'tasks', 'todo'],
         action: () => {
@@ -95,7 +95,7 @@ export function SearchModal({
         id: 'cmd-nav-persons',
         title: 'رفتن به لیست افراد و پرونده‌ها',
         subtitle: 'مدیریت و جستجوی جامع افراد',
-        icon: '👥',
+        icon: 'users',
         category: 'پیمایش صفحات',
         keywords: ['افراد', 'پرسنل', 'پرونده', 'persons', 'people'],
         action: () => {
@@ -107,7 +107,7 @@ export function SearchModal({
         id: 'cmd-nav-workflow',
         title: 'رفتن به برد گردش‌کار',
         subtitle: 'جابجایی پرونده‌ها بین مراحل گردش‌کار',
-        icon: '🔄',
+        icon: 'workflow',
         category: 'پیمایش صفحات',
         keywords: ['گردش کار', 'مراحل', 'برد', 'workflow'],
         action: () => {
@@ -119,7 +119,7 @@ export function SearchModal({
         id: 'cmd-nav-reports',
         title: 'رفتن به گزارش‌ها و تحلیل عملکرد',
         subtitle: 'مشاهده نمودارهای تحلیلی و لاگ رویدادها',
-        icon: '📈',
+        icon: 'chart',
         category: 'پیمایش صفحات',
         keywords: ['گزارش', 'نمودار', 'تحلیل', 'audit', 'reports'],
         action: () => {
@@ -131,7 +131,7 @@ export function SearchModal({
         id: 'cmd-theme-light',
         title: 'تغییر تم به حالت روشن (Light)',
         subtitle: 'قالب استاندارد روز با پس‌زمینه روشن',
-        icon: '☀️',
+        icon: 'sun',
         category: 'شخصی‌سازی و تم',
         keywords: ['تم', 'روشن', 'سفید', 'light', 'day'],
         action: () => {
@@ -143,7 +143,7 @@ export function SearchModal({
         id: 'cmd-theme-dark',
         title: 'تغییر تم به حالت تاریک (Dark)',
         subtitle: 'قالب تیره و ملایم برای شب',
-        icon: '🌙',
+        icon: 'moon',
         category: 'شخصی‌سازی و تم',
         keywords: ['تم', 'تاریک', 'تیره', 'شب', 'dark', 'night'],
         action: () => {
@@ -155,7 +155,7 @@ export function SearchModal({
         id: 'cmd-theme-midnight',
         title: 'تغییر تم به سرمه‌ای سلطنتی (Midnight Navy)',
         subtitle: 'قالب اختصاصی با آبی تیره و جزئیات نئونی',
-        icon: '🌌',
+        icon: 'moon',
         category: 'شخصی‌سازی و تم',
         keywords: ['تم', 'سرمه ای', 'سرمه‌ای', 'midnight', 'navy', 'blue'],
         action: () => {
@@ -167,7 +167,7 @@ export function SearchModal({
         id: 'cmd-theme-emerald',
         title: 'تغییر تم به زمردی سازمانی (Emerald)',
         subtitle: 'قالب لوکس سبز تیره زمردی',
-        icon: '🌲',
+        icon: 'palette',
         category: 'شخصی‌سازی و تم',
         keywords: ['تم', 'سبز', 'زمردی', 'emerald', 'green'],
         action: () => {
@@ -179,7 +179,7 @@ export function SearchModal({
         id: 'cmd-theme-cobalt',
         title: 'تغییر تم به آبی کاربنی (Cobalt)',
         subtitle: 'قالب مدرن آبی کاربنی با کنتراست بالا',
-        icon: '💎',
+        icon: 'palette',
         category: 'شخصی‌سازی و تم',
         keywords: ['تم', 'کاربنی', 'نیلگون', 'cobalt'],
         action: () => {
@@ -240,7 +240,7 @@ export function SearchModal({
 
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className={cn(searchBox, 'max-h-[min(42rem,calc(100vh-2rem))] overflow-y-auto')} onClick={e => e.stopPropagation()} dir="rtl">
+      <div className={cn(searchBox, modalSearchLayout, 'max-h-[min(42rem,calc(100vh-2rem))] overflow-y-auto')} onClick={e => e.stopPropagation()} dir="rtl">
         <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
           <Icon name="search" className={searchIcon} />
           <input
@@ -259,7 +259,7 @@ export function SearchModal({
         {/* Command section */}
         {matchedCommands.length > 0 && (
           <div className="search-section">
-            <h5>⚡ دستورات و اقدامات سریع</h5>
+            <h5><Icon name="quick" className="inline-block align-middle" /> دستورات و اقدامات سریع</h5>
             {matchedCommands.map(cmd => (
               <button
                 key={cmd.id}
@@ -270,7 +270,7 @@ export function SearchModal({
                   cmd.action()
                 }}
               >
-                <span className="search-ico">{cmd.icon}</span>
+                <span className="search-ico"><Icon name={cmd.icon} /></span>
                 <span>
                   <b>{cmd.title}</b>
                   <small>{cmd.subtitle}</small>
@@ -316,7 +316,7 @@ export function SearchModal({
                   if (p) onPickPerson(p)
                 }}
               >
-                <span className="search-ico">💬</span>
+                <span className="search-ico"><Icon name="message" /></span>
                 <span>
                   <b>{n.author}</b>
                   <small>{n.text.length > 70 ? `${n.text.slice(0, 70)}…` : n.text}</small>
@@ -340,7 +340,7 @@ export function SearchModal({
                   if (p) onPickPerson(p)
                 }}
               >
-                <span className="search-ico">↺</span>
+                <span className="search-ico"><Icon name="history" /></span>
                 <span>
                   <b>{a.action}</b>
                   <small>

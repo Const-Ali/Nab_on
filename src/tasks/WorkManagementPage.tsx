@@ -28,6 +28,7 @@ import {
   sortTasks,
 } from './utils'
 import './tasks.css'
+import { btnMini, btnMiniOn, btnOutline, btnPrimary, cn, panelBox } from '../components/ui'
 
 interface Props {
   users: UserLite[]
@@ -224,10 +225,10 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
         title="مدیریت کارهای من"
         subtitle="کارهای شخصی و سازمانی شما — همراه با تایم‌لاین، ماتریس اولویت و تایمر تمرکز پومودورو."
         action={
-          <div className="flex items-center gap-[9px]">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
-              className="outline flex items-center gap-[6px]"
+              className={btnOutline}
               onClick={() => {
                 setShowPomo(p => !p)
                 if (!showPomo && !activePomoTask && filtered.length > 0) {
@@ -236,11 +237,11 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
               }}
               title="تایمر تمرکز پومودورو"
             >
-              🍅 تایمر پومودورو
+              <Icon name="timer" /> تایمر پومودورو
             </button>
             <button
               type="button"
-              className="primary"
+              className={btnPrimary}
               onClick={() => {
                 setEditing(null)
                 setFormOpen(true)
@@ -254,16 +255,16 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
 
       <WorkDashboard tasks={typed} quick={quick} onQuick={setQuick} />
 
-      <div className="wm-tabs">
-        <button type="button" className={tab === 'personal' ? 'on' : ''} onClick={() => setTab('personal')}>
+      <div className="my-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-800 dark:bg-slate-900">
+        <button type="button" className={cn(btnMini, 'border-0 bg-transparent shadow-none', tab === 'personal' && btnMiniOn)} onClick={() => setTab('personal')}>
           کارهای شخصی <em>{personalCount.toLocaleString('fa-IR')}</em>
         </button>
-        <button type="button" className={tab === 'organizational' ? 'on' : ''} onClick={() => setTab('organizational')}>
+        <button type="button" className={cn(btnMini, 'border-0 bg-transparent shadow-none', tab === 'organizational' && btnMiniOn)} onClick={() => setTab('organizational')}>
           کارهای سازمانی <em>{orgCount.toLocaleString('fa-IR')}</em>
         </button>
       </div>
 
-      <section className="panel wm-panel">
+      <section className={cn(panelBox, 'overflow-hidden')}>
         <TaskFilters
           value={filters}
           onChange={patch => setFilters(cur => ({ ...cur, ...patch }))}

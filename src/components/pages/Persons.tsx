@@ -135,10 +135,10 @@ export function Persons({
                   setSelectedIds(new Set())
                 }}
               >
-                حذف گروهی
+                <Icon name="trash" /> حذف گروهی
               </button>
             )}
-            <button type="button" className={btnMini} onClick={() => setSelectedIds(new Set())}>لغو انتخاب</button>
+            <button type="button" className={btnMini} onClick={() => setSelectedIds(new Set())}><Icon name="close" /> لغو انتخاب</button>
           </div>
         )}
         <div className="hidden grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-500 lg:grid dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400">
@@ -185,11 +185,11 @@ export function Persons({
           <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 dark:border-slate-800 dark:text-slate-400">
             <span>{people.length.toLocaleString('fa-IR')} پرونده · صفحه {(safePage + 1).toLocaleString('fa-IR')} از {pageCount.toLocaleString('fa-IR')}</span>
             <div className="flex flex-wrap gap-1.5">
-              <button type="button" className={btnMini} disabled={safePage === 0} onClick={() => setPageNo(safePage - 1)}>قبلی</button>
+              <button type="button" className={btnMini} disabled={safePage === 0} onClick={() => setPageNo(safePage - 1)}><Icon name="previous" /> قبلی</button>
               {Array.from({ length: pageCount }, (_, i) => i).filter(i => pageCount <= 7 || Math.abs(i - safePage) <= 2 || i === 0 || i === pageCount - 1).map(i => (
                 <button type="button" key={i} className={cn(btnMini, i === safePage && btnMiniOn)} onClick={() => setPageNo(i)}>{(i + 1).toLocaleString('fa-IR')}</button>
               ))}
-              <button type="button" className={btnMini} disabled={safePage >= pageCount - 1} onClick={() => setPageNo(safePage + 1)}>بعدی</button>
+              <button type="button" className={btnMini} disabled={safePage >= pageCount - 1} onClick={() => setPageNo(safePage + 1)}><Icon name="next" /> بعدی</button>
             </div>
           </div>
         )}

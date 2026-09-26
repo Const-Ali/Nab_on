@@ -396,8 +396,9 @@ export default function App() {
           className={cn('absolute -left-4 top-8 grid h-8 w-8 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-950 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800', focusRing, transition, collapsed && 'rotate-180')}
           onClick={() => setCollapsed(c => !c)}
           title="جمع / باز کردن نوار کناری"
+          aria-label="جمع / باز کردن نوار کناری"
         >
-          ❯
+          <Icon name="previous" />
         </button>
         <div className="flex items-center gap-3 px-2 py-3">
           <b className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-600 text-lg font-black text-white shadow-sm">ن</b>
@@ -419,6 +420,8 @@ export default function App() {
                   setPage(key)
                   setCalOpen(false)
                 }}
+                title={collapsed ? label : undefined}
+                aria-label={collapsed ? label : undefined}
               >
                 <Icon name={iconName} />
                 <span className={collapsed ? 'hidden' : ''}>{label}</span>
@@ -429,7 +432,7 @@ export default function App() {
 
         <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            <button type="button" className={cn('flex min-w-0 flex-1 items-center gap-2 rounded-xl p-2 text-right hover:bg-slate-100 dark:hover:bg-slate-800', focusRing, transition, collapsed && 'justify-center')} onClick={() => setProfileOpen(true)}>
+            <button type="button" className={cn('flex min-w-0 flex-1 items-center gap-2 rounded-xl p-2 text-right hover:bg-slate-100 dark:hover:bg-slate-800', focusRing, transition, collapsed && 'justify-center')} onClick={() => setProfileOpen(true)} title={collapsed ? 'نمایش پروفایل' : undefined} aria-label={collapsed ? 'نمایش پروفایل' : undefined}>
               <Avatar text={currentUser.name[0]} src={currentUser.photo} size={34} />
               <span className={collapsed ? 'hidden' : 'min-w-0'}>
                 <b className="block truncate text-sm text-slate-800 dark:text-slate-100">{currentUser.name}</b>
@@ -444,6 +447,7 @@ export default function App() {
                 playChime('alert')
               }}
               title="خروج از حساب"
+              aria-label="خروج از حساب"
             >
               <Icon name="logout" />
             </button>
@@ -497,6 +501,7 @@ export default function App() {
                 className={cn('grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800', focusRing, transition)}
                 onClick={() => setThemeMenuOpen(o => !o)}
                 title="انتخاب تم رنگی"
+                aria-label="انتخاب تم رنگی"
               >
                 {theme === 'light' ? <Icon name="sun" /> : <Icon name="moon" />}
               </button>

@@ -5,7 +5,7 @@ import { BirthDateField, Icon } from '../../shared-ui'
 import { personTags, validNationalId, validBirthDate, validDeadlineDate } from '../../app-lib'
 import type { Person } from '../../types'
 import { PhotoField } from '../common/PhotoField'
-import { backdropCls, modalBox } from '../ui'
+import { backdropCls, cn, modalBox, modalFormLayout } from '../ui'
 
 export function EditModal({ person, existing, onClose, onSave }: { person: Person; existing: Person[]; onClose: () => void; onSave: (p: Person, changed: string[]) => void }) {
   const [firstName, setFirstName] = useState(person.firstName)
@@ -82,8 +82,8 @@ export function EditModal({ person, existing, onClose, onSave }: { person: Perso
 
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className={modalBox} onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose} aria-label="بستن"><Icon name="close" /></button>
+      <form className={cn(modalBox, modalFormLayout, 'max-h-[calc(100vh-2rem)] max-w-3xl overflow-y-auto')} onSubmit={submit}>
+        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن"><Icon name="close" /></button>
         <small>ویرایش پرونده · {person.id}</small>
         <h2>ویرایش اطلاعات فرد</h2>
         <p>وضعیت پرونده فقط از مسیر گردش‌کار تغییر می‌کند؛ تغییرات این فرم در تاریخچه ثبت می‌شود.</p>
@@ -111,8 +111,8 @@ export function EditModal({ person, existing, onClose, onSave }: { person: Perso
         </div>
         {error && <div className="error">{error}</div>}
         <div className="modal-actions">
-          <button type="button" className="outline" onClick={onClose}>انصراف</button>
-          <button type="submit" className="primary"><Icon name="check" /> ذخیره ویرایش</button>
+          <button type="button" className="outline" onClick={onClose}><Icon name="close" /> انصراف</button>
+          <button type="submit" className="primary"><Icon name="save" /> ذخیره ویرایش</button>
         </div>
       </form>
     </div>

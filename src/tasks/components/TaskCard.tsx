@@ -1,77 +1,14 @@
+import { Icon } from '../../shared-ui'
 import { isOverdue, overdueDays } from '../utils'
 import { taskPriorityLabels, taskPriorityTones, taskStatusLabels } from '../types'
 import type { WorkTask } from '../types'
+import { cn, focusRing, transition } from '../../components/ui'
 
-interface Props {
-  task: WorkTask
-  onOpen: (t: WorkTask) => void
-  onToggle: (t: WorkTask) => void
-}
+const statusTone: Record<string, string> = { todo: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300', in_progress: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300', completed: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300', cancelled: 'bg-slate-100 text-slate-400 line-through dark:bg-slate-800' }
+const priorityTone: Record<string, string> = { slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300', blue: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300', amber: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300', red: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' }
 
-export default function TaskCard({ task, onOpen, onToggle }: Props) {
+export default function TaskCard({ task, onOpen, onToggle }: { task: WorkTask; onOpen: (t: WorkTask) => void; onToggle: (t: WorkTask) => void }) {
   const done = task.status === 'completed'
-  const inProgress = task.status === 'in_progress'
-  const overdue = isOverdue(task)
-
-  return (
-    <div className={`wm-task ${done ? 'done' : ''}`} onClick={() => onOpen(task)}>
-      {/* دکمه اختصاصی تغییر وضعیت — جایگزین تیک ساده مرورگر */}
-      <button
-        type="button"
-        className={`wm-status-btn ${done ? 'done' : inProgress ? 'progress' : task.status === 'cancelled' ? 'cancelled' : 'todo'}`}
-        onClick={e => {
-          e.stopPropagation()
-          onToggle(task)
-        }}
-        title={done ? 'تغییر به انجام‌نشده (بازگشایی)' : 'تغییر به تکمیل‌شده'}
-        aria-label={done ? 'بازگشایی کار' : 'تکمیل کار'}
-      >
-        {done ? (
-          <svg viewBox="0 0 20 20" className="h-[13px] w-[13px]" fill="currentColor">
-            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 0 1 0 1.414l-8 8a1 1 0 0 1-1.414 0l-4-4a1 1 0 0 1 1.414-1.414L8 12.586l7.293-7.293a1 1 0 0 1 1.414 0z" clipRule="evenodd" />
-          </svg>
-        ) : inProgress ? (
-          <>
-            <span className="wm-status-dot" />
-            <svg viewBox="0 0 20 20" className="wm-status-hover-check h-[13px] w-[13px]" fill="currentColor">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 0 1 0 1.414l-8 8a1 1 0 0 1-1.414 0l-4-4a1 1 0 0 1 1.414-1.414L8 12.586l7.293-7.293a1 1 0 0 1 1.414 0z" clipRule="evenodd" />
-            </svg>
-          </>
-        ) : (
-          <svg viewBox="0 0 20 20" className="wm-status-hover-check h-[13px] w-[13px]" fill="currentColor">
-            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 0 1 0 1.414l-8 8a1 1 0 0 1-1.414 0l-4-4a1 1 0 0 1 1.414-1.414L8 12.586l7.293-7.293a1 1 0 0 1 1.414 0z" clipRule="evenodd" />
-          </svg>
-        )}
-      </button>
-
-      <div className="wm-task-main">
-        <b>{task.title}</b>
-        {task.description && (
-          <small>{task.description.length > 90 ? `${task.description.slice(0, 90)}…` : task.description}</small>
-        )}
-        <div className="wm-task-chips">
-          <i className={`wm-chip st-${task.status}`}>{taskStatusLabels[task.status]}</i>
-          <i className={`wm-chip pr-${taskPriorityTones[task.priority]}`}>● {taskPriorityLabels[task.priority]}</i>
-          {task.category && <i className="wm-chip cat">{task.category}</i>}
-          {task.tags.slice(0, 2).map(t => <i className="wm-chip tag" key={t}>#{t}</i>)}
-          {task.tags.length > 2 && <i className="wm-chip tag">+{(task.tags.length - 2).toLocaleString('fa-IR')}</i>}
-        </div>
-      </div>
-
-      <div className="wm-task-side">
-        {task.dueDate && <time className={overdue ? 'late' : ''}>{task.dueDate.replace(/(\d)/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])}</time>}
-        {overdue && <em className="wm-late">{overdueDays(task).toLocaleString('fa-IR')} روز تأخیر</em>}
-        <button
-          type="button"
-          className={`wm-quick-btn ${done ? 'reopen' : 'complete'}`}
-          onClick={e => {
-            e.stopPropagation()
-            onToggle(task)
-          }}
-        >
-          {done ? '↺ بازگشایی' : '✓ تکمیل'}
-        </button>
-      </div>
-    </div>
-  )
+  const late = isOverdue(task)
+  return <article className={cn('group flex cursor-pointer gap-3 border-b border-slate-100 px-4 py-4 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50', transition, done && 'opacity-70')} onClick={() => onOpen(task)}><button type="button" onClick={event => { event.stopPropagation(); onToggle(task) }} className={cn('mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 transition-all', done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 text-transparent hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 dark:border-slate-600', focusRing)} title={done ? 'بازگشایی کار' : 'تکمیل کار'} aria-label={done ? 'بازگشایی کار' : 'تکمیل کار'}><Icon name="check" className="h-3.5 w-3.5" /></button><div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-center"><h3 className={cn('truncate text-sm font-semibold text-slate-900 dark:text-slate-100', done && 'line-through')}>{task.title}</h3><div className="flex flex-wrap gap-1.5"><span className={cn('rounded-md px-2 py-0.5 text-[11px] font-semibold', statusTone[task.status])}>{taskStatusLabels[task.status]}</span><span className={cn('rounded-md px-2 py-0.5 text-[11px] font-semibold', priorityTone[taskPriorityTones[task.priority]])}>{taskPriorityLabels[task.priority]}</span></div></div>{task.description && <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{task.description}</p>}<div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">{task.category && <span className="rounded-md bg-slate-100 px-2 py-1 dark:bg-slate-800">{task.category}</span>}{task.tags.slice(0, 3).map(tag => <span key={tag} className="rounded-md bg-slate-100 px-2 py-1 dark:bg-slate-800">#{tag}</span>)}</div></div><div className="shrink-0 text-left text-xs"><time className={cn('block whitespace-nowrap text-slate-500 dark:text-slate-400', late && 'font-bold text-rose-600 dark:text-rose-300')}>{task.dueDate || 'بدون مهلت'}</time>{late && <span className="mt-1 block text-[11px] font-medium text-rose-600 dark:text-rose-300">{overdueDays(task).toLocaleString('fa-IR')} روز تأخیر</span>}</div></article>
 }

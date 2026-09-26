@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { load, save } from '../../shared'
-import { Heading } from '../../shared-ui'
+import { Heading, Icon } from '../../shared-ui'
 import { defaultSettings, fontOptions } from '../../app-lib'
 import type { AppSettings } from '../../types'
 import { btnPrimary, cn, inputCls, labelCls, panelBox, selectCls } from '../ui'
@@ -26,7 +26,7 @@ export function Settings({ onSaved }: { onSaved: () => void }) {
               {fontOptions.map(f => <option key={f.key} value={f.key}>{f.label} · {f.hint}</option>)}
             </select>
           </label>
-          <button className={btnPrimary} onClick={() => { save('nab:settings', settings); onSaved() }}>ذخیره تغییرات</button>
+          <button className={btnPrimary} onClick={() => { save('nab:settings', settings); onSaved() }}><Icon name="save" /> ذخیره تغییرات</button>
         </section>
         <section className={cn(panelBox, 'space-y-3 p-4 sm:p-5')}>
           <h2>امنیت و نشست</h2><p>کنترل دسترسی و ورود کاربران</p>

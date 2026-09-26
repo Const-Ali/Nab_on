@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { Icon } from '../../shared-ui'
 import type { User } from '../../types'
 import { PhotoField } from '../common/PhotoField'
-import { backdropCls, modalBox } from '../ui'
+import { backdropCls, cn, modalBox, modalFormLayout } from '../ui'
 
 export function ProfileModal({ user, onClose, onSave, onLogout }: { user: User; onClose: () => void; onSave: (name: string, photo: string, newPassword: string) => void; onLogout: () => void }) {
   const [name, setName] = useState(user.name)
@@ -24,8 +24,8 @@ export function ProfileModal({ user, onClose, onSave, onLogout }: { user: User; 
   }
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className={modalBox} onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose}><Icon name="close" /></button>
+      <form className={cn(modalBox, modalFormLayout)} onSubmit={submit}>
+        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن"><Icon name="close" /></button>
         <small>پروفایل من · {user.username}@</small>
         <h2>حساب کاربری</h2>
         <PhotoField value={photo} fallbackInitial={name.trim()[0] ?? 'ن'} onChange={setPhoto} />
@@ -42,9 +42,9 @@ export function ProfileModal({ user, onClose, onSave, onLogout }: { user: User; 
         </div>
         {error && <div className="error">{error}</div>}
         <div className="modal-actions">
-          <button type="button" className="outline" onClick={onClose}>بستن</button>
+          <button type="button" className="outline" onClick={onClose}><Icon name="close" /> بستن</button>
           <button type="button" className="danger" onClick={onLogout}><Icon name="logout" /> خروج از حساب</button>
-          <button type="submit" className="primary"><Icon name="check" /> ذخیره پروفایل</button>
+          <button type="submit" className="primary"><Icon name="save" /> ذخیره پروفایل</button>
         </div>
       </form>
     </div>

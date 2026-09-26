@@ -2,6 +2,7 @@ import { Icon } from '../../shared-ui'
 import { isOverdue, overdueDays } from '../utils'
 import { taskPriorityLabels, taskPriorityTones, taskStatusLabels, taskTypeLabels } from '../types'
 import type { UserLite, WorkTask } from '../types'
+import { backdropCls, cn, modalBox, modalFormLayout } from '../../components/ui'
 
 interface Props {
   task: WorkTask
@@ -28,9 +29,9 @@ export default function TaskDetails({
   const nameOf = (u: string) => users.find(x => x.username === u)?.name ?? u
 
   return (
-    <div className="backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal wm-details">
-        <button type="button" className="x" onClick={onClose} aria-label="بستن">
+    <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className={cn(modalBox, modalFormLayout, 'max-w-4xl')} onClick={e => e.stopPropagation()}>
+        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن">
           <Icon name="close" />
         </button>
         <div className="wm-details-head">
@@ -43,7 +44,7 @@ export default function TaskDetails({
 
         {late && (
           <div className="wm-late-banner">
-            این کار {overdueDays(task).toLocaleString('fa-IR')} روز از موعد خود گذشته است ⚠
+            <Icon name="warning" className="inline-block align-middle" /> این کار {overdueDays(task).toLocaleString('fa-IR')} روز از موعد خود گذشته است
           </div>
         )}
 
@@ -119,7 +120,7 @@ export default function TaskDetails({
 
         <div className="modal-actions wm-detail-actions">
           <button type="button" className="outline danger-lite" onClick={() => onDelete(task)}>
-            حذف کار
+            <Icon name="trash" /> حذف کار
           </button>
           {onStartPomo && (
             <button
@@ -131,7 +132,7 @@ export default function TaskDetails({
               }}
               title="آغاز تایمر پومودورو برای این کار"
             >
-              🍅 فوکوس پومودورو
+              <Icon name="timer" /> فوکوس پومودورو
             </button>
           )}
           <span className="wm-spacer" />

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { jalaliMonthNames, jalaliParts, toPersianDigits } from '../../shared'
+import { Icon } from '../../shared-ui'
 import { taskPriorityTones, taskStatusLabels } from '../types'
 import type { WorkTask } from '../types'
 
@@ -49,7 +50,7 @@ export default function TaskGantt({ tasks, onOpen }: Props) {
   return (
     <div className="wm-gantt-wrap" dir="rtl">
       <div className="wm-gantt-header-banner">
-        <b>📊 تایم‌لاین و گانت‌چارت کارها · {jalaliMonthNames[todayJ.m - 1]} {toPersianDigits(todayJ.y)}</b>
+        <b><Icon name="chart" className="inline-block align-middle" /> تایم‌لاین و گانت‌چارت کارها · {jalaliMonthNames[todayJ.m - 1]} {toPersianDigits(todayJ.y)}</b>
         <small>نمایش بازه زمانی، مهلت انجام و پیشرفت تسک‌ها روی خط زمان</small>
       </div>
 

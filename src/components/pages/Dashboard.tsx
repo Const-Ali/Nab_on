@@ -37,7 +37,7 @@ export function Dashboard({
             </button>
           ) : (
             <button className={btnOutline} onClick={onPersons}>
-              مشاهده افراد ←
+              <Icon name="forward" /> مشاهده افراد
             </button>
           )
         }
@@ -123,7 +123,7 @@ export function Dashboard({
         <section className={cn(panelBox, 'p-4 sm:p-5')}>
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2>آخرین افراد ثبت‌شده</h2>
-            <button onClick={onPersons}>مشاهده همه ←</button>
+            <button onClick={onPersons} className="inline-flex items-center gap-1"><Icon name="forward" /> مشاهده همه</button>
           </div>
           {people.slice(0, 6).map(p => (
             <button type="button" className="flex w-full items-center justify-between gap-3 border-t border-slate-100 py-3 text-right first:border-t-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id} onClick={() => onSelect(p)}>
