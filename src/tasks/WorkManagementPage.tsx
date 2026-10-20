@@ -1,3 +1,4 @@
+import { Button } from '../components/common/Button'
 import { useEffect, useMemo, useState } from 'react'
 import { load, nowStamp, nowTs, playChime, save, uid } from '../shared'
 import { Heading } from '../shared-ui'
@@ -28,7 +29,7 @@ import {
   sortTasks,
 } from './utils'
 import './tasks.css'
-import { btnMini, btnMiniOn, btnOutline, btnPrimary, cn, panelBox } from '../components/ui'
+import { cn, panelBox } from '../components/ui'
 
 interface Props {
   users: UserLite[]
@@ -226,9 +227,11 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
         subtitle="کارهای شخصی و سازمانی شما — همراه با تایم‌لاین، ماتریس اولویت و تایمر تمرکز پومودورو."
         action={
           <div className="flex flex-col gap-2 sm:flex-row">
-            <button
+            <Button
               type="button"
-              className={btnOutline}
+              variant="outline"
+              size="sm"
+              active={showPomo}
               onClick={() => {
                 setShowPomo(p => !p)
                 if (!showPomo && !activePomoTask && filtered.length > 0) {
@@ -236,32 +239,34 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
                 }
               }}
               title="تایمر تمرکز پومودورو"
+              className="whitespace-nowrap"
             >
                تایمر پومودورو
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className={btnPrimary}
+              variant="primary"
               onClick={() => {
                 setEditing(null)
                 setFormOpen(true)
               }}
+              className="whitespace-nowrap"
             >
                ایجاد کار جدید
-            </button>
+            </Button>
           </div>
         }
       />
 
       <WorkDashboard tasks={typed} quick={quick} onQuick={setQuick} />
 
-      <div className="my-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-800 dark:bg-slate-900">
-        <button type="button" className={cn(btnMini, 'border-0 bg-transparent shadow-none', tab === 'personal' && btnMiniOn)} onClick={() => setTab('personal')}>
+      <div className="my-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-800 dark:bg-slate-900" role="group" aria-label="نوع کار">
+        <Button type="button" variant="tab" size="sm" active={tab === 'personal'} className={tab === 'personal' ? 'on' : ''} onClick={() => setTab('personal')}>
           کارهای شخصی <em>{personalCount.toLocaleString('fa-IR')}</em>
-        </button>
-        <button type="button" className={cn(btnMini, 'border-0 bg-transparent shadow-none', tab === 'organizational' && btnMiniOn)} onClick={() => setTab('organizational')}>
+        </Button>
+        <Button type="button" variant="tab" size="sm" active={tab === 'organizational'} className={tab === 'organizational' ? 'on' : ''} onClick={() => setTab('organizational')}>
           کارهای سازمانی <em>{orgCount.toLocaleString('fa-IR')}</em>
-        </button>
+        </Button>
       </div>
 
       <section className={cn(panelBox, 'overflow-hidden')}>

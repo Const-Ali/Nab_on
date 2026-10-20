@@ -1,3 +1,4 @@
+import { Button } from '../common/Button'
 import { useMemo, useState } from 'react'
 import { normalizeText, playChime } from '../../shared'
 import { Avatar } from '../../shared-ui'
@@ -237,7 +238,7 @@ export function SearchModal({
             onKeyDown={handleKeyDown}
             placeholder="دستور یا جستجو را تایپ کنید (مثلاً: ثبت فرد، تم تاریک، کد ملی)..."
           />
-          <button type="button" className={cn(modalX, 'static shrink-0')} onClick={onClose}>بستن</button>
+          <Button type="button" className={cn(modalX, 'static shrink-0')} onClick={onClose}>بستن</Button>
         </div>
 
         {/* Command section */}
@@ -245,7 +246,7 @@ export function SearchModal({
           <div className="search-section">
             <h5>دستورات و اقدامات سریع</h5>
             {matchedCommands.map(cmd => (
-              <button
+              <Button
                 key={cmd.id}
                 type="button"
                 className="search-hit cmd-hit"
@@ -259,7 +260,7 @@ export function SearchModal({
                   <small>{cmd.subtitle}</small>
                 </span>
                 <span className="cmd-badge">{cmd.category}</span>
-              </button>
+              </Button>
             ))}
           </div>
         )}
@@ -269,7 +270,7 @@ export function SearchModal({
           <div className="search-section">
             <h5>افراد و پرونده‌ها ({matchedPeople.length.toLocaleString('fa-IR')})</h5>
             {matchedPeople.map(p => (
-              <button key={p.id} type="button" className="search-hit" onClick={() => onPickPerson(p)}>
+              <Button key={p.id} type="button" className="search-hit" onClick={() => onPickPerson(p)}>
                 <Avatar text={p.firstName[0]} src={p.photo} size={28} />
                 <span>
                   <b>
@@ -280,7 +281,7 @@ export function SearchModal({
                   </small>
                 </span>
                 <Badge status={p.status} />
-              </button>
+              </Button>
             ))}
           </div>
         )}
@@ -290,7 +291,7 @@ export function SearchModal({
           <div className="search-section">
             <h5>یادداشت‌ها ({matchedNotes.length.toLocaleString('fa-IR')})</h5>
             {matchedNotes.map(n => (
-              <button
+              <Button
                 key={n.id}
                 type="button"
                 className="search-hit"
@@ -303,7 +304,7 @@ export function SearchModal({
                   <b>{n.author}</b>
                   <small>{n.text.length > 70 ? `${n.text.slice(0, 70)}…` : n.text}</small>
                 </span>
-              </button>
+              </Button>
             ))}
           </div>
         )}
@@ -313,7 +314,7 @@ export function SearchModal({
           <div className="search-section">
             <h5>رویدادها ({matchedActs.length.toLocaleString('fa-IR')})</h5>
             {matchedActs.map(a => (
-              <button
+              <Button
                 key={a.id}
                 type="button"
                 className="search-hit"
@@ -328,7 +329,7 @@ export function SearchModal({
                     {a.personName} · {a.createdBy} · {a.createdAt}
                   </small>
                 </span>
-              </button>
+              </Button>
             ))}
           </div>
         )}

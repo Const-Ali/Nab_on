@@ -2,36 +2,14 @@
 
 export const cn = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' ')
 
-export const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950'
-export const transition = 'transition-all duration-200'
-
-export const btnPrimary = cn(
-  'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm',
-  'hover:bg-indigo-500 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
+export const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950'
+export const transition = 'transition-[background-color,border-color,color,box-shadow,transform] duration-150 motion-reduce:transition-none'
+export const buttonInteraction = cn(
+  'touch-manipulation select-none',
+  'disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-55 disabled:shadow-none active:scale-[0.98] disabled:active:scale-100',
   focusRing,
   transition,
 )
-export const btnOutline = cn(
-  'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm',
-  'hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
-  'dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
-  focusRing,
-  transition,
-)
-export const btnDanger = cn(
-  'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700',
-  'hover:bg-rose-100 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300',
-  focusRing,
-  transition,
-)
-export const btnMini = cn(
-  'inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm',
-  'hover:border-slate-300 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
-  focusRing,
-  transition,
-)
-export const btnMiniOn = 'border-indigo-600 bg-indigo-600 text-white hover:border-indigo-500 hover:bg-indigo-500 dark:border-indigo-500 dark:bg-indigo-500'
-export const dangerLiteTxt = 'border-rose-200 text-rose-700 hover:border-rose-300 hover:bg-rose-50 dark:border-rose-900/60 dark:text-rose-300'
 
 export const panelBox = 'rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900'
 export const panelPad = 'p-4 sm:p-5'
@@ -69,7 +47,7 @@ export const personDetailLayout = cn(
   '[&_.steps-list]:mt-3 [&_.steps-list]:flex [&_.steps-list]:gap-2 [&_.steps-list]:overflow-x-auto [&_.steps-list]:pb-2 [&_.step-item]:relative [&_.step-item]:flex [&_.step-item]:min-w-28 [&_.step-item]:flex-1 [&_.step-item]:flex-col [&_.step-item]:items-center [&_.step-item]:gap-2 [&_.step-item]:rounded-xl [&_.step-item]:border [&_.step-item]:border-slate-200 [&_.step-item]:bg-white [&_.step-item]:p-3 [&_.step-item]:text-center [&_.step-item]:text-xs [&_.step-item]:font-medium [&_.step-item]:text-slate-500 dark:[&_.step-item]:border-slate-800 dark:[&_.step-item]:bg-slate-950 [&_.step-item>i]:grid [&_.step-item>i]:h-7 [&_.step-item>i]:w-7 [&_.step-item>i]:place-items-center [&_.step-item>i]:rounded-full [&_.step-item>i]:bg-slate-100 [&_.step-item>i]:text-xs [&_.step-item.done>i]:bg-emerald-100 [&_.step-item.done>i]:text-emerald-700 [&_.step-item.current]:border-indigo-300 [&_.step-item.current]:bg-indigo-50 [&_.step-item.current]:text-indigo-700 dark:[&_.step-item.current]:border-indigo-800 dark:[&_.step-item.current]:bg-indigo-950/40 dark:[&_.step-item.current]:text-indigo-200 [&_.step-item.current>i]:bg-indigo-600 [&_.step-item.current>i]:text-white [&_.step-item_em]:text-[10px] [&_.step-item_em]:not-italic [&_.step-item_em]:text-indigo-600',
   '[&>label:not(.assign-label)]:mt-4 [&>label:not(.assign-label)]:block [&>label:not(.assign-label)]:text-sm [&>label:not(.assign-label)]:font-medium [&>label:not(.assign-label)]:text-slate-700 dark:[&>label:not(.assign-label)]:text-slate-200 [&>label>select]:mt-1.5 [&>label>select]:block [&>label>select]:w-full [&>label>select]:rounded-xl [&>label>select]:border [&>label>select]:border-slate-200 [&>label>select]:bg-white [&>label>select]:px-3 [&>label>select]:py-2.5 [&>label>select]:text-sm dark:[&>label>select]:border-slate-700 dark:[&>label>select]:bg-slate-950 dark:[&>label>select]:text-slate-100 [&>label>textarea]:mt-1.5 [&>label>textarea]:block [&>label>textarea]:min-h-24 [&>label>textarea]:w-full [&>label>textarea]:rounded-xl [&>label>textarea]:border [&>label>textarea]:border-slate-200 [&>label>textarea]:bg-white [&>label>textarea]:p-3 dark:[&>label>textarea]:border-slate-700 dark:[&>label>textarea]:bg-slate-950 [&_.assign-label]:mt-4 [&_.assign-label]:block [&_.assign-label]:text-sm [&_.assign-label]:font-medium [&_.assign-label]:text-slate-700 dark:[&_.assign-label]:text-slate-200',
   '[&_.modal-tabs]:mt-6 [&_.modal-tabs]:flex [&_.modal-tabs]:gap-2 [&_.modal-tabs]:border-b [&_.modal-tabs]:border-slate-200 dark:[&_.modal-tabs]:border-slate-800 [&_.modal-tabs_button]:rounded-t-xl [&_.modal-tabs_button]:px-3 [&_.modal-tabs_button]:py-2.5 [&_.modal-tabs_button]:text-sm [&_.modal-tabs_button]:font-semibold [&_.modal-tabs_button]:text-slate-500 [&_.modal-tabs_button.active]:bg-indigo-50 [&_.modal-tabs_button.active]:text-indigo-700 dark:[&_.modal-tabs_button.active]:bg-indigo-950/40 dark:[&_.modal-tabs_button.active]:text-indigo-200 [&_.chat]:mt-4 [&_.chat]:max-h-80 [&_.chat]:space-y-3 [&_.chat]:overflow-y-auto [&_.chat]:rounded-2xl [&_.chat]:bg-slate-50 [&_.chat]:p-3 dark:[&_.chat]:bg-slate-950/50 [&_.msg]:rounded-xl [&_.msg]:border [&_.msg]:border-slate-200 [&_.msg]:bg-white [&_.msg]:p-3 dark:[&_.msg]:border-slate-800 dark:[&_.msg]:bg-slate-900 [&_.msg.mine]:border-indigo-200 [&_.msg.mine]:bg-indigo-50/60 dark:[&_.msg.mine]:border-indigo-900/60 dark:[&_.msg.mine]:bg-indigo-950/30 [&_.msg_header]:flex [&_.msg_header]:items-start [&_.msg_header]:gap-2 [&_.msg_header]:text-sm [&_.msg_header_small]:mr-auto [&_.msg_header_small]:text-[11px] [&_.msg_header_small]:text-slate-500 [&_.msg>p]:mt-2 [&_.msg>p]:text-sm [&_.msg>p]:leading-6 [&_.msg>p]:text-slate-700 dark:[&_.msg>p]:text-slate-200',
-  '[&_.composer]:mt-3 [&_.composer]:flex [&_.composer]:flex-col [&_.composer]:gap-2 sm:[&_.composer]:flex-row [&_.composer_textarea]:min-h-20 [&_.composer_textarea]:flex-1 [&_.composer_textarea]:rounded-xl [&_.composer_textarea]:border [&_.composer_textarea]:border-slate-200 [&_.composer_textarea]:bg-white [&_.composer_textarea]:p-3 [&_.composer_textarea]:text-sm dark:[&_.composer_textarea]:border-slate-700 dark:[&_.composer_textarea]:bg-slate-950 [&_.timeline]:mt-4 [&_.timeline]:space-y-3 [&_.tl-item]:flex [&_.tl-item]:gap-3 [&_.tl-item_b]:block [&_.tl-item_b]:text-sm [&_.tl-item_b]:text-slate-800 dark:[&_.tl-item_b]:text-slate-100 [&_.tl-item_small]:mt-1 [&_.tl-item_small]:block [&_.tl-item_small]:text-xs [&_.tl-item_small]:text-slate-500',
+  '[&_.composer]:mt-3 [&_.composer]:flex [&_.composer]:flex-col [&_.composer]:gap-2 sm:[&_.composer]:flex-row sm:[&_.composer]:items-center [&_.composer_textarea]:min-h-20 [&_.composer_textarea]:flex-1 [&_.composer_textarea]:rounded-xl [&_.composer_textarea]:border [&_.composer_textarea]:border-slate-200 [&_.composer_textarea]:bg-white [&_.composer_textarea]:p-3 [&_.composer_textarea]:text-sm [&_.composer_textarea]:outline-none [&_.composer_textarea]:transition-[border-color,box-shadow] focus:[&_.composer_textarea]:border-indigo-500 focus:[&_.composer_textarea]:ring-2 focus:[&_.composer_textarea]:ring-indigo-500/20 dark:[&_.composer_textarea]:border-slate-700 dark:[&_.composer_textarea]:bg-slate-950 dark:focus:[&_.composer_textarea]:border-indigo-400 dark:focus:[&_.composer_textarea]:ring-indigo-400/20 [&_.timeline]:mt-4 [&_.timeline]:space-y-3 [&_.tl-item]:flex [&_.tl-item]:gap-3 [&_.tl-item_b]:block [&_.tl-item_b]:text-sm [&_.tl-item_b]:text-slate-800 dark:[&_.tl-item_b]:text-slate-100 [&_.tl-item_small]:mt-1 [&_.tl-item_small]:block [&_.tl-item_small]:text-xs [&_.tl-item_small]:text-slate-500',
 )
 
 export const labelCls = 'block text-sm font-medium text-slate-700 dark:text-slate-200'

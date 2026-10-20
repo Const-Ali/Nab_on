@@ -1,0 +1,47 @@
+import { Button } from '../common/Button'
+import { useState } from 'react'
+import type { FormEvent } from 'react'
+import { nowTs } from '../../shared'
+import { permissionLabels, allPermissions } from '../../app-lib'
+import type { Permission, RoleDef } from '../../types'
+import { backdropCls, cn, modalBox, modalFormLayout } from '../ui'
+
+export function RoleModal({ existing, onClose, onCreate }: { existing: RoleDef[]; onClose: () => void; onCreate: (r: RoleDef) => void }) {
+  const [title, setTitle] = useState('')
+  const [id, setId] = useState('')
+  const [permissions, setPermissions] = useState<Permission[]>(['view_persons'])
+  const [error, setError] = useState('')
+  const togglePerm = (p: Permission) => setPermissions(cur => (cur.includes(p) ? cur.filter(x => x !== p) : [...cur, p]))
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    const cleanId = (id.trim().toLowerCase() || `role-${nowTs().toString(36)}`)
+    if (!title.trim()) { setError('عنوان نقش الزامی است.'); return }
+    if (!/^[a-z0-9_-]+$/.test(cleanId)) { setError('شناسه نقش فقط حروف لاتین، عدد و _- می‌پذیرد.'); return }
+    if (existing.some(r => r.id === cleanId)) { setError('این شناسه قبلاً استفاده شده است.'); return }
+    if (!permissions.length) { setError('حداقل یک مجوز انتخاب کنید.'); return }
+    onCreate({ id: cleanId, title: title.trim(), permissions })
+  }
+  return (
+    <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <form className={cn(modalBox, modalFormLayout)} onSubmit={submit}>
+        <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
+        <small>نقش سازمانی جدید</small>
+        <h2>تعریف نقش سفارشی</h2>
+        <p>کاربرانی که این نقش را بگیرند، مجوزهای زیر را خواهند داشت؛ بعداً برای هر کاربر قابل تنظیم است.</p>
+        <div className="form-grid">
+          <label>عنوان نقش *<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="مثلاً ناظر بازرسی" /></label>
+          <label>شناسه لاتین<input dir="ltr" value={id} onChange={e => { setId(e.target.value); setError('') }} placeholder="اختیاری، مثل auditor" /></label>
+        </div>
+        <h3 className="modal-h">مجوزهای این نقش</h3>
+        <div className="perm-grid">
+          {allPermissions.map(p => <label key={p}><input type="checkbox" checked={permissions.includes(p)} onChange={() => togglePerm(p)} /> {permissionLabels[p]}</label>)}
+        </div>
+        {error && <div className="error">{error}</div>}
+        <div className="modal-actions">
+          <Button type="button" variant="outline" onClick={onClose}> انصراف</Button>
+          <Button type="submit" variant="primary"> ایجاد نقش</Button>
+        </div>
+      </form>
+    </div>
+  )
+}

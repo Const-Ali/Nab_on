@@ -1,7 +1,8 @@
+import { Button } from './Button'
 import { useRef, useState } from 'react'
 import { Avatar } from '../../shared-ui'
 import { imageToDataUrl } from '../../app-lib'
-import { btnDanger, btnMini, cn, errorBox } from '../ui'
+import { cn, errorBox } from '../ui'
 
 export function PhotoField({
   value,
@@ -60,13 +61,13 @@ export function PhotoField({
       <Avatar text={fallbackInitial || 'ن'} src={value} size={64} />
       <div className="min-w-0 flex-1" onClick={e => e.stopPropagation()}>
         <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-          <button type="button" className={btnMini} onClick={() => fileRef.current?.click()}>
+          <Button type="button" variant="outline" size="xs" onClick={() => fileRef.current?.click()}>
             {value ? 'تغییر عکس' : 'انتخاب یا رها کردن عکس'}
-          </button>
+          </Button>
           {value && (
-            <button type="button" className={cn(btnDanger, 'px-3 py-1.5 text-xs')} onClick={() => onChange('')}>
+            <Button type="button" variant="danger" size="xs" onClick={() => onChange('')}>
               حذف عکس
-            </button>
+            </Button>
           )}
         </div>
         <small className="mt-2 block text-xs leading-5 text-slate-500 dark:text-slate-400">

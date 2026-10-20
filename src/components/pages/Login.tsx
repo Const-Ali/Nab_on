@@ -1,8 +1,9 @@
+import { Button } from '../common/Button'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { load, save } from '../../shared'
 import type { User } from '../../types'
-import { btnPrimary, errorBox, inputCls, labelCls } from '../ui'
+import { errorBox, inputCls, labelCls } from '../ui'
 
 export function Login({ onLogin, users }: { onLogin: (user: User, remember: boolean) => void; users: User[] }) {
   const [username, setUsername] = useState('admin')
@@ -55,7 +56,7 @@ export function Login({ onLogin, users }: { onLogin: (user: User, remember: bool
           <label className="flex items-center gap-2 text-slate-600 dark:text-slate-300"><input className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} /> مرا به خاطر بسپار</label>
           <span className="text-xs text-slate-500 dark:text-slate-400">فراموشی رمز؟ با مدیر سیستم تماس بگیرید</span>
         </div>
-        <button className={`${btnPrimary} mt-6 w-full`} disabled={loading}> {loading ? 'در حال بررسی...' : 'ورود به سامانه'}</button>
+        <Button type="submit" variant="primary" size="md" className="mt-6 w-full" loading={loading} loadingText="در حال بررسی...">ورود به سامانه</Button>
         <small className="mt-4 block text-center text-xs leading-5 text-slate-500 dark:text-slate-400">حساب مدیر: admin / admin — سایر حساب‌ها را مدیر سیستم ایجاد می‌کند</small>
       </form>
       </main>

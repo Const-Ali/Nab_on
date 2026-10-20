@@ -1,3 +1,4 @@
+import { Button } from '../../components/common/Button'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { BirthDateField } from '../../shared-ui'
@@ -62,7 +63,7 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <form className={cn(modalBox, modalFormLayout, 'max-w-3xl')} onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</button>
+        <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
         <small className={modalSmall}>{initial ? 'ویرایش کار' : 'کار جدید'}</small>
         <h2 className={modalH2}>{initial ? `ویرایش «${initial.title}»` : 'ایجاد کار جدید'}</h2>
         <p className={modalP}>کارهای شخصی فقط برای شما قابل مشاهده است؛ کارهای سازمانی بین ایجادکننده و مسئول مشترک می‌شود.</p>
@@ -149,8 +150,8 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
         <datalist id="wm-cats">{categories.map(c => <option key={c} value={c} />)}</datalist>
         {error && <div className={errorBox}>{error}</div>}
         <div className={modalActions}>
-          <button type="button" className="outline" onClick={onClose}> انصراف</button>
-          <button type="submit" className="primary"> {initial ? 'ذخیره تغییرات' : 'ایجاد کار'}</button>
+          <Button type="button" variant="outline" onClick={onClose}> انصراف</Button>
+          <Button type="submit" variant="primary"> {initial ? 'ذخیره تغییرات' : 'ایجاد کار'}</Button>
         </div>
       </form>
     </div>

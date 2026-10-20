@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import { Button } from '../../components/common/Button'
 import { jalaliMonthNames, jalaliParts, toPersianDigits } from '../../shared'
 import { taskPriorityLabels, taskPriorityTones, taskStatusLabels } from '../types'
 import type { WorkTask } from '../types'
@@ -10,6 +11,7 @@ interface Props {
 
 export default function TaskGantt({ tasks, onOpen }: Props) {
   const todayJ = jalaliParts(new Date())
+  const todayDayRef = useRef<HTMLDivElement>(null)
 
   // Create 30 days window centered around today
   const days = useMemo(() => {
@@ -32,6 +34,10 @@ export default function TaskGantt({ tasks, onOpen }: Props) {
     }
     return list
   }, [todayJ.y, todayJ.m, todayJ.d])
+
+  useEffect(() => {
+    todayDayRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' })
+  }, [days.length, todayJ.d])
 
   const parseDayIndex = (dateStr?: string) => {
     if (!dateStr) return null
@@ -58,28 +64,33 @@ export default function TaskGantt({ tasks, onOpen }: Props) {
         <div className="wm-gantt-tasks-col">
           <div className="wm-gantt-cell-head">عنوان کار</div>
           {tasks.map(t => (
-            <div
+            <Button
               key={t.id}
+              type="button"
+              variant="ghost"
+              size="none"
               className="wm-gantt-task-item"
               onClick={() => onOpen(t)}
               title={`${t.title} (${taskStatusLabels[t.status]})`}
+              aria-label={`نمایش جزئیات کار: ${t.title}، ${taskStatusLabels[t.status]}`}
             >
               <small>اولویت: {taskPriorityLabels[t.priority]}</small>
               <span className={`wm-gantt-task-name ${t.status === 'completed' ? 'done' : ''}`}>
                 {t.title}
               </span>
               <small className={`wm-chip st-${t.status}`}>{taskStatusLabels[t.status]}</small>
-            </div>
+            </Button>
           ))}
-          {tasks.length === 0 && <div className="empty">کاری برای نمایش وجود ندارد</div>}
+          {tasks.length === 0 && <div className="wm-gantt-empty">کاری برای نمایش وجود ندارد</div>}
         </div>
 
         {/* Right timeline grid */}
         <div className="wm-gantt-grid-col">
-          <div className="wm-gantt-days-head">
+          <div className="wm-gantt-days-head" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(28px, 1fr))` }}>
             {days.map(d => (
               <div
                 key={d.dateStr}
+                ref={d.isToday ? todayDayRef : undefined}
                 className={`wm-gantt-day-head ${d.isToday ? 'today' : ''}`}
                 title={`${d.d} ${jalaliMonthNames[d.m - 1]}`}
               >
@@ -100,15 +111,22 @@ export default function TaskGantt({ tasks, onOpen }: Props) {
               const widthPercent = span * cellWidthPercent
 
               return (
-                <div key={t.id} className="wm-gantt-row">
+                <div
+                  key={t.id}
+                  className="wm-gantt-row"
+                  style={{ backgroundSize: `${cellWidthPercent}% 100%` }}
+                >
                   {/* Today vertical line */}
                   <div
                     className="wm-gantt-today-line"
-                    style={{ left: `${(todayJ.d - 1) * cellWidthPercent + cellWidthPercent / 2}%` }}
+                    style={{ right: `${(todayJ.d - 0.5) * cellWidthPercent}%` }}
                   />
 
                   {/* Task timeline bar */}
-                  <div
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="none"
                     className={`wm-gantt-bar pr-${taskPriorityTones[t.priority]} st-${t.status}`}
                     style={{
                       right: `${leftPercent}%`,
@@ -116,10 +134,11 @@ export default function TaskGantt({ tasks, onOpen }: Props) {
                     }}
                     onClick={() => onOpen(t)}
                     title={`${t.title} | از ${t.startDate || '—'} تا ${t.dueDate || '—'}`}
+                    aria-label={`نمایش جزئیات کار روی نمودار: ${t.title}`}
                   >
                     <span className="wm-gantt-bar-title">{t.title}</span>
                     {t.dueDate && <small className="wm-gantt-bar-due">{toPersianDigits(t.dueDate.slice(5))}</small>}
-                  </div>
+                  </Button>
                 </div>
               )
             })}

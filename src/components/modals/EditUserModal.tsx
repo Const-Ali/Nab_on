@@ -1,3 +1,4 @@
+import { Button } from '../common/Button'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { permissionLabels, allPermissions } from '../../app-lib'
@@ -32,13 +33,13 @@ export function EditUserModal({ user, roles, isSelf, onClose, onSave }: { user: 
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <form className={cn(modalBox, modalFormLayout)} onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</button>
+        <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
         <small>تنظیم دسترسی · {user.username}@</small>
         <h2>سطح دسترسی کاربر</h2>
         <div className="form-grid">
           <label>نام و نام خانوادگی *<input required value={name} onChange={e => setName(e.target.value)} /></label>
           <label>نقش<select value={role} onChange={e => changeRole(e.target.value as Role)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label>رمز عبور جدید<input dir="ltr" autoComplete="new-password" value={password} onChange={e => { setPassword(e.target.value); setError('') }} placeholder="فقط برای تغییر وارد کنید" /></label>
+          <label>رمز عبور جدید<input type="password" minLength={4} dir="ltr" autoComplete="new-password" value={password} onChange={e => { setPassword(e.target.value); setError('') }} placeholder="فقط برای تغییر وارد کنید" /></label>
         </div>
         <h3 className="modal-h">مجوزها <small>— با تغییر نقش به‌صورت خودکار پر می‌شود</small></h3>
         <div className="perm-grid">
@@ -50,8 +51,8 @@ export function EditUserModal({ user, roles, isSelf, onClose, onSave }: { user: 
         </div>
         {error && <div className="error">{error}</div>}
         <div className="modal-actions">
-          <button type="button" className="outline" onClick={onClose}> انصراف</button>
-          <button type="submit" className="primary"> ذخیره دسترسی</button>
+          <Button type="button" variant="outline" onClick={onClose}> انصراف</Button>
+          <Button type="submit" variant="primary"> ذخیره دسترسی</Button>
         </div>
       </form>
     </div>

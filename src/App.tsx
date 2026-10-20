@@ -1,3 +1,4 @@
+import { Button } from './components/common/Button'
 import { useEffect, useMemo, useState } from 'react'
 import {
   jalaliMonthNames,
@@ -61,7 +62,7 @@ import { ProfileModal } from './components/modals/ProfileModal'
 import { SearchModal } from './components/modals/SearchModal'
 import { PrintPerson } from './components/common/PrintPerson'
 import { PrintReport } from './components/common/PrintReport'
-import { btnPrimary, cn, focusRing, transition } from './components/ui'
+import { cn } from './components/ui'
 
 export default function App() {
   const [session, setSession] = useState<{ username: string } | null>(() => {
@@ -96,6 +97,7 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(() => load('nab:sidebar-collapsed', false))
   const [theme, setTheme] = useState<ThemeMode>(() => load<ThemeMode>('nab:theme', 'light'))
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [isServerConnected, setIsServerConnected] = useState<boolean | null>(null)
 
   // بارگذاری اولیه و همگام‌سازی با دیتابیس هاست
@@ -197,12 +199,39 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
+        setThemeMenuOpen(false)
+        setMobileMoreOpen(false)
+        setCalOpen(false)
         setSearchOpen(o => !o)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  useEffect(() => {
+    if (!themeMenuOpen && !mobileMoreOpen && !calOpen) return
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return
+      const popover = event.target.closest('[data-app-popover]')?.getAttribute('data-app-popover')
+      if (themeMenuOpen && popover !== 'theme') setThemeMenuOpen(false)
+      if (mobileMoreOpen && popover !== 'mobile-more') setMobileMoreOpen(false)
+      if (calOpen && popover !== 'calendar') setCalOpen(false)
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setThemeMenuOpen(false)
+        setMobileMoreOpen(false)
+        setCalOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [themeMenuOpen, mobileMoreOpen, calOpen])
 
   const auditLog = (action: string, target: string) => {
     const entry: Audit = { id: uid('AUD'), action, target, createdAt: nowStamp(), createdBy: currentUser?.name ?? 'کاربر' }
@@ -212,6 +241,16 @@ export default function App() {
   const showToast = (msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
+  }
+
+  const openTasksPage = () => {
+    setMobileMoreOpen(false)
+    setThemeMenuOpen(false)
+    setCalOpen(false)
+    if (window.location.pathname !== '/tasks') {
+      window.history.pushState({}, '', '/tasks')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    }
   }
 
   const handleCreatePerson = (p: Person) => {
@@ -370,6 +409,7 @@ export default function App() {
     ['reports', 'گزارش‌ها و تحلیل', 'view_reports'],
     ['settings', 'تنظیمات'],
   ]
+  const mobileMorePageActive = navItems.slice(4).some(([key, , perm]) => key === page && (!perm || has(perm)))
   const compactNavLabels: Record<Page, string> = { dashboard: 'داشبورد', persons: 'افراد', workflow: 'گردش‌کار', activities: 'رویدادها', users: 'کاربران', reports: 'گزارش‌ها', settings: 'تنظیمات', tasks: 'کارها' }
 
   const todayJ = jalaliParts(new Date())
@@ -392,15 +432,18 @@ export default function App() {
   return (
     <div className={cn('min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100', theme !== 'light' && 'dark')} dir="rtl">
       <aside className={cn('fixed inset-y-0 right-0 z-40 hidden w-72 flex-col border-l border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 lg:flex dark:border-slate-800 dark:bg-slate-900', collapsed && 'w-20')}>
-        <button
+        <Button
           type="button"
-          className={cn('absolute -left-4 top-8 flex h-8 -translate-x-full items-center justify-center rounded-full border border-slate-200 bg-white px-2 text-xs text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-950 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800', focusRing, transition)}
+          variant="outline"
+          size="xs"
+          className="absolute -left-4 top-8 -translate-x-full rounded-full px-2 text-xs"
           onClick={() => setCollapsed(c => !c)}
-          title="جمع / باز کردن نوار کناری"
-          aria-label="جمع / باز کردن نوار کناری"
+          title={collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'}
+          aria-label={collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'}
+          aria-pressed={collapsed}
         >
           {collapsed ? 'باز کردن' : 'جمع کردن'}
-        </button>
+        </Button>
         <div className="flex items-center gap-3 px-2 py-3">
           <b className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-600 text-lg font-black text-white shadow-sm">ن</b>
           <span className={cn('min-w-0', collapsed && 'hidden')}>
@@ -413,35 +456,42 @@ export default function App() {
           {navItems.map(([key, label, perm]) => {
             if (perm && !has(perm)) return null
             return (
-              <button
+              <Button
                 type="button"
                 key={key}
-                className={cn('flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-right text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white', focusRing, transition, page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300', collapsed && 'justify-center px-1 text-center text-[10px]')}
+                variant="ghost"
+                size="none"
+                active={page === key}
+                aria-current={page === key ? 'page' : undefined}
+                className={cn('flex w-full justify-start rounded-xl px-3 py-2.5 text-right text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white', page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300', collapsed && 'justify-center px-1 text-center text-[10px]')}
                 onClick={() => {
                   setPage(key)
                   setCalOpen(false)
+                  setMobileMoreOpen(false)
                 }}
                 title={collapsed ? label : undefined}
                 aria-label={collapsed ? label : undefined}
               >
                 <span>{collapsed ? compactNavLabels[key] : label}</span>
-              </button>
+              </Button>
             )
           })}
         </nav>
 
         <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            <button type="button" className={cn('flex min-w-0 flex-1 items-center gap-2 rounded-xl p-2 text-right hover:bg-slate-100 dark:hover:bg-slate-800', focusRing, transition, collapsed && 'justify-center')} onClick={() => setProfileOpen(true)} title={collapsed ? 'نمایش پروفایل' : undefined} aria-label={collapsed ? 'نمایش پروفایل' : undefined}>
+            <Button type="button" variant="ghost" size="none" className={cn('flex min-w-0 flex-1 justify-start gap-2 rounded-xl p-2 text-right', collapsed && 'justify-center')} onClick={() => setProfileOpen(true)} title={collapsed ? 'نمایش پروفایل' : undefined} aria-label={collapsed ? 'نمایش پروفایل' : `نمایش پروفایل ${currentUser.name}`}>
               <Avatar text={currentUser.name[0]} src={currentUser.photo} size={34} />
               <span className={collapsed ? 'hidden' : 'min-w-0'}>
                 <b className="block truncate text-sm text-slate-800 dark:text-slate-100">{currentUser.name}</b>
                 <small className="block truncate text-xs text-slate-500 dark:text-slate-400">{currentUser.title}</small>
               </span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className={cn('grid h-9 shrink-0 place-items-center rounded-xl px-2 text-xs text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-300', focusRing, transition, collapsed && 'hidden')}
+              variant="dangerGhost"
+              size="sm"
+              className={cn('shrink-0', collapsed && 'hidden')}
               onClick={() => {
                 setSession(null)
                 playChime('alert')
@@ -450,7 +500,7 @@ export default function App() {
               aria-label="خروج از حساب"
             >
               خروج
-            </button>
+            </Button>
           </div>
         </div>
       </aside>
@@ -461,16 +511,24 @@ export default function App() {
             <span>
               خانه / <b>{navItems.find(n => n[0] === page)?.[1]}</b>
             </span>
-            <div className="relative hidden sm:block">
-              <button
+            <div className="relative hidden sm:block" data-app-popover="calendar">
+              <Button
                 type="button"
-                className={cn('flex items-center gap-2 rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800', focusRing, transition)}
-                onClick={() => setCalOpen(o => !o)}
+                variant="ghost"
+                size="xs"
+                className="rounded-lg text-xs text-slate-500 dark:text-slate-400"
+                onClick={() => {
+                  setThemeMenuOpen(false)
+                  setMobileMoreOpen(false)
+                  setCalOpen(o => !o)
+                }}
                 title="نمایش تقویم شمسی"
+                aria-expanded={calOpen}
+                aria-label={`نمایش تقویم شمسی، ${headerDate}`}
               >
                 <time>{headerDate}</time>
                 <LiveClock />
-              </button>
+              </Button>
               {calOpen && <MiniCalendar activityDays={activityDayKeys} onPick={() => setCalOpen(false)} />}
             </div>
             {isServerConnected !== null && (
@@ -483,58 +541,95 @@ export default function App() {
             )}
           </div>
 
-          <button
+          <Button
             type="button"
-            className={cn('hidden min-w-0 max-w-sm items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-sm hover:border-slate-300 hover:text-slate-700 md:flex dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800', focusRing, transition)}
-            onClick={() => setSearchOpen(true)}
+            variant="outline"
+            size="sm"
+            className="hidden min-w-0 max-w-sm flex-1 justify-start text-slate-500 md:flex dark:text-slate-400"
+            onClick={() => {
+              setCalOpen(false)
+              setThemeMenuOpen(false)
+              setMobileMoreOpen(false)
+              setSearchOpen(true)
+            }}
             title="پالت دستورات سریع و جستجو (Ctrl+K)"
+            aria-label="جستجو و دستورات سریع"
           >
             جستجو یا دستور... <kbd>Ctrl+K</kbd>
-          </button>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="md:hidden"
+            onClick={() => {
+              setCalOpen(false)
+              setThemeMenuOpen(false)
+              setMobileMoreOpen(false)
+              setSearchOpen(true)
+            }}
+            title="جستجو و دستورات سریع"
+            aria-label="جستجو و دستورات سریع"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <circle cx="10.8" cy="10.8" r="6.8" />
+              <path d="m16 16 4 4" strokeLinecap="round" />
+            </svg>
+          </Button>
 
           <div className="flex items-center gap-2">
             {/* Theme Multi-Picker */}
-            <div className="relative">
-              <button
+            <div className="relative" data-app-popover="theme">
+              <Button
                 type="button"
-                className={cn('grid h-10 place-items-center rounded-xl border border-slate-200 bg-white px-2 text-xs text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800', focusRing, transition)}
-                onClick={() => setThemeMenuOpen(o => !o)}
+                variant="outline"
+                size="sm"
+                className="shrink-0 text-xs"
+                onClick={() => {
+                  setCalOpen(false)
+                  setMobileMoreOpen(false)
+                  setThemeMenuOpen(o => !o)
+                }}
                 title="انتخاب تم رنگی"
                 aria-label="انتخاب تم رنگی"
+                aria-expanded={themeMenuOpen}
+                aria-controls="theme-menu"
               >
                 انتخاب تم
-              </button>
+              </Button>
               {themeMenuOpen && (
-                <div className="absolute left-0 top-full z-50 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={() => setThemeMenuOpen(false)}>
+                <div id="theme-menu" role="group" aria-label="تم‌های رنگی" className="absolute left-0 top-full z-50 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={() => setThemeMenuOpen(false)}>
                   {(['light', 'dark', 'midnight', 'emerald', 'cobalt'] as ThemeMode[]).map(t => (
-                    <button
+                    <Button
                       key={t}
                       type="button"
-                      className={cn('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-right text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800', focusRing, transition, theme === t && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
+                      variant="ghost"
+                      size="sm"
+                      active={theme === t}
+                      className={cn('w-full justify-start rounded-lg text-right', theme === t && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
                       onClick={() => setTheme(t)}
                     >
                       <span>{themeLabels[t].label}</span>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               )}
             </div>
 
-            <button
+            <Button
               type="button"
-              className={cn(btnPrimary, 'hidden sm:inline-flex')}
-              onClick={() => {
-                window.history.pushState({}, '', '/tasks')
-                window.dispatchEvent(new PopStateEvent('popstate'))
-              }}
+              variant="primary"
+              size="sm"
+              className="hidden sm:inline-flex"
+              onClick={openTasksPage}
               title="ورود به بخش کارهای من"
             >
               کارهای من
-            </button>
+            </Button>
           </div>
         </header>
 
-        <div className="mx-auto w-full max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-8">
           {page === 'dashboard' && (
             <Dashboard
               people={people}
@@ -571,9 +666,10 @@ export default function App() {
                 showToast(`وضعیت ${ids.length} پرونده تغییر یافت.`)
               }}
               onBulkDelete={ids => {
-                if (!window.confirm(`حذف ${ids.length} پرونده انتخاب‌شده؟`)) return
+                if (!window.confirm(`حذف ${ids.length} پرونده انتخاب‌شده؟`)) return false
                 setPeople(cur => cur.filter(p => !ids.includes(p.id)))
                 showToast(`${ids.length} پرونده حذف شدند.`)
+                return true
               }}
             />
           )}
@@ -751,10 +847,7 @@ export default function App() {
             setSearchOpen(false)
           }}
           onOpenCreatePerson={() => setCreateOpen(true)}
-          onOpenCreateTask={() => {
-            window.history.pushState({}, '', '/tasks')
-            window.dispatchEvent(new PopStateEvent('popstate'))
-          }}
+          onOpenCreateTask={openTasksPage}
           onChangeTheme={t => setTheme(t)}
           onExportData={exportAllPeople}
         />
@@ -773,8 +866,67 @@ export default function App() {
         <PrintReport people={people} activities={activities} printedBy={currentUser.name} />
       )}
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-slate-200 bg-white/95 px-2 py-2 backdrop-blur lg:hidden dark:border-slate-800 dark:bg-slate-900/95">
-        {navItems.slice(0, 5).map(([key, label, perm]) => !perm || has(perm) ? <button key={key} type="button" onClick={() => setPage(key)} className={cn('flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[10px] text-slate-500 dark:text-slate-400', focusRing, transition, page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}><span className="truncate">{label}</span></button> : null)}
+      <nav aria-label="پیمایش موبایل" className="fixed inset-x-0 bottom-0 z-40 flex min-h-16 items-stretch gap-1 border-t border-slate-200 bg-white/95 px-1.5 py-1.5 pb-[max(.375rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden dark:border-slate-800 dark:bg-slate-900/95">
+        {navItems.slice(0, 4).map(([key, label, perm]) => !perm || has(perm) ? (
+          <Button
+            key={key}
+            type="button"
+            variant="tab"
+            size="none"
+            active={page === key}
+            aria-current={page === key ? 'page' : undefined}
+            onClick={() => {
+              setPage(key)
+              setCalOpen(false)
+              setThemeMenuOpen(false)
+              setMobileMoreOpen(false)
+            }}
+            className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1 text-[10px] text-slate-500 dark:text-slate-400', page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
+          >
+            <span className="truncate">{label}</span>
+          </Button>
+        ) : null)}
+        <div className="relative flex min-w-0 flex-1" data-app-popover="mobile-more">
+          <Button
+            type="button"
+            variant="tab"
+            size="none"
+            active={mobileMoreOpen || mobileMorePageActive}
+            aria-current={mobileMorePageActive ? 'page' : undefined}
+            aria-expanded={mobileMoreOpen}
+            aria-controls="mobile-more-menu"
+            onClick={() => setMobileMoreOpen(open => !open)}
+            className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1 text-[10px] text-slate-500 dark:text-slate-400', mobileMoreOpen && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
+          >
+            <span>بیشتر</span>
+          </Button>
+          {mobileMoreOpen && (
+            <div id="mobile-more-menu" className="absolute bottom-full left-0 z-50 mb-2 grid max-h-[70vh] w-[min(19rem,calc(100vw-1rem))] grid-cols-1 gap-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+              {navItems.slice(4).map(([key, label, perm]) => !perm || has(perm) ? (
+                <Button
+                  key={key}
+                  type="button"
+                  variant={page === key ? 'soft' : 'ghost'}
+                  size="sm"
+                  active={page === key}
+                  aria-current={page === key ? 'page' : undefined}
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setPage(key)
+                    setCalOpen(false)
+                    setThemeMenuOpen(false)
+                    setMobileMoreOpen(false)
+                  }}
+                >
+                  {label}
+                </Button>
+              ) : null)}
+              <Button type="button" variant="ghost" size="sm" className="w-full justify-start" onClick={openTasksPage}>
+                کارهای من
+              </Button>
+            </div>
+          )}
+        </div>
       </nav>
       {toast && <div className="fixed bottom-20 left-4 z-[60] max-w-sm rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-xl lg:bottom-6">{toast}</div>}
     </div>

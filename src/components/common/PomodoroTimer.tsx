@@ -1,5 +1,7 @@
+import { Button } from './Button'
 import { useEffect, useState } from 'react'
 import { playChime, sendBrowserNotification, toPersianDigits } from '../../shared'
+import './pomodoro.css'
 
 interface Props {
   taskTitle?: string
@@ -82,11 +84,18 @@ export function PomodoroTimer({ taskTitle, onTimeLogged, onClose }: Props) {
 
   if (minimized) {
     return (
-      <div className="pomo-floating-pill" onClick={() => setMinimized(false)} title="کلیک جهت باز کردن تایمر پومودورو">
-        <span className={`pomo-pulse ${isRunning ? 'active' : ''}`} />
+      <Button
+        variant="soft"
+        size="sm"
+        className="pomo-floating-pill"
+        onClick={() => setMinimized(false)}
+        title="باز کردن تایمر پومودورو"
+        aria-label={`باز کردن تایمر پومودورو، ${toPersianDigits(timeStr)} باقی‌مانده`}
+      >
+        <span className={`pomo-pulse ${isRunning ? 'active' : ''}`} aria-hidden="true" />
         <span className="pomo-time-pill">{toPersianDigits(timeStr)}</span>
         <small>{mode === 'pomodoro' ? 'تمرکز' : 'استراحت'}</small>
-      </div>
+      </Button>
     )
   }
 
@@ -100,27 +109,28 @@ export function PomodoroTimer({ taskTitle, onTimeLogged, onClose }: Props) {
           </div>
         </div>
         <div className="pomo-head-actions">
-          <button type="button" className="pomo-min-btn" onClick={() => setMinimized(true)} title="کوچک‌نمایی" aria-label="کوچک‌نمایی">
+          <Button variant="ghost" size="xs" onClick={() => setMinimized(true)} title="کوچک‌نمایی" aria-label="کوچک‌نمایی">
             کوچک‌نمایی
-          </button>
+          </Button>
           {onClose && (
-            <button type="button" className="pomo-min-btn" onClick={onClose} title="بستن" aria-label="بستن">
+            <Button variant="ghost" size="xs" onClick={onClose} title="بستن تایمر" aria-label="بستن تایمر">
               بستن
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
-      <div className="pomo-modes">
+      <div className="pomo-modes" role="group" aria-label="حالت تایمر">
         {(['pomodoro', 'shortBreak', 'longBreak'] as Mode[]).map(m => (
-          <button
+          <Button
             key={m}
-            type="button"
-            className={`pomo-mode-btn ${mode === m ? 'active' : ''}`}
+            variant="tab"
+            size="xs"
+            active={mode === m}
             onClick={() => changeMode(m)}
           >
             {m === 'pomodoro' ? 'تمرکز (۲۵ دقیقه)' : m === 'shortBreak' ? 'استراحت (۵ دقیقه)' : 'استراحت طولانی (۱۵)'}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -147,16 +157,12 @@ export function PomodoroTimer({ taskTitle, onTimeLogged, onClose }: Props) {
       </div>
 
       <div className="pomo-controls">
-        <button
-          type="button"
-          className={`pomo-start-btn ${isRunning ? 'pause' : 'start'}`}
-          onClick={toggleRun}
-        >
+        <Button variant={isRunning ? 'outline' : 'primary'} size="md" onClick={toggleRun}>
           {isRunning ? 'توقف موقت' : 'شروع تمرکز'}
-        </button>
-        <button type="button" className="pomo-reset-btn" onClick={reset} title="شروع مجدد" aria-label="شروع مجدد">
+        </Button>
+        <Button variant="outline" size="sm" onClick={reset} title="شروع مجدد" aria-label="شروع مجدد">
           شروع مجدد
-        </button>
+        </Button>
       </div>
 
       <div className="pomo-footer">

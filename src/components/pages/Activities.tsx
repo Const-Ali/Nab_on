@@ -1,12 +1,13 @@
+import { Button } from '../common/Button'
 import { Heading } from '../../shared-ui'
 import type { Activity } from '../../types'
 import { Badge } from '../common/Badge'
-import { btnOutline, emptyBox, panelBox } from '../ui'
+import { emptyBox, panelBox } from '../ui'
 
 export function Activities({ activities, onExport }: { activities: Activity[]; onExport: () => void }) {
   return (
     <>
-      <Heading title="گزارش فعالیت‌ها" subtitle="Activity Log تاریخچه‌ی دائمی تغییرات پرونده‌هاست و قابل حذف نیست." action={<button className={btnOutline} onClick={onExport}> خروجی اکسل</button>} />
+      <Heading title="گزارش فعالیت‌ها" subtitle="Activity Log تاریخچه‌ی دائمی تغییرات پرونده‌هاست و قابل حذف نیست." action={<Button variant="outline" onClick={onExport}> خروجی اکسل</Button>} />
       <section className={panelBox}>
         {activities.map(a => (
           <div className="grid grid-cols-1 gap-3 border-b border-slate-100 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center sm:px-5 dark:border-slate-800" key={a.id}>

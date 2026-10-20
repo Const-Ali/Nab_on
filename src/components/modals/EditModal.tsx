@@ -1,3 +1,4 @@
+import { Button } from '../common/Button'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { normalizeDigits } from '../../shared'
@@ -83,7 +84,7 @@ export function EditModal({ person, existing, onClose, onSave }: { person: Perso
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <form className={cn(modalBox, modalFormLayout, 'max-h-[calc(100vh-2rem)] max-w-3xl overflow-y-auto')} onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</button>
+        <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
         <small>ویرایش پرونده · {person.id}</small>
         <h2>ویرایش اطلاعات فرد</h2>
         <p>وضعیت پرونده فقط از مسیر گردش‌کار تغییر می‌کند؛ تغییرات این فرم در تاریخچه ثبت می‌شود.</p>
@@ -91,14 +92,14 @@ export function EditModal({ person, existing, onClose, onSave }: { person: Perso
         <h3 className="modal-h">برچسب‌ها <small className="modal-h-small">— برای اولویت‌بندی و فیلتر</small></h3>
         <div className="tag-picker">
           {Object.keys(personTags).map(t => (
-            <button
+            <Button
               type="button"
               key={t}
               className={`tag-chip ${personTags[t]} ${tags.includes(t) ? 'on' : ''}`}
               onClick={() => setTags(cur => (cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t]))}
             >
               {t}
-            </button>
+            </Button>
           ))}
         </div>
         <div className="form-grid">
@@ -111,8 +112,8 @@ export function EditModal({ person, existing, onClose, onSave }: { person: Perso
         </div>
         {error && <div className="error">{error}</div>}
         <div className="modal-actions">
-          <button type="button" className="outline" onClick={onClose}> انصراف</button>
-          <button type="submit" className="primary"> ذخیره ویرایش</button>
+          <Button type="button" variant="outline" onClick={onClose}> انصراف</Button>
+          <Button type="submit" variant="primary"> ذخیره ویرایش</Button>
         </div>
       </form>
     </div>

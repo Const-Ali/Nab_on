@@ -1,9 +1,10 @@
+import { Button } from '../common/Button'
 import { useState } from 'react'
 import { Avatar, Heading } from '../../shared-ui'
 import { workflow, personTags, STALE_LIMIT, deadlineLeft, PAGE_SIZE, staleDays, downloadCsv } from '../../app-lib'
 import type { Status, Person, PersonFilter } from '../../types'
 import { Badge } from '../common/Badge'
-import { btnMini, btnMiniOn, btnPrimary, cn, dangerLiteTxt, emptyBox, panelBox, rowCheck, searchBox, searchInput, selectCls } from '../ui'
+import { cn, emptyBox, panelBox, rowCheck, searchBox, searchInput, selectCls } from '../ui'
 
 export function Persons({
   people,
@@ -36,7 +37,7 @@ export function Persons({
   onCreate: () => void
   onSelect: (p: Person) => void
   onBulkStatus: (ids: string[], target: Status) => void
-  onBulkDelete: (ids: string[]) => void
+  onBulkDelete: (ids: string[]) => boolean
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [pageNo, setPageNo] = useState(0)
@@ -81,7 +82,7 @@ export function Persons({
       <Heading
         title="افراد"
         subtitle="اطلاعات افراد و وضعیت پرونده‌های آن‌ها را مدیریت کنید."
-        action={canCreate ? <button className={btnPrimary} onClick={onCreate}> افزودن فرد</button> : undefined}
+        action={canCreate ? <Button variant="primary" onClick={onCreate}> افزودن فرد</Button> : undefined}
       />
       <section className={cn(panelBox, 'overflow-hidden')}>
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:p-5 lg:flex-row dark:border-slate-800">
@@ -124,20 +125,20 @@ export function Persons({
               <option value="" disabled>تغییر وضعیت گروهی...</option>
               {workflow.filter(s => s !== 'رد شده').map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button type="button" className={btnMini} onClick={exportSelected}> خروجی اکسل</button>
+            <Button type="button" variant="outline" size="xs" onClick={exportSelected}> خروجی اکسل</Button>
             {canDelete && (
-              <button
+              <Button
                 type="button"
-                className={cn(btnMini, dangerLiteTxt)}
+                variant="dangerGhost"
+                size="xs"
                 onClick={() => {
-                  onBulkDelete([...selectedIds])
-                  setSelectedIds(new Set())
+                  if (onBulkDelete([...selectedIds])) setSelectedIds(new Set())
                 }}
               >
                  حذف گروهی
-              </button>
+              </Button>
             )}
-            <button type="button" className={btnMini} onClick={() => setSelectedIds(new Set())}> لغو انتخاب</button>
+            <Button type="button" variant="outline" size="xs" onClick={() => setSelectedIds(new Set())}> لغو انتخاب</Button>
           </div>
         )}
         <div className="hidden grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-500 lg:grid dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400">
@@ -149,19 +150,28 @@ export function Persons({
           <span>ثبت‌کننده</span>
         </div>
         {pageItems.map(p => (
-          <button type="button" className="grid w-full grid-cols-1 gap-3 border-b border-slate-100 px-4 py-4 text-right hover:bg-slate-50 sm:px-5 lg:grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] lg:items-center lg:gap-4 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id} onClick={() => onSelect(p)}>
+          <div className="grid w-full grid-cols-1 gap-3 border-b border-slate-100 px-4 py-4 text-right hover:bg-slate-50 sm:px-5 lg:grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] lg:items-center lg:gap-4 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id}>
             <span className="flex min-w-0 items-center gap-3">
               <input
                 type="checkbox"
                 className={rowCheck}
                 checked={selectedIds.has(p.id)}
-                onClick={e => e.stopPropagation()}
                 onChange={() => toggleId(p.id)}
                 aria-label={`انتخاب ${p.firstName} ${p.lastName}`}
               />
-              <Avatar text={p.firstName[0]} src={p.photo} />
-              <b className="min-w-0 text-sm text-slate-800 dark:text-slate-100">{p.firstName} {p.lastName}<small className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">{p.id}</small></b>
-              {(p.tags ?? []).map(t => <span className={cn('hidden rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 sm:inline-flex dark:bg-slate-800 dark:text-slate-300', personTags[t])} key={t}>{t}</span>)}
+              <Button
+                type="button"
+                variant="unstyled"
+                size="none"
+                className="min-w-0 flex-1 justify-start gap-3 rounded-lg py-1 text-right"
+                onClick={() => onSelect(p)}
+                aria-label={`نمایش پرونده ${p.firstName} ${p.lastName}`}
+                title="نمایش پرونده"
+              >
+                <Avatar text={p.firstName[0]} src={p.photo} />
+                <b className="min-w-0 text-sm text-slate-800 dark:text-slate-100">{p.firstName} {p.lastName}<small className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">{p.id}</small></b>
+                {(p.tags ?? []).map(t => <span className={cn('hidden rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 sm:inline-flex dark:bg-slate-800 dark:text-slate-300', personTags[t])} key={t}>{t}</span>)}
+              </Button>
             </span>
             <span className="text-sm text-slate-600 dark:text-slate-300"><small className="ml-2 inline lg:hidden">کد ملی:</small>{p.nationalId}</span>
             <span className="text-sm text-slate-600 dark:text-slate-300"><small className="ml-2 inline lg:hidden">تولد:</small>{p.birthDate}</span>
@@ -177,18 +187,29 @@ export function Persons({
             </span>
             <span className="text-sm text-slate-500 dark:text-slate-400"><small className="ml-2 inline lg:hidden">فعالیت:</small>{p.updatedAt}</span>
             <span className="text-sm text-slate-500 dark:text-slate-400"><small className="ml-2 inline lg:hidden">کاربر:</small>{p.updatedBy}</span>
-          </button>
+          </div>
         ))}
         {!people.length && <div className={cn(emptyBox, 'm-4')}>نتیجه‌ای پیدا نشد</div>}
         {people.length > PAGE_SIZE && (
           <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 dark:border-slate-800 dark:text-slate-400">
             <span>{people.length.toLocaleString('fa-IR')} پرونده · صفحه {(safePage + 1).toLocaleString('fa-IR')} از {pageCount.toLocaleString('fa-IR')}</span>
             <div className="flex flex-wrap gap-1.5">
-              <button type="button" className={btnMini} disabled={safePage === 0} onClick={() => setPageNo(safePage - 1)}> قبلی</button>
+              <Button type="button" variant="outline" size="xs" disabled={safePage === 0} onClick={() => setPageNo(safePage - 1)}> قبلی</Button>
               {Array.from({ length: pageCount }, (_, i) => i).filter(i => pageCount <= 7 || Math.abs(i - safePage) <= 2 || i === 0 || i === pageCount - 1).map(i => (
-                <button type="button" key={i} className={cn(btnMini, i === safePage && btnMiniOn)} onClick={() => setPageNo(i)}>{(i + 1).toLocaleString('fa-IR')}</button>
+                <Button
+                  type="button"
+                  key={i}
+                  variant="tab"
+                  size="xs"
+                  aria-label={`صفحه ${i + 1}`}
+                  aria-current={i === safePage ? 'page' : undefined}
+                  className={i === safePage ? 'bg-indigo-600 text-white hover:bg-indigo-500 dark:bg-indigo-500' : ''}
+                  onClick={() => setPageNo(i)}
+                >
+                  {(i + 1).toLocaleString('fa-IR')}
+                </Button>
               ))}
-              <button type="button" className={btnMini} disabled={safePage >= pageCount - 1} onClick={() => setPageNo(safePage + 1)}> بعدی</button>
+              <Button type="button" variant="outline" size="xs" disabled={safePage >= pageCount - 1} onClick={() => setPageNo(safePage + 1)}> بعدی</Button>
             </div>
           </div>
         )}

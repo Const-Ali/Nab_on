@@ -1,3 +1,4 @@
+import { Button } from '../common/Button'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { permissionLabels } from '../../app-lib'
@@ -24,14 +25,14 @@ export function AddUserModal({ existing, roles, onClose, onCreate }: { existing:
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <form className={cn(modalBox, modalFormLayout)} onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</button>
+        <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
         <small>کاربر جدید</small>
         <h2>ایجاد حساب ورود</h2>
         <p>کاربر با همین نام کاربری و رمز عبور وارد سامانه می‌شود؛ سطح دسترسی را مشخص کنید.</p>
         <div className={formGrid}>
           <label>نام و نام خانوادگی *<input required value={name} onChange={e => setName(e.target.value)} /></label>
           <label>نام کاربری *<input required dir="ltr" autoComplete="off" value={username} onChange={e => { setUsername(e.target.value); setError('') }} /></label>
-          <label>رمز عبور *<input required dir="ltr" autoComplete="new-password" value={password} onChange={e => { setPassword(e.target.value); setError('') }} /></label>
+          <label>رمز عبور *<input type="password" required minLength={4} dir="ltr" autoComplete="new-password" value={password} onChange={e => { setPassword(e.target.value); setError('') }} /></label>
           <label>نقش<select value={role} onChange={e => setRole(e.target.value as Role)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>
         <h3 className="modal-h">مجوزهای این نقش <small>— بعداً برای هر کاربر قابل ویرایش است</small></h3>
@@ -40,8 +41,8 @@ export function AddUserModal({ existing, roles, onClose, onCreate }: { existing:
         </div>
         {error && <div className={errorBox}>{error}</div>}
         <div className={modalActions}>
-          <button type="button" className="outline" onClick={onClose}> انصراف</button>
-          <button type="submit" className="primary"> ایجاد کاربر</button>
+          <Button type="button" variant="outline" onClick={onClose}> انصراف</Button>
+          <Button type="submit" variant="primary"> ایجاد کاربر</Button>
         </div>
       </form>
     </div>

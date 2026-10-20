@@ -1,3 +1,4 @@
+import { Button } from '../common/Button'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar } from '../../shared-ui'
 import { workflow, nextStatuses, personTags, STALE_LIMIT, deadlineLeft, staleDays } from '../../app-lib'
@@ -87,7 +88,7 @@ export function PersonModal({
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className={cn(modalBox, modalFormLayout, personDetailLayout, 'max-h-[calc(100vh-2rem)] max-w-5xl overflow-y-auto')} onClick={e => e.stopPropagation()}>
-        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</button>
+        <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
         <small>جزئیات فرد · {person.id}</small>
         <h2>{person.firstName} {person.lastName}</h2>
         <div className="summary">
@@ -162,13 +163,13 @@ export function PersonModal({
             <textarea required value={reason} onChange={e => setReason(e.target.value)} placeholder="علت رد پرونده را وارد کنید..." />
           </label>
         )}
-        <div className="modal-tabs">
-          <button type="button" className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}>
+        <div className="modal-tabs" role="group" aria-label="بخش‌های پرونده">
+          <Button type="button" variant="tab" size="sm" active={tab === 'chat'} className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}>
              گفتگو {notes.length > 0 && <small>({notes.length.toLocaleString('fa-IR')})</small>}
-          </button>
-          <button type="button" className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
+          </Button>
+          <Button type="button" variant="tab" size="sm" active={tab === 'history'} className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
              تاریخچه پرونده {history.length > 0 && <small>({history.length.toLocaleString('fa-IR')})</small>}
-          </button>
+          </Button>
         </div>
         {tab === 'chat' ? (
           <>
@@ -179,13 +180,13 @@ export function PersonModal({
                     <b>{note.author}</b>
                     {note.role === 'admin' && <em className="role-chip">مدیر</em>}
                     <small>{note.title} · {note.createdAt}{note.edited ? ' · (ویرایش‌شده)' : ''}</small>
-                    <span className="msg-tools">
-                      <button type="button" title="پاسخ" onClick={() => setReplyTo(note)}>پاسخ</button>
+                    <span className="msg-tools flex items-center gap-1">
+                      <Button type="button" variant="ghost" size="xs" title="پاسخ به یادداشت" aria-label="پاسخ به یادداشت" onClick={() => setReplyTo(note)}>پاسخ</Button>
                     </span>
                     {note.author === meName && (
-                      <span className="msg-tools">
-                        <button type="button" title="ویرایش" onClick={() => { setEditingNote(note.id); setEditText(note.text) }}>ویرایش</button>
-                        <button type="button" title="حذف" onClick={() => onDeleteNote(note.id)}>حذف</button>
+                      <span className="msg-tools flex items-center gap-1">
+                        <Button type="button" variant="ghost" size="xs" title="ویرایش یادداشت" aria-label="ویرایش یادداشت" onClick={() => { setEditingNote(note.id); setEditText(note.text) }}>ویرایش</Button>
+                        <Button type="button" variant="dangerGhost" size="xs" title="حذف یادداشت" aria-label="حذف یادداشت" onClick={() => onDeleteNote(note.id)}>حذف</Button>
                       </span>
                     )}
                   </header>
@@ -197,9 +198,9 @@ export function PersonModal({
                   {editingNote === note.id ? (
                     <div className="note-edit">
                       <textarea value={editText} onChange={e => setEditText(e.target.value)} />
-                      <div>
-                        <button type="button" className="mini-btn" onClick={() => setEditingNote(null)}> انصراف</button>
-                        <button type="button" className="mini-btn" onClick={saveNoteEdit}> ذخیره</button>
+                      <div className="mt-2 flex flex-wrap justify-end gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setEditingNote(null)}>انصراف</Button>
+                        <Button type="button" variant="primary" size="sm" disabled={!editText.trim()} onClick={saveNoteEdit}>ذخیره</Button>
                       </div>
                     </div>
                   ) : <p>{renderText(note.text)}</p>}
@@ -210,12 +211,12 @@ export function PersonModal({
             {replyTo && (
               <div className="reply-bar">
                 <span>پاسخ به <b>{replyTo.author}</b>: {replyTo.text.length > 60 ? `${replyTo.text.slice(0, 60)}…` : replyTo.text}</span>
-                <button type="button" onClick={() => setReplyTo(null)} title="لغو پاسخ">لغو پاسخ</button>
+                <Button type="button" variant="dangerGhost" size="xs" onClick={() => setReplyTo(null)} title="لغو پاسخ">لغو پاسخ</Button>
               </div>
             )}
             {suggestions.length > 0 && (
               <div className="mention-sug">
-                {suggestions.map(u => <button type="button" key={u.username} onClick={() => insertMention(u.name)}>@{u.name}</button>)}
+                {suggestions.map(u => <Button variant="soft" size="xs" type="button" key={u.username} onClick={() => insertMention(u.name)}>@{u.name}</Button>)}
               </div>
             )}
             <div className="composer">
@@ -230,7 +231,7 @@ export function PersonModal({
                 }}
                 placeholder="نظر یا نکته‌ای بنویسید... (با @ کاربران را منشن کنید)"
               />
-              <button type="button" className="primary" disabled={!noteText.trim()} onClick={submitNote}> ارسال</button>
+              <Button type="button" variant="primary" size="sm" className="w-full sm:w-auto" disabled={!noteText.trim()} onClick={submitNote}>ارسال</Button>
             </div>
           </>
         ) : (
@@ -253,19 +254,19 @@ export function PersonModal({
           </div>
         )}
         <div className="modal-actions">
-          <button type="button" className="outline" onClick={() => window.print()}> چاپ</button>
-          <button type="button" className="outline" onClick={onClose}> بستن</button>
-          {canEdit && <button type="button" className="outline" onClick={() => onEdit(person)}> ویرایش اطلاعات</button>}
-          {canDelete && <button type="button" className="danger" onClick={() => onDelete(person)}> حذف پرونده</button>}
+          <Button type="button" variant="outline" onClick={() => window.print()}> چاپ</Button>
+          <Button type="button" variant="outline" onClick={onClose}> بستن</Button>
+          {canEdit && <Button type="button" variant="outline" onClick={() => onEdit(person)}> ویرایش اطلاعات</Button>}
+          {canDelete && <Button type="button" variant="danger" onClick={() => onDelete(person)}> حذف پرونده</Button>}
           {canChange && (
-            <button
+            <Button
               type="button"
-              className="primary"
+              variant="primary"
               disabled={status === person.status || (status === 'رد شده' && !reason.trim())}
               onClick={() => onUpdate(person, status, status === 'رد شده' ? reason : null)}
             >
                ذخیره تغییرات
-            </button>
+            </Button>
           )}
         </div>
       </div>

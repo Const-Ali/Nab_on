@@ -1,3 +1,4 @@
+import { Button } from '../../components/common/Button'
 import { isOverdue, overdueDays } from '../utils'
 import { taskPriorityLabels, taskStatusLabels, taskTypeLabels } from '../types'
 import type { UserLite, WorkTask } from '../types'
@@ -30,7 +31,7 @@ export default function TaskDetails({
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className={cn(modalBox, modalFormLayout, 'max-w-4xl')} onClick={e => e.stopPropagation()}>
-        <button type="button" className="x" onClick={onClose} title="بستن">بستن</button>
+        <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن">بستن</Button>
         <div className="wm-details-head">
           <span>
             <small>{taskTypeLabels[task.type]} · {task.id}</small>
@@ -115,13 +116,13 @@ export default function TaskDetails({
         </div>
 
         <div className="modal-actions wm-detail-actions">
-          <button type="button" className="outline danger-lite" onClick={() => onDelete(task)}>
+          <Button type="button" variant="danger" size="sm" onClick={() => onDelete(task)}>
              حذف کار
-          </button>
+          </Button>
           {onStartPomo && (
-            <button
+            <Button
               type="button"
-              className="outline"
+              variant="outline"
               onClick={() => {
                 onStartPomo(task)
                 onClose()
@@ -129,15 +130,15 @@ export default function TaskDetails({
               title="آغاز تایمر پومودورو برای این کار"
             >
                فوکوس پومودورو
-            </button>
+            </Button>
           )}
           <span className="wm-spacer" />
-          <button type="button" className="outline" onClick={() => onEdit(task)}>
+          <Button type="button" variant="outline" onClick={() => onEdit(task)}>
              ویرایش
-          </button>
-          <button type="button" className="primary" onClick={() => onToggle(task)}>
+          </Button>
+          <Button type="button" variant="primary" onClick={() => onToggle(task)}>
              {done ? 'بازگشایی کار' : 'تکمیل کار'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

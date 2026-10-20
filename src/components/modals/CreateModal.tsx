@@ -1,3 +1,4 @@
+import { Button } from '../common/Button'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { jalaliToday, normalizeDigits, nowStamp } from '../../shared'
@@ -5,7 +6,7 @@ import { BirthDateField } from '../../shared-ui'
 import { validNationalId, validBirthDate, validDeadlineDate } from '../../app-lib'
 import type { Person } from '../../types'
 import { PhotoField } from '../common/PhotoField'
-import { backdropCls, btnOutline, btnPrimary, cn, errorBox, formGrid, inputCls, labelCls, modalActions, modalBox, modalFormLayout, modalH2, modalP, modalSmall, modalX } from '../ui'
+import { backdropCls, cn, errorBox, formGrid, inputCls, labelCls, modalActions, modalBox, modalFormLayout, modalH2, modalP, modalSmall, modalX } from '../ui'
 
 export function CreateModal({ existing, creatorName, onClose, onCreate }: { existing: Person[]; creatorName: string; onClose: () => void; onCreate: (p: Person) => void }) {
   const [firstName, setFirstName] = useState('')
@@ -61,7 +62,7 @@ export function CreateModal({ existing, creatorName, onClose, onCreate }: { exis
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <form className={cn(modalBox, modalFormLayout)} onSubmit={submit}>
-        <button type="button" className={modalX} onClick={onClose} title="بستن" aria-label="بستن">بستن</button>
+        <Button type="button" className={modalX} onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
         <small className={modalSmall}>ثبت اطلاعات پایه</small>
         <h2 className={modalH2}>افزودن فرد جدید</h2>
         <p className={modalP}>اطلاعات متنی و عکس پرسنلی (اختیاری) ثبت می‌شود؛ مدرک دیگری بارگذاری نمی‌شود.</p>
@@ -76,8 +77,8 @@ export function CreateModal({ existing, creatorName, onClose, onCreate }: { exis
         </div>
         {error && <div className={errorBox}>{error}</div>}
         <div className={modalActions}>
-          <button type="button" className={btnOutline} onClick={onClose}> انصراف</button>
-          <button type="submit" className={btnPrimary}> ثبت فرد</button>
+          <Button type="button" variant="outline" onClick={onClose}> انصراف</Button>
+          <Button type="submit" variant="primary"> ثبت فرد</Button>
         </div>
       </form>
     </div>

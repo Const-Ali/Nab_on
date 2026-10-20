@@ -1,3 +1,4 @@
+import { Button } from '../common/Button'
 import { useState } from 'react'
 import { Avatar, Heading } from '../../shared-ui'
 import { workflow } from '../../app-lib'
@@ -23,7 +24,7 @@ export function WorkflowBoard({ people, canChange, onSelect, onDropPerson }: { p
           >
             <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-100"><b className="grid h-6 w-6 place-items-center rounded-lg bg-slate-100 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{(i + 1).toLocaleString('fa-IR')}</b>{status}<small className="mr-auto rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{people.filter(p => p.status === status).length.toLocaleString('fa-IR')} پرونده</small></h3>
             {people.filter(p => p.status === status).map(p => (
-              <button
+              <Button
                 type="button"
                 key={p.id}
                 onClick={() => onSelect(p)}
@@ -42,7 +43,7 @@ export function WorkflowBoard({ people, canChange, onSelect, onDropPerson }: { p
                   <b className="block truncate text-sm text-slate-800 dark:text-slate-100">{p.firstName} {p.lastName}</b>
                   <small className="mt-1 block text-xs text-slate-500 dark:text-slate-400">{p.id}</small>
                 </span>
-              </button>
+              </Button>
             ))}
           </section>
         ))}

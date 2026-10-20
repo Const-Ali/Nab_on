@@ -1,7 +1,8 @@
+import { Button } from '../common/Button'
 import { Avatar, Heading } from '../../shared-ui'
 import type { Status, Person, Activity } from '../../types'
 import { Badge } from '../common/Badge'
-import { btnOutline, btnPrimary, cn, emptyBox, panelBox, panelH2 } from '../ui'
+import { cn, emptyBox, panelBox, panelH2 } from '../ui'
 
 export function Dashboard({
   people,
@@ -31,13 +32,13 @@ export function Dashboard({
         subtitle="در یک نگاه وضعیت پرونده‌ها و فعالیت‌های سامانه را بررسی کنید."
         action={
           canCreate ? (
-            <button className={btnPrimary} onClick={onCreate}>
+            <Button variant="primary" onClick={onCreate}>
                ثبت فرد جدید
-            </button>
+            </Button>
           ) : (
-            <button className={btnOutline} onClick={onPersons}>
+            <Button variant="outline" onClick={onPersons}>
                مشاهده افراد
-            </button>
+            </Button>
           )
         }
       />
@@ -119,10 +120,10 @@ export function Dashboard({
         <section className={cn(panelBox, 'p-4 sm:p-5')}>
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2>آخرین افراد ثبت‌شده</h2>
-            <button onClick={onPersons} className="inline-flex items-center"> مشاهده همه</button>
+            <Button variant="ghost" size="sm" onClick={onPersons} className="text-indigo-700 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40">مشاهده همه</Button>
           </div>
           {people.slice(0, 6).map(p => (
-            <button type="button" className="flex w-full items-center justify-between gap-3 border-t border-slate-100 py-3 text-right first:border-t-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id} onClick={() => onSelect(p)}>
+            <Button type="button" className="flex w-full items-center justify-between gap-3 border-t border-slate-100 py-3 text-right first:border-t-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id} onClick={() => onSelect(p)}>
               <span className="flex min-w-0 items-center gap-3">
                 <Avatar text={p.firstName[0]} src={p.photo} />
                 <b className="min-w-0 text-sm text-slate-800 dark:text-slate-100">
@@ -132,7 +133,7 @@ export function Dashboard({
               </span>
               <Badge status={p.status} />
               <small className="hidden text-xs text-slate-500 sm:block dark:text-slate-400">{p.updatedAt}</small>
-            </button>
+            </Button>
           ))}
         </section>
         <section className={cn(panelBox, 'p-4 sm:p-5')}>

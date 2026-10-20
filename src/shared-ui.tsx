@@ -1,3 +1,4 @@
+import { Button } from './components/common/Button'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { jalaliJdn, jalaliMonthNames, jalaliParts, jdnToDate, normalizeDigits } from './shared'
@@ -22,8 +23,6 @@ export function Heading({ title, subtitle, action }: { title: string; subtitle: 
     </div>
   )
 }
-
-const calNavBtn = cn('flex h-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs leading-none text-slate-600 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-200', focusRing, transition)
 
 export function MiniCalendar({
   activityDays,
@@ -93,7 +92,7 @@ export function MiniCalendar({
       onMouseDown={e => e.stopPropagation()}
     >
       <div className="mb-3 flex items-center justify-between gap-2">
-        <button type="button" className={calNavBtn} onClick={() => move(1)} title="ماه بعد">ماه بعد</button>
+        <Button type="button" variant="outline" size="xs" className="shrink-0" onClick={() => move(1)} title="ماه بعد" aria-label="رفتن به ماه بعد">ماه بعد</Button>
         <div className="flex items-center gap-1">
           <select
             value={view.m}
@@ -114,15 +113,15 @@ export function MiniCalendar({
             ))}
           </select>
         </div>
-        <button type="button" className={calNavBtn} onClick={() => move(-1)} title="ماه قبل">ماه قبل</button>
+        <Button type="button" variant="outline" size="xs" className="shrink-0" onClick={() => move(-1)} title="ماه قبل" aria-label="رفتن به ماه قبل">ماه قبل</Button>
       </div>
       <div className="grid grid-cols-7 gap-[3px] text-center">
         {['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'].map(w => <span className="py-[3px] text-[8px] font-bold text-faint" key={w}>{w}</span>)}
         {cells.map((cell, i) => cell
           ? (
-            <button
+            <Button
               type="button"
-              className={`relative flex h-8 w-full items-center justify-center rounded-lg text-[11px] font-semibold ${transition} ${
+              className={`relative flex h-9 w-full items-center justify-center rounded-lg text-[11px] font-semibold ${transition} ${
                 cell.isSelected
                   ? 'bg-indigo-600 font-extrabold text-white shadow-sm shadow-indigo-600/30'
                   : cell.isToday
@@ -130,27 +129,31 @@ export function MiniCalendar({
                     : 'bg-transparent text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
               key={i}
+              aria-pressed={cell.isSelected}
+              aria-label={`${cell.d.toLocaleString('fa-IR')} ${jalaliMonthNames[view.m - 1]} ${view.y.toLocaleString('fa-IR', { useGrouping: false })}`}
               onClick={() => onPick?.(view.y, view.m, cell.d)}
             >
               {cell.d.toLocaleString('fa-IR')}
               {activityDays.has(`${view.y}-${view.m}-${cell.d}`) && (
                 <i className={`absolute bottom-0.5 right-1/2 h-1 w-1 translate-x-1/2 rounded-full ${cell.isSelected ? 'bg-white' : 'bg-indigo-500'}`} />
               )}
-            </button>
+            </Button>
           )
           : <span key={i} />)}
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
-        <button
+        <Button
           type="button"
-          className={cn('flex-1 rounded-lg bg-indigo-50 py-1.5 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-200 dark:hover:bg-indigo-900', transition, focusRing)}
+          variant="soft"
+          size="xs"
+          className="flex-1 text-[10px]"
           onClick={() => {
             setView({ y: todayJ.y, m: todayJ.m })
             onPick?.(todayJ.y, todayJ.m, todayJ.d)
           }}
         >
           امروز · {todayJ.d.toLocaleString('fa-IR')} {jalaliMonthNames[todayJ.m - 1]}
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -208,9 +211,11 @@ export function BirthDateField({
         />
         <div className="flex items-center gap-[3px]">
           {value && (
-            <button
+            <Button
               type="button"
-              className={cn('flex h-6 items-center justify-center rounded-md border-0 bg-transparent px-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800', focusRing, transition)}
+              variant="dangerGhost"
+              size="xs"
+              className="rounded-md px-2 text-xs"
               onClick={e => {
                 e.stopPropagation()
                 onChange('')
@@ -219,11 +224,14 @@ export function BirthDateField({
               aria-label="پاک کردن تاریخ"
             >
               پاک کردن
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             type="button"
-            className={cn('flex h-7 items-center justify-center rounded-lg border-0 bg-indigo-50 px-2 text-xs text-indigo-700 hover:bg-indigo-600 hover:text-white dark:bg-indigo-950 dark:text-indigo-200 dark:hover:bg-indigo-600', focusRing, transition)}
+            variant="soft"
+            size="xs"
+            className="rounded-lg px-2 text-xs"
+            aria-expanded={open}
             onClick={e => {
               e.stopPropagation()
               setOpen(o => !o)
@@ -232,7 +240,7 @@ export function BirthDateField({
             aria-label="انتخاب از تقویم شمسی"
           >
             تقویم
-          </button>
+          </Button>
         </div>
       </div>
       {open && (

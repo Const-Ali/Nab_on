@@ -1,3 +1,4 @@
+import { Button } from '../common/Button'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import type { User } from '../../types'
@@ -24,7 +25,7 @@ export function ProfileModal({ user, onClose, onSave, onLogout }: { user: User; 
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <form className={cn(modalBox, modalFormLayout)} onSubmit={submit}>
-        <button type="button" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</button>
+        <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
         <small>پروفایل من · {user.username}@</small>
         <h2>حساب کاربری</h2>
         <PhotoField value={photo} fallbackInitial={name.trim()[0] ?? 'ن'} onChange={setPhoto} />
@@ -41,9 +42,9 @@ export function ProfileModal({ user, onClose, onSave, onLogout }: { user: User; 
         </div>
         {error && <div className="error">{error}</div>}
         <div className="modal-actions">
-          <button type="button" className="outline" onClick={onClose}> بستن</button>
-          <button type="button" className="danger" onClick={onLogout}> خروج از حساب</button>
-          <button type="submit" className="primary"> ذخیره پروفایل</button>
+          <Button type="button" variant="outline" onClick={onClose}> بستن</Button>
+          <Button type="button" variant="danger" onClick={onLogout}> خروج از حساب</Button>
+          <Button type="submit" variant="primary"> ذخیره پروفایل</Button>
         </div>
       </form>
     </div>
