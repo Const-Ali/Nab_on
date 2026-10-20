@@ -1,0 +1,21 @@
+Options -Indexes
+RewriteEngine On
+
+# Do not expose deployment secrets or common backup/source artifacts if they are
+# accidentally copied into the document root.
+<FilesMatch "(?i)^(\.env|nab-config(?:\..*)?\.php|.*\.(?:sql|log|bak|backup))$">
+  Require all denied
+</FilesMatch>
+
+# Keep the PHP API executable; serve existing build assets directly and route
+# remaining SPA paths to the application shell.
+RewriteRule ^api\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+RewriteRule ^ index.html [L]
+
+# HTTPS is required for secure session cookies. Prefer enabling Force HTTPS in
+# the hosting control panel after the certificate is active. If needed, uncomment:
+# RewriteCond %{HTTPS} !=on
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]

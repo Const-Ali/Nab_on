@@ -12,18 +12,23 @@ import {
   uid,
 } from './shared'
 import {
-  checkServerHealth,
-  fetchAllFromServer,
+  ApiError,
+  bootstrap as bootstrapServer,
+  deleteUser as deleteUserOnServer,
+  getSetupStatus,
+  importLegacyState,
+  importLegacyTasks,
+  login as loginOnServer,
+  logout as logoutFromServer,
+  saveUser as createUserOnServer,
+  setupAdmin as setupAdminOnServer,
   syncSave,
+  updateProfile as updateProfileOnServer,
+  updateUser as updateUserOnServer,
 } from './api-client'
 import { Avatar, MiniCalendar } from './shared-ui'
 import {
   deadlineLeft,
-  initialPeople,
-  initialActivities,
-  initialAudit,
-  initialUsers,
-  initialNotes,
   defaultRoles,
   normalizeUser,
   downloadCsv,
@@ -33,7 +38,6 @@ import type {
   Status,
   Page,
   Permission,
-  Role,
   RoleDef,
   Person,
   Activity,
@@ -44,6 +48,7 @@ import type {
   ThemeMode,
 } from './types'
 import { Login } from './components/pages/Login'
+import { SetupAdmin } from './components/pages/SetupAdmin'
 import { Dashboard } from './components/pages/Dashboard'
 import { Persons } from './components/pages/Persons'
 import { WorkflowBoard } from './components/pages/WorkflowBoard'
@@ -58,23 +63,92 @@ import { AddUserModal } from './components/modals/AddUserModal'
 import { EditModal } from './components/modals/EditModal'
 import { EditUserModal } from './components/modals/EditUserModal'
 import { LiveClock } from './components/common/LiveClock'
+import { LegacyDataMigration, type LegacySnapshot } from './components/common/LegacyDataMigration'
 import { ProfileModal } from './components/modals/ProfileModal'
 import { SearchModal } from './components/modals/SearchModal'
 import { PrintPerson } from './components/common/PrintPerson'
 import { PrintReport } from './components/common/PrintReport'
 import { cn } from './components/ui'
 
+const legacyKeys = ['nab:people', 'nab:activities', 'nab:audit', 'nab:roles', 'nab:notes'] as const
+
+function readLegacySnapshot(username: string, includeSharedData: boolean): LegacySnapshot | null {
+  const state: Record<string, unknown[]> = {}
+  try {
+    if (includeSharedData) {
+      for (const key of legacyKeys) {
+        const raw = localStorage.getItem(key)
+        if (!raw) continue
+        const value: unknown = JSON.parse(raw)
+        if (Array.isArray(value) && value.length) state[key] = value
+      }
+    }
+    const ownTasks = localStorage.getItem(`nab:tasks:${username}`)
+    if (ownTasks) {
+      const value: unknown = JSON.parse(ownTasks)
+      if (Array.isArray(value) && value.length) state.tasks = value
+    } else {
+      const rawTasks = localStorage.getItem('nab:tasks')
+      if (rawTasks) {
+        const value: unknown = JSON.parse(rawTasks)
+        if (Array.isArray(value)) {
+          const mine = value.filter(raw => {
+            const task = raw as { assignee?: string; createdBy?: string }
+            return task.assignee === username || task.createdBy === username
+          })
+          if (mine.length) state.tasks = mine
+        }
+      }
+    }
+    const hasLegacyUsers = includeSharedData && Boolean(localStorage.getItem('nab:users'))
+    return Object.keys(state).length || hasLegacyUsers ? { state, hasLegacyUsers } : null
+  } catch {
+    return null
+  }
+}
+
+function clearLegacyLocalData(username: string, includeSharedData: boolean) {
+  try {
+    const keys = [`nab:tasks:${username}`]
+    if (includeSharedData) keys.push(...legacyKeys, 'nab:users', 'nab:session', 'nab:lock')
+    for (const key of keys) localStorage.removeItem(key)
+    const rawTasks = localStorage.getItem('nab:tasks')
+    if (rawTasks) {
+      const value: unknown = JSON.parse(rawTasks)
+      if (Array.isArray(value)) {
+        const remaining = value.filter(raw => {
+          const task = raw as { assignee?: string; createdBy?: string }
+          return task.assignee !== username && task.createdBy !== username
+        })
+        if (remaining.length) localStorage.setItem('nab:tasks', JSON.stringify(remaining))
+        else localStorage.removeItem('nab:tasks')
+      }
+    }
+  } catch {
+    // If storage is unavailable, the server data remains unaffected.
+  }
+}
+
+function downloadLegacySnapshot(snapshot: LegacySnapshot) {
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'nab-browser-backup.json'
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 export default function App() {
-  const [session, setSession] = useState<{ username: string } | null>(() => {
-    const raw = load<{ username?: string; role?: Role } | null>('nab:session', null)
-    if (!raw) return null
-    if (raw.username) return { username: raw.username }
-    const legacy: Record<string, string> = { admin: 'admin', assistant: 'assistant', reviewer: 'reviewer' }
-    return raw.role && legacy[raw.role] ? { username: legacy[raw.role] } : null
-  })
+  const [session, setSession] = useState<{ username: string } | null>(null)
+  const [authReady, setAuthReady] = useState(false)
+  const [serverReady, setServerReady] = useState(false)
+  const [needsSetup, setNeedsSetup] = useState(false)
+  const [setupOpen, setSetupOpen] = useState(false)
+  const [serverMessage, setServerMessage] = useState('')
 
   const [page, setPage] = useState<Page>('dashboard')
-  const [people, setPeople] = useState<Person[]>(() => load('nab:people', initialPeople))
+  const [people, setPeople] = useState<Person[]>([])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<PersonFilter>('همه وضعیت‌ها')
   const [tagFilter, setTagFilter] = useState('همه برچسب‌ها')
@@ -82,102 +156,161 @@ export default function App() {
   const [selected, setSelected] = useState<Person | null>(null)
   const [editingPerson, setEditingPerson] = useState<Person | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
-  const [activities, setActivities] = useState<Activity[]>(() => load('nab:activities', initialActivities))
-  const [audit, setAudit] = useState<Audit[]>(() => load('nab:audit', initialAudit))
-  const [users, setUsers] = useState<User[]>(() => load<unknown[]>('nab:users', initialUsers).map(normalizeUser))
-  const [roles, setRoles] = useState<RoleDef[]>(() => load('nab:roles', defaultRoles))
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [audit, setAudit] = useState<Audit[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [roles, setRoles] = useState<RoleDef[]>([])
   const [addUserOpen, setAddUserOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [addRoleOpen, setAddRoleOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [calOpen, setCalOpen] = useState(false)
-  const [notes, setNotes] = useState<Note[]>(() => load('nab:notes', initialNotes))
+  const [notes, setNotes] = useState<Note[]>([])
   const [toast, setToast] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(() => load('nab:sidebar-collapsed', false))
   const [theme, setTheme] = useState<ThemeMode>(() => load<ThemeMode>('nab:theme', 'light'))
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [isServerConnected, setIsServerConnected] = useState<boolean | null>(null)
+  const [legacySnapshot, setLegacySnapshot] = useState<LegacySnapshot | null>(null)
+  const [legacyCanImport, setLegacyCanImport] = useState(false)
 
-  // بارگذاری اولیه و همگام‌سازی با دیتابیس هاست
+  const applyServerBootstrap = (data: Awaited<ReturnType<typeof bootstrapServer>>) => {
+    setSession({ username: data.user.username })
+    setUsers(data.users.map(normalizeUser))
+    setPeople(Array.isArray(data.state['nab:people']) ? data.state['nab:people'] as Person[] : [])
+    setActivities(Array.isArray(data.state['nab:activities']) ? data.state['nab:activities'] as Activity[] : [])
+    setAudit(Array.isArray(data.state['nab:audit']) ? data.state['nab:audit'] as Audit[] : [])
+    setRoles(Array.isArray(data.state['nab:roles']) && data.state['nab:roles'].length ? data.state['nab:roles'] as RoleDef[] : defaultRoles)
+    setNotes(Array.isArray(data.state['nab:notes']) ? data.state['nab:notes'] as Note[] : [])
+    const isAdmin = data.user.role === 'admin'
+    const serverRoles = data.state['nab:roles']
+    const currentTasks = data.state.tasks
+    const taskMarker = data.state.legacy_tasks_imported
+    const sharedMigrationMarker = data.state.legacy_migration_completed
+    const serverHasRecords = ['nab:people', 'nab:activities', 'nab:audit', 'nab:notes'].some(key => Array.isArray(data.state[key]) && data.state[key].length > 0)
+      || (Array.isArray(serverRoles) && serverRoles.length > defaultRoles.length)
+      || (Array.isArray(currentTasks) && currentTasks.length > 0)
+      || (Array.isArray(taskMarker) && taskMarker.length > 0)
+      || (Array.isArray(sharedMigrationMarker) && sharedMigrationMarker.length > 0)
+      || data.users.length > 1
+    const legacy = readLegacySnapshot(data.user.username, isAdmin)
+    setLegacySnapshot(legacy)
+    const canImportLegacyTasks = Boolean(legacy?.state.tasks?.length && (!Array.isArray(currentTasks) || currentTasks.length === 0) && (!Array.isArray(taskMarker) || taskMarker.length === 0))
+    const hasLegacyState = Boolean(legacy && Object.values(legacy.state).some(rows => rows.length > 0))
+    const canImportLegacy = isAdmin
+      ? Boolean(hasLegacyState && !serverHasRecords && (!legacy?.state.tasks?.length || canImportLegacyTasks))
+      : canImportLegacyTasks
+    setLegacyCanImport(canImportLegacy)
+    setNeedsSetup(false)
+    setServerMessage('')
+    setIsServerConnected(true)
+    setServerReady(true)
+    setAuthReady(true)
+  }
+
+  // نشست فقط از سرور خوانده می‌شود؛ اطلاعات حساس در localStorage نگهداری نمی‌شود.
   useEffect(() => {
-    async function initServerSync() {
-      const healthy = await checkServerHealth()
-      setIsServerConnected(healthy)
-      if (healthy) {
-        const serverData = await fetchAllFromServer()
-        if (serverData) {
-          if (Array.isArray(serverData['nab:people']) && serverData['nab:people'].length > 0) {
-            setPeople(serverData['nab:people'] as Person[])
-          }
-          if (Array.isArray(serverData['nab:activities']) && serverData['nab:activities'].length > 0) {
-            setActivities(serverData['nab:activities'] as Activity[])
-          }
-          if (Array.isArray(serverData['nab:audit']) && serverData['nab:audit'].length > 0) {
-            setAudit(serverData['nab:audit'] as Audit[])
-          }
-          if (Array.isArray(serverData['nab:users']) && serverData['nab:users'].length > 0) {
-            setUsers((serverData['nab:users'] as unknown[]).map(normalizeUser))
-          }
-          if (Array.isArray(serverData['nab:roles']) && serverData['nab:roles'].length > 0) {
-            setRoles(serverData['nab:roles'] as RoleDef[])
-          }
-          if (Array.isArray(serverData['nab:notes']) && serverData['nab:notes'].length > 0) {
-            setNotes(serverData['nab:notes'] as Note[])
-          }
+    let active = true
+    const onAuthExpired = () => {
+      setSession(null)
+      setServerReady(false)
+      setUsers([])
+      setPeople([])
+      setActivities([])
+      setAudit([])
+      setRoles([])
+      setNotes([])
+      setServerMessage('نشست شما پایان یافته است؛ دوباره وارد شوید.')
+    }
+    window.addEventListener('nab:auth-expired', onAuthExpired)
+    const initialize = async () => {
+      try {
+        const setupRequired = await getSetupStatus()
+        if (!active) return
+        setNeedsSetup(setupRequired)
+        setIsServerConnected(true)
+        if (setupRequired) {
+          setAuthReady(true)
+          return
         }
+        try {
+          const data = await bootstrapServer()
+          if (active) applyServerBootstrap(data)
+        } catch (cause) {
+          if (!active) return
+          if (cause instanceof ApiError && cause.status === 401) {
+            setSession(null)
+            setServerReady(false)
+            setServerMessage('برای ادامه وارد حساب کاربری شوید.')
+          } else {
+            setIsServerConnected(false)
+            setServerMessage(cause instanceof Error ? cause.message : 'ارتباط با پایگاه دادهٔ هاست برقرار نشد.')
+          }
+          setAuthReady(true)
+        }
+      } catch (cause) {
+        if (!active) return
+        setIsServerConnected(false)
+        setServerMessage(cause instanceof Error ? cause.message : 'تنظیمات PHP/MySQL هاست در دسترس نیست.')
+        setAuthReady(true)
       }
     }
-    initServerSync()
+    void initialize()
+    return () => {
+      active = false
+      window.removeEventListener('nab:auth-expired', onAuthExpired)
+    }
   }, [])
 
-  // تنظیم فونت و تم
+  // تنظیم فونت، تم و نوار کناری؛ این‌ها ترجیح‌های غیرحساسِ همین مرورگر هستند.
   useEffect(() => {
     applySavedFont()
     document.documentElement.dataset.theme = theme
-    syncSave('nab:theme', theme)
+    save('nab:theme', theme)
   }, [theme])
+  useEffect(() => { save('nab:sidebar-collapsed', collapsed) }, [collapsed])
 
   const sessionUsername = session?.username ?? ''
-  const currentUser: User | null = useMemo(() => {
-    if (!sessionUsername) return null
-    return (
-      users.find(u => u.username === sessionUsername) ?? {
-        name: 'کاربر سیستم',
-        username: sessionUsername,
-        role: 'admin',
-        title: 'مدیر ارشد',
-        tone: 'blue',
-        password: '',
-        active: true,
-        permissions: [
-          'view_persons',
-          'create_person',
-          'edit_person',
-          'change_status',
-          'view_activities',
-          'manage_users',
-          'view_reports',
-          'delete_person',
-        ] as Permission[],
-      }
-    )
-  }, [users, sessionUsername])
+  const currentUser: User | null = useMemo(
+    () => sessionUsername ? users.find(user => user.username === sessionUsername && user.active) ?? null : null,
+    [users, sessionUsername],
+  )
 
   const has = (p: Permission) => Boolean(currentUser?.permissions.includes(p))
 
-  // ذخیره در حافظه محلی و ارسال به هاست
+  // داده‌های پرونده فقط روی هاست ذخیره می‌شوند؛ اگر نوشتن ناموفق باشد، وضعیت به کاربر اعلام می‌شود.
   useEffect(() => {
-    syncSave('nab:people', people)
-    syncSave('nab:activities', activities)
-    syncSave('nab:audit', audit)
-    syncSave('nab:users', users)
-    syncSave('nab:roles', roles)
-    syncSave('nab:notes', notes)
-    save('nab:session', session)
-    save('nab:sidebar-collapsed', collapsed)
-  }, [people, activities, audit, users, roles, notes, session, collapsed])
+    if (!serverReady || !session) return
+    let active = true
+    const persist = async () => {
+      try {
+        const writes: Promise<void>[] = [
+          syncSave('nab:activities', activities),
+          syncSave('nab:audit', audit),
+        ]
+        if (currentUser?.permissions.includes('view_persons')) {
+          writes.push(syncSave('nab:people', people), syncSave('nab:notes', notes))
+        }
+        if (currentUser?.permissions.includes('manage_users')) writes.push(syncSave('nab:roles', roles))
+        await Promise.all(writes)
+        if (active) {
+          setIsServerConnected(true)
+          setServerMessage('')
+        }
+      } catch (cause) {
+        if (active) {
+          const message = cause instanceof Error ? cause.message : 'ذخیره‌سازی روی هاست ناموفق بود.'
+          setIsServerConnected(false)
+          setServerMessage(message)
+          setToast(`ذخیره روی هاست ناموفق بود: ${message}`)
+        }
+      }
+    }
+    void persist()
+    return () => { active = false }
+  }, [people, activities, audit, roles, notes, serverReady, session, currentUser])
 
   // یادآور سررسید
   useEffect(() => {
@@ -240,7 +373,47 @@ export default function App() {
 
   const showToast = (msg: string) => {
     setToast(msg)
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  const handleLogout = async () => {
+    try { await logoutFromServer() } catch { /* The local view is cleared even if the host is offline. */ }
+    setSession(null)
+    setServerReady(false)
+    setUsers([])
+    setPeople([])
+    setActivities([])
+    setAudit([])
+    setRoles([])
+    setNotes([])
+    setProfileOpen(false)
+    setServerMessage('از حساب خارج شدید.')
+  }
+
+  const handleLegacyImport = async () => {
+    if (!legacySnapshot || !legacyCanImport || !currentUser) throw new Error('انتقال داده‌های قدیمی در این وضعیت مجاز نیست.')
+    const isAdmin = currentUser.role === 'admin'
+    if (isAdmin) await importLegacyState(legacySnapshot.state)
+    else await importLegacyTasks(legacySnapshot.state.tasks ?? [])
+    clearLegacyLocalData(currentUser.username, isAdmin)
+    setLegacySnapshot(null)
+    const refreshed = await bootstrapServer()
+    applyServerBootstrap(refreshed)
+    showToast(isAdmin
+      ? 'انتقال داده‌های قدیمی به هاست انجام شد. حساب‌های قدیمی باید دوباره ساخته شوند.'
+      : 'کارهای قدیمی این حساب به هاست منتقل شدند.')
+  }
+
+  const handleLegacyDiscard = () => {
+    if (!currentUser) return
+    const isAdmin = currentUser.role === 'admin'
+    const warning = isAdmin
+      ? 'داده‌های قدیمی همین مرورگر و رمزهای ذخیره‌شدهٔ آن پاک شوند؟ اگر هنوز نسخهٔ پشتیبان نگرفته‌اید، ابتدا آن را دانلود کنید.'
+      : 'کارهای قدیمی این حساب از همین مرورگر پاک شوند؟ اگر هنوز نسخهٔ پشتیبان نگرفته‌اید، ابتدا آن را دانلود کنید.'
+    if (!window.confirm(warning)) return
+    clearLegacyLocalData(currentUser.username, isAdmin)
+    setLegacySnapshot(null)
+    showToast('داده‌های محلی قدیمی پاک شدند.')
   }
 
   const openTasksPage = () => {
@@ -272,7 +445,7 @@ export default function App() {
     auditLog('افزودن فرد جدید', `${p.firstName} ${p.lastName} (${p.id})`)
     setCreateOpen(false)
     playChime('success')
-    showToast(`پرونده «${p.firstName} ${p.lastName}» در سرور ذخیره شد.`)
+    showToast(`پرونده «${p.firstName} ${p.lastName}» ثبت شد.`)
   }
 
   const handleUpdateStatus = (p: Person, next: Status, reason: string | null) => {
@@ -310,7 +483,7 @@ export default function App() {
     auditLog('حذف پرونده', `${p.firstName} ${p.lastName} (${p.id})`)
     setSelected(null)
     playChime('alert')
-    showToast('پرونده با موفقیت از سرور حذف شد.')
+    showToast('پرونده حذف شد.')
   }
 
   const handleEditPerson = (p: Person, changes: string[]) => {
@@ -388,12 +561,27 @@ export default function App() {
     showToast('فایل گزارش رویدادها دانلود شد.')
   }
 
+  if (!authReady) {
+    return <main className="grid min-h-screen place-items-center bg-slate-50 text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400" dir="rtl">در حال اتصال امن به هاست…</main>
+  }
+
+  if (setupOpen && needsSetup) {
+    return <SetupAdmin onBack={() => setSetupOpen(false)} onSetup={async input => {
+      const data = await setupAdminOnServer(input)
+      applyServerBootstrap(data)
+      playChime('success')
+    }} />
+  }
+
   if (!session || !currentUser) {
     return (
       <Login
-        users={users}
-        onLogin={u => {
-          setSession({ username: u.username })
+        showSetup={needsSetup}
+        serverMessage={serverMessage}
+        onShowSetup={() => setSetupOpen(true)}
+        onLogin={async (username, password, remember) => {
+          const data = await loginOnServer(username, password, remember)
+          applyServerBootstrap(data)
           playChime('success')
         }}
       />
@@ -630,6 +818,16 @@ export default function App() {
         </header>
 
         <div className="mx-auto w-full max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-8">
+          {legacySnapshot && (
+            <LegacyDataMigration
+              snapshot={legacySnapshot}
+              canImport={legacyCanImport}
+              onImport={handleLegacyImport}
+              onDiscard={handleLegacyDiscard}
+              onDownload={() => downloadLegacySnapshot(legacySnapshot)}
+            />
+          )}
+
           {page === 'dashboard' && (
             <Dashboard
               people={people}
@@ -696,14 +894,18 @@ export default function App() {
               selfUsername={currentUser.username}
               onAdd={() => setAddUserOpen(true)}
               onEdit={setEditingUser}
-              onDelete={u => {
+              onDelete={async u => {
                 if (u.username === currentUser.username) {
                   alert('نمی‌توانید حساب کاربری خود را حذف کنید.')
                   return
                 }
-                if (window.confirm(`حذف کاربر «${u.name}»؟`)) {
+                if (!window.confirm(`حذف کاربر «${u.name}»؟`)) return
+                try {
+                  await deleteUserOnServer(u.username)
                   setUsers(cur => cur.filter(x => x.username !== u.username))
                   showToast('کاربر حذف شد.')
+                } catch (cause) {
+                  showToast(cause instanceof Error ? cause.message : 'حذف کاربر ناموفق بود.')
                 }
               }}
               onAddRole={() => setAddRoleOpen(true)}
@@ -784,8 +986,9 @@ export default function App() {
           existing={users}
           roles={roles}
           onClose={() => setAddUserOpen(false)}
-          onCreate={u => {
-            setUsers(cur => [...cur, u])
+          onCreate={async u => {
+            const created = await createUserOnServer(u as unknown as Record<string, unknown>)
+            setUsers(cur => [...cur, normalizeUser(created)])
             setAddUserOpen(false)
             showToast('کاربر جدید ایجاد شد.')
           }}
@@ -798,8 +1001,9 @@ export default function App() {
           roles={roles}
           isSelf={editingUser.username === currentUser.username}
           onClose={() => setEditingUser(null)}
-          onSave={(u) => {
-            setUsers(cur => cur.map(x => (x.username === u.username ? u : x)))
+          onSave={async u => {
+            const updated = await updateUserOnServer(u as unknown as Record<string, unknown>)
+            setUsers(cur => cur.map(x => (x.username === u.username ? normalizeUser(updated) : x)))
             setEditingUser(null)
             showToast('دسترسی‌های کاربر به‌روز شد.')
           }}
@@ -822,13 +1026,13 @@ export default function App() {
         <ProfileModal
           user={currentUser}
           onClose={() => setProfileOpen(false)}
-          onSave={(name, photo, pw) => {
-            const up: User = { ...currentUser, name, photo: photo || undefined, password: pw || currentUser.password }
-            setUsers(cur => cur.map(x => (x.username === currentUser.username ? up : x)))
+          onSave={async (name, photo, currentPassword, newPassword) => {
+            const updated = await updateProfileOnServer({ name, photo: photo || null, current_password: currentPassword, new_password: newPassword })
+            setUsers(cur => cur.map(x => (x.username === currentUser.username ? normalizeUser(updated) : x)))
             setProfileOpen(false)
             showToast('پروفایل به‌روزرسانی شد.')
           }}
-          onLogout={() => setSession(null)}
+          onLogout={handleLogout}
         />
       )}
 

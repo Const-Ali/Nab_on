@@ -1,4 +1,4 @@
-const CACHE = 'nab-v4'
+const CACHE = 'nab-v5'
 const SHELL = ['./', './index.html', './manifest.webmanifest']
 
 self.addEventListener('install', event => {
@@ -17,6 +17,9 @@ self.addEventListener('fetch', event => {
   const { request } = event
   if (request.method !== 'GET') return
   if (!request.url.startsWith('http')) return
+  // Authenticated API responses can contain sensitive records. Never put them
+  // in the offline shell cache, even when the URL has a query-string action.
+  if (new URL(request.url).pathname.endsWith('/api.php')) return
 
   // صفحه‌ی اصلی همیشه اول از شبکه خوانده شود تا نسخه‌ی قدیمی به فایل‌های ناموجود لینک ندهد
   if (request.mode === 'navigate') {

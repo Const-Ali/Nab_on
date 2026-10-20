@@ -1,139 +1,123 @@
-/**
- * ماژول همگام‌سازی و اتصال به سرور و هاست (Nab Server Sync Client)
- * این ماژول ارتباط فرانت‌اند را با بک‌اند PHP یا Node.js برقرار می‌کند.
- */
+import type { User } from './types'
 
-import { save } from './shared'
+const API_BASE = '/api.php'
+let csrfToken = ''
 
-const API_BASE = '/api.php' // آدرس پیش‌فرض فایل بک‌اند PHP روی هاست
-
-export interface SyncStatus {
-  online: boolean
-  lastSynced: string | null
-  serverType?: string
-}
-
-let isServerAvailable: boolean | null = null
-
-/**
- * بررسی دسترسی به بک‌اند روی هاست
- */
-export async function checkServerHealth(): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}?action=ping`, { method: 'GET', cache: 'no-store' })
-    if (res.ok) {
-      const data = await res.json()
-      isServerAvailable = data.success === true
-      return true
-    }
-  } catch {
-    // try fallback for Node.js endpoint /api/ping
-    try {
-      const resNode = await fetch('/api/ping', { method: 'GET', cache: 'no-store' })
-      if (resNode.ok) {
-        const dataNode = await resNode.json()
-        isServerAvailable = dataNode.success === true
-        return true
-      }
-    } catch {
-      isServerAvailable = false
-    }
+export class ApiError extends Error {
+  status: number
+  constructor(message: string, status = 0) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
   }
-  isServerAvailable = false
-  return false
 }
 
-/**
- * بارگذاری کلیه داده‌ها از روی دیتابیس هاست
- */
-export async function fetchAllFromServer(): Promise<Record<string, unknown> | null> {
-  try {
-    const isHealthy = isServerAvailable ?? (await checkServerHealth())
-    if (!isHealthy) return null
+export interface AppBootstrap {
+  user: User
+  users: User[]
+  csrf: string
+  state: Record<string, unknown[]>
+}
 
-    // Try PHP endpoint
-    let res = await fetch(`${API_BASE}?action=get_all`, { method: 'GET', cache: 'no-store' })
-    if (!res.ok) {
-      // Try Node.js endpoint
-      res = await fetch('/api/get_all', { method: 'GET', cache: 'no-store' })
-    }
-    if (res.ok) {
-      const result = await res.json()
-      if (result.success && result.data) {
-        return result.data as Record<string, unknown>
-      }
-    }
-  } catch (err) {
-    console.warn('Could not fetch initial data from host server:', err)
+async function request<T>(
+  action: string,
+  method: 'GET' | 'POST' = 'GET',
+  body?: Record<string, unknown>,
+  signalUnauthorized = true,
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (method === 'POST') {
+    headers['Content-Type'] = 'application/json'
+    if (csrfToken && !['login', 'setup'].includes(action)) headers['X-CSRF-Token'] = csrfToken
   }
-  return null
-}
-
-/**
- * ذخیره همزمان در حافظه محلی و ارسال به هاست
- */
-export async function syncSave(key: string, value: unknown) {
-  // ۱. ذخیره فوری در حافظه محلی (برای پاسخ‌دهی بلادرنگ UI)
-  save(key, value)
-
-  // ۲. ارسال ناهمگام به سرور هاست در پس‌زمینه
+  let response: Response
   try {
-    const endpoint = isServerAvailable ? `${API_BASE}?action=save` : `${API_BASE}?action=save`
-    fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, value }),
-    }).catch(() => {
-      // Node.js fallback
-      fetch('/api/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, value }),
-      }).catch(() => {
-        /* offline fallback */
-      })
+    response = await fetch(`${API_BASE}?action=${encodeURIComponent(action)}`, {
+      method,
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers,
+      body: method === 'POST' ? JSON.stringify(body ?? {}) : undefined,
     })
   } catch {
-    /* ignore offline fetch */
+    throw new ApiError('اتصال به API هاست برقرار نشد. تنظیم PHP/MySQL و HTTPS را بررسی کنید.')
   }
-}
 
-/**
- * ارسال دسته‌ای چندین داده به هاست (Batch Sync)
- */
-export async function syncBatchSave(items: Record<string, unknown>) {
-  Object.entries(items).forEach(([k, v]) => save(k, v))
-
+  let payload: { success?: boolean; error?: string; data?: T; csrf?: string; needs_setup?: boolean }
   try {
-    fetch(`${API_BASE}?action=batch_save`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
-    }).catch(() => {
-      fetch('/api/batch_save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
-      }).catch(() => {})
-    })
+    payload = await response.json()
   } catch {
-    /* offline */
+    throw new ApiError('پاسخ API معتبر نیست؛ مسیر /api.php باید توسط PHP اجرا شود.', response.status)
   }
+  if (!response.ok || payload.success !== true) {
+    if (response.status === 401 && signalUnauthorized && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nab:auth-expired'))
+    }
+    throw new ApiError(payload.error || 'درخواست به سرور ناموفق بود.', response.status)
+  }
+  const nestedCsrf = typeof payload.data === 'object' && payload.data !== null && 'csrf' in payload.data
+    ? (payload.data as { csrf?: unknown }).csrf
+    : undefined
+  if (typeof payload.csrf === 'string') csrfToken = payload.csrf
+  else if (typeof nestedCsrf === 'string') csrfToken = nestedCsrf
+  if (payload.data !== undefined) return payload.data as T
+  return payload as T
 }
 
-/**
- * همگام‌سازی اولیه دیتابیس محلی با دیتابیس سرور
- */
-export async function initialHydrateFromServer(): Promise<boolean> {
-  const serverData = await fetchAllFromServer()
-  if (!serverData) return false
+export async function getSetupStatus(): Promise<boolean> {
+  const result = await request<{ success: boolean; needs_setup: boolean }>('status', 'GET', undefined, false)
+  return Boolean((result as { needs_setup?: boolean }).needs_setup)
+}
 
-  let count = 0
-  for (const [k, v] of Object.entries(serverData)) {
-    if (v !== null && v !== undefined) {
-      save(k, v)
-      count++
-    }
-  }
-  return count > 0
+export function bootstrap(): Promise<AppBootstrap> {
+  return request<AppBootstrap>('bootstrap', 'GET')
+}
+
+export function login(username: string, password: string, remember: boolean): Promise<AppBootstrap> {
+  return request<AppBootstrap>('login', 'POST', { username, password, remember }, false)
+}
+
+export function setupAdmin(input: { setup_key: string; username: string; name: string; password: string }): Promise<AppBootstrap> {
+  return request<AppBootstrap>('setup', 'POST', input, false)
+}
+
+export async function logout(): Promise<void> {
+  await request<{ success: boolean }>('logout', 'POST')
+  csrfToken = ''
+}
+
+export function syncSave(key: string, value: unknown[]): Promise<void> {
+  return request<void>('state_save', 'POST', { key, value })
+}
+
+export function importLegacyState(state: Record<string, unknown[]>): Promise<void> {
+  return request<void>('legacy_import', 'POST', { state })
+}
+
+export function importLegacyTasks(tasks: unknown[]): Promise<void> {
+  return request<void>('legacy_tasks_import', 'POST', { tasks })
+}
+
+export function saveUser(input: Record<string, unknown>): Promise<User> {
+  return request<User>('user_create', 'POST', input)
+}
+
+export function updateUser(input: Record<string, unknown>): Promise<User> {
+  return request<User>('user_update', 'POST', input)
+}
+
+export async function deleteUser(username: string): Promise<void> {
+  await request<void>('user_delete', 'POST', { username })
+}
+
+export function updateProfile(input: Record<string, unknown>): Promise<User> {
+  return request<User>('profile_update', 'POST', input)
+}
+
+export function fetchTasks(): Promise<unknown[]> {
+  return request<unknown[]>('tasks_get', 'GET')
+}
+
+export function syncTasks(tasks: unknown[]): Promise<void> {
+  return request<void>('tasks_save', 'POST', { tasks })
 }

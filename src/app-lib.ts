@@ -123,12 +123,7 @@ export const initialAudit: Audit[] = [
   { id: 'AUD-1', action: 'ورود به سامانه', target: 'مدیر سیستم', createdAt: '۱۶ شهریور ۱۴۰۵ · ۰۸:۴۵', createdBy: 'احمد محمدی' },
 ]
 
-export const initialUsers: User[] = [
-  { name: 'احمد محمدی', username: 'admin', role: 'admin', title: 'مدیر سیستم', tone: 'green', password: 'admin', active: true, permissions: ['view_persons', 'create_person', 'edit_person', 'change_status', 'view_activities', 'manage_users', 'view_reports', 'delete_person'] },
-  { name: 'مریم رضایی', username: 'assistant', role: 'assistant', title: 'کارشناس پرونده', tone: 'blue', password: 'assistant', active: true, permissions: ['view_persons', 'create_person', 'edit_person'] },
-  { name: 'محمد رضایی', username: 'reviewer', role: 'reviewer', title: 'کارشناس مرکز', tone: 'purple', password: 'reviewer', active: true, permissions: ['view_persons', 'change_status', 'view_activities'] },
-  { name: 'سارا کریمی', username: 'operator', role: 'assistant', title: 'اپراتور', tone: 'orange', password: '1234', active: false, permissions: ['view_persons'] },
-]
+export const initialUsers: User[] = []
 
 export const initialNotes: Note[] = [
   { id: 'NOTE-1', personId: 'P-14001', author: 'مریم رضایی', role: 'assistant', title: 'کارشناس پرونده', text: 'مدارک هویتی بررسی شد؛ در انتظار تکمیل اطلاعات بیمه‌ای.', createdAt: '۱۴ شهریور ۱۴۰۵ · ۱۰:۱۵' },
@@ -206,7 +201,6 @@ export const normalizeUser = (raw: unknown): User => {
     role,
     title: u.title ?? userByRole[role]?.title ?? role,
     tone: u.tone ?? 'blue',
-    password: typeof u.password === 'string' && u.password ? u.password : '',
     active: typeof u.active === 'boolean' ? u.active : true,
     permissions: Array.isArray(u.permissions) ? (u.permissions as Permission[]) : [...(rolePermissions[role] ?? [])],
   }
@@ -283,29 +277,46 @@ export const rangeDefs: [string, number, string][] = [
   ['season', 90, '۹۰ روز گذشته'],
 ]
 
-export const validJalaliFormat = (value: string) => {
-  const v = normalizeDigits(value.trim())
-  return /^(13|14)\d{2}\/(0?[1-9]|1[0-2])\/(0?[1-9]|[12]\d|3[01])$/.test(v)
+const parseJalaliDate = (value: string) => {
+  const clean = normalizeDigits(value.trim())
+  const match = clean.match(/^(13|14)\d{2}\/(\d{1,2})\/(\d{1,2})$/)
+  if (!match) return null
+  const year = Number(clean.slice(0, 4))
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (month < 1 || month > 12 || day < 1) return null
+  const first = jalaliJdn(year, month, 1)
+  const next = month === 12 ? jalaliJdn(year + 1, 1, 1) : jalaliJdn(year, month + 1, 1)
+  if (day > next - first) return null
+  return { year, month, day, jdn: jalaliJdn(year, month, day) }
 }
+
+export const validJalaliFormat = (value: string) => parseJalaliDate(value) !== null
 
 export const validBirthDate = (value: string) => {
-  const v = normalizeDigits(value.trim())
-  return /^(13|14)\d{2}\/(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])$/.test(v) && v <= jalaliToday()
+  const date = parseJalaliDate(value)
+  const today = parseJalaliDate(jalaliToday())
+  return Boolean(date && today && date.jdn <= today.jdn)
 }
 
-export const validDeadlineDate = (value: string) => {
-  const v = normalizeDigits(value.trim())
-  return /^(13|14)\d{2}\/(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])$/.test(v)
-}
+export const validDeadlineDate = (value: string) => parseJalaliDate(value) !== null
 
 export const downloadCsv = (filename: string, headers: string[], rows: (string | number | null | undefined)[][]) => {
-  const csv = [headers, ...rows].map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const csvCell = (cell: string | number | null | undefined) => {
+    let value = String(cell ?? '')
+    // Prefix formula-like cells to prevent spreadsheet formula injection on open.
+    let firstSignificant = 0
+    while (firstSignificant < value.length && value.charCodeAt(firstSignificant) <= 0x20) firstSignificant += 1
+    if ('=+@-'.includes(value[firstSignificant] ?? '\0')) value = `'${value}`
+    return `"${value.replace(/"/g, '""')}"`
+  }
+  const csv = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\n')
   const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }))
   const link = document.createElement('a')
   link.href = url
   link.download = filename
   link.click()
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 export const imageToDataUrl = (file: File, max = 160): Promise<string> => new Promise((resolve, reject) => {

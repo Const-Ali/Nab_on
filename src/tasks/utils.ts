@@ -7,18 +7,23 @@ export const todayJdn = () => {
   return jalaliJdn(j.y, j.m, j.d)
 }
 
-export const dateJdn = (latin: string): number | null => {
-  if (!latin) return null
-  const clean = normalizeDigits(latin.trim())
-  const m = clean.match(/^(\d{3,4})\/(\d{1,2})\/(\d{1,2})$/)
-  return m ? jalaliJdn(Number(m[1]), Number(m[2]), Number(m[3])) : null
+const parseJalaliDate = (value: string) => {
+  const clean = normalizeDigits(value.trim())
+  const match = clean.match(/^(1[34]\d{2})\/(\d{1,2})\/(\d{1,2})$/)
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (month < 1 || month > 12 || day < 1) return null
+  const first = jalaliJdn(year, month, 1)
+  const next = month === 12 ? jalaliJdn(year + 1, 1, 1) : jalaliJdn(year, month + 1, 1)
+  if (day > next - first) return null
+  return jalaliJdn(year, month, day)
 }
 
-export const validJalaliDate = (value: string) => {
-  if (!value) return false
-  const clean = normalizeDigits(value.trim())
-  return /^1[34]\d{2}\/(0?[1-9]|1[0-2])\/(0?[1-9]|[12]\d|3[01])$/.test(clean)
-}
+export const dateJdn = (latin: string): number | null => latin ? parseJalaliDate(latin) : null
+
+export const validJalaliDate = (value: string) => value !== '' && parseJalaliDate(value) !== null
 
 const isDone = (t: WorkTask) => t.status === 'completed' || t.status === 'cancelled'
 

@@ -81,7 +81,8 @@ export type User = {
   role: Role
   title: string
   tone: string
-  password: string
+  /** Never populated by the API; passwords are only submitted transiently for hashing. */
+  password?: string
   active: boolean
   permissions: Permission[]
   photo?: string

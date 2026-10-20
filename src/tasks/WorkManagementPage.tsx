@@ -1,6 +1,6 @@
 import { Button } from '../components/common/Button'
 import { useEffect, useMemo, useState } from 'react'
-import { load, nowStamp, nowTs, playChime, save, uid } from '../shared'
+import { nowStamp, nowTs, playChime, uid } from '../shared'
 import { Heading } from '../shared-ui'
 import WorkDashboard from './components/WorkDashboard'
 import TaskFilters from './components/TaskFilters'
@@ -25,7 +25,6 @@ import {
   isHighPriority,
   isOverdue,
   matchesQuery,
-  normalizeTask,
   sortTasks,
 } from './utils'
 import './tasks.css'
@@ -35,6 +34,8 @@ interface Props {
   users: UserLite[]
   sessionUsername: string
   sessionName: string
+  initialTasks: WorkTask[]
+  onTasksChange: (tasks: WorkTask[]) => void | Promise<void>
 }
 
 const defaultFilters: TaskFilterState = {
@@ -46,21 +47,12 @@ const defaultFilters: TaskFilterState = {
   view: 'list',
 }
 
-export default function WorkManagementPage({ users, sessionUsername, sessionName }: Props) {
-  const storeKey = `nab:tasks:${sessionUsername}`
-  const [tasks, setTasks] = useState<WorkTask[]>(() => {
-    const stored = load<unknown[]>(storeKey, [])
-    if (stored.length) return stored.map(normalizeTask)
-    const legacy = load<unknown[]>('nab:tasks', []).filter(raw => {
-      const t = raw as { assignee?: string; createdBy?: string }
-      return t.assignee === sessionUsername || t.createdBy === sessionUsername
-    })
-    return legacy.map(normalizeTask)
-  })
+export default function WorkManagementPage({ users, sessionUsername, sessionName, initialTasks, onTasksChange }: Props) {
+  const [tasks, setTasks] = useState<WorkTask[]>(initialTasks)
 
   useEffect(() => {
-    save(storeKey, tasks)
-  }, [storeKey, tasks])
+    void onTasksChange(tasks)
+  }, [tasks, onTasksChange])
 
   const [tab, setTab] = useState<TaskType>('personal')
   const [quick, setQuick] = useState<QuickFilter>('all')
