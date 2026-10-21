@@ -5,6 +5,18 @@ export const nowStamp = () =>
 
 export const nowTs = () => Date.now()
 
+export const timestampToMs = (value?: number) => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined
+  return value < 100_000_000_000 ? value * 1000 : value
+}
+
+export const formatServerTimestamp = (raw: string | undefined, timestamp?: number) => {
+  const ms = timestampToMs(timestamp)
+  const date = ms ? new Date(ms) : raw ? new Date(raw) : null
+  if (!date || Number.isNaN(date.getTime())) return raw ?? ''
+  return `${date.toLocaleDateString('fa-IR')} · ${date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}`
+}
+
 export const normalizeDigits = (value: string) => value.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
 
 export const normalizeText = (value: string) => normalizeDigits(value.trim()).replace(/ي/g, 'ی').replace(/ك/g, 'ک')

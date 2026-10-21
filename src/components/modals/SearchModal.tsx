@@ -1,6 +1,6 @@
 import { Button } from '../common/Button'
 import { useMemo, useState } from 'react'
-import { normalizeText, playChime } from '../../shared'
+import { formatServerTimestamp, normalizeText, playChime } from '../../shared'
 import { Avatar } from '../../shared-ui'
 import type { Person, Activity, Note, ThemeMode } from '../../types'
 import { Badge } from '../common/Badge'
@@ -326,7 +326,7 @@ export function SearchModal({
                 <span>
                   <b>{a.action}</b>
                   <small>
-                    {a.personName} · {a.createdBy} · {a.createdAt}
+                    {a.personName} · {a.createdBy} · {formatServerTimestamp(a.createdAt, a.ts)}
                   </small>
                 </span>
               </Button>

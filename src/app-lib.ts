@@ -1,4 +1,4 @@
-import { jalaliJdn, jalaliMonthNames, jalaliParts, jalaliToday, load, normalizeDigits } from './shared'
+import { jalaliJdn, jalaliMonthNames, jalaliParts, jalaliToday, load, normalizeDigits, timestampToMs } from './shared'
 import { validJalaliDate } from './tasks/utils'
 import type { Status, Permission, Role, RoleDef, Person, Activity, Audit, User, AppSettings, Note, FontKey } from './types'
 
@@ -47,7 +47,10 @@ export const deadlineLeft = (p: Person): number | null => {
 }
 
 export const PAGE_SIZE = 20
-export const staleDays = (p: Person) => (!p.ts || p.status === 'پایان کار' || p.status === 'تأیید شده') ? 0 : Math.floor((Date.now() - p.ts) / 86400000)
+export const staleDays = (p: Person) => {
+  const timestamp = timestampToMs(p.ts)
+  return (!timestamp || p.status === 'پایان کار' || p.status === 'تأیید شده') ? 0 : Math.floor((Date.now() - timestamp) / 86400000)
+}
 
 export const seedNames = [
   ['علی', 'رضایی', 'محمد'],
@@ -215,8 +218,9 @@ export const validNationalId = (value: string) => {
 }
 
 export const activityMonth = (a: Activity) => {
-  if (a.ts) {
-    const j = jalaliParts(new Date(a.ts))
+  const timestamp = timestampToMs(a.ts)
+  if (timestamp) {
+    const j = jalaliParts(new Date(timestamp))
     return { y: j.y, m: j.m }
   }
   const parts = normalizeDigits(a.createdAt).split(' ')

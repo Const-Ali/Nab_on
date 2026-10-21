@@ -2,7 +2,7 @@ import { Button } from '../common/Button'
 import { useState } from 'react'
 import { Avatar, Heading } from '../../shared-ui'
 import { workflow, personTags, STALE_LIMIT, deadlineLeft, PAGE_SIZE, staleDays, downloadCsv } from '../../app-lib'
-import { jalaliJdn, jalaliMonthNames, normalizeText } from '../../shared'
+import { formatServerTimestamp, jalaliJdn, jalaliMonthNames, normalizeText, timestampToMs } from '../../shared'
 import type { Status, Person, PersonFilter } from '../../types'
 import { Badge } from '../common/Badge'
 import { cn, emptyBox, panelBox, rowCheck, searchBox, searchInput, selectCls } from '../ui'
@@ -71,7 +71,8 @@ export function Persons({
     return matchesQuery && matchesStatus && matchesTag
   })
   const updateOrder = (person: Person) => {
-    if (typeof person.ts === 'number' && Number.isFinite(person.ts)) return person.ts
+    const serverTime = timestampToMs(person.ts)
+    if (serverTime) return serverTime
     const dateText = normalizeText(String(person.updatedAt ?? '').split(' · ')[0])
     const slashDate = dateText.match(/^(\d{3,4})[/-](\d{1,2})[/-](\d{1,2})$/)
     if (slashDate) {
@@ -251,7 +252,7 @@ export function Persons({
                   : null
               })()}
             </span>
-            <span className="text-sm text-slate-500 dark:text-slate-400"><small className="ml-2 inline lg:hidden">فعالیت:</small>{p.updatedAt}</span>
+            <span className="text-sm text-slate-500 dark:text-slate-400"><small className="ml-2 inline lg:hidden">فعالیت:</small>{formatServerTimestamp(p.updatedAt, p.ts)}</span>
             <span className="text-sm text-slate-500 dark:text-slate-400"><small className="ml-2 inline lg:hidden">کاربر:</small>{p.updatedBy}</span>
           </div>
         ))}

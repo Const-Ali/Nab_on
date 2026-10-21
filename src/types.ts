@@ -73,6 +73,7 @@ export type Audit = {
   target: string
   createdAt: string
   createdBy: string
+  ts?: number
 }
 
 export type User = {
@@ -107,11 +108,17 @@ export type Note = {
   id: string
   personId: string
   author: string
+  authorUsername?: string
   role: Role
   title: string
   text: string
   createdAt: string
+  ts?: number
   edited?: boolean
+  editedAt?: string
+  editedAtTs?: number
+  editedBy?: string
+  editedByUsername?: string
   replyTo?: { author: string; text: string }
   mentions?: string[]
 }

@@ -1,5 +1,6 @@
 import { Button } from '../common/Button'
 import { Avatar, Heading } from '../../shared-ui'
+import { formatServerTimestamp } from '../../shared'
 import type { Status, Person, Activity } from '../../types'
 import { Badge } from '../common/Badge'
 import { cn, emptyBox, panelBox, panelH2 } from '../ui'
@@ -205,7 +206,7 @@ export function Dashboard({
                 </b>
               </span>
               <Badge status={person.status} />
-              <small className="hidden shrink-0 text-xs text-slate-500 sm:block dark:text-slate-400">{person.updatedAt}</small>
+              <small className="hidden shrink-0 text-xs text-slate-500 sm:block dark:text-slate-400">{formatServerTimestamp(person.updatedAt, person.ts)}</small>
             </Button>
           ))}
           {!people.length && (
@@ -233,7 +234,7 @@ export function Dashboard({
                   {activity.newStatus ? ` · ${activity.newStatus}` : ''}
                 </small>
               </span>
-              <time className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{activity.createdAt}</time>
+              <time className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{formatServerTimestamp(activity.createdAt, activity.ts)}</time>
             </div>
           )) : (
             <div className={cn(emptyBox, 'mt-3 px-3 py-8')}>دسترسی مشاهدهٔ رویدادها برای حساب شما فعال نیست.</div>

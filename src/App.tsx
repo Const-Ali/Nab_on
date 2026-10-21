@@ -6,6 +6,9 @@ import {
   load,
   nowStamp,
   nowTs,
+  timestampToMs,
+  normalizeDigits,
+  formatServerTimestamp,
   playChime,
   save,
   sendBrowserNotification,
@@ -517,6 +520,7 @@ export default function App() {
       id: uid('NOTE'),
       personId,
       author: currentUser?.name ?? 'کاربر',
+      authorUsername: currentUser?.username ?? '',
       role: currentUser?.role ?? 'admin',
       title: currentUser?.title ?? 'کارشناس',
       text,
@@ -558,7 +562,7 @@ export default function App() {
         a.newStatus ?? '',
         a.rejectionReason ?? '',
         a.createdBy,
-        a.createdAt,
+        formatServerTimestamp(a.createdAt, a.ts),
       ]),
     )
     showToast('فایل گزارش رویدادها دانلود شد.')
@@ -605,12 +609,17 @@ export default function App() {
 
   const todayJ = jalaliParts(new Date())
   const headerDate = `${todayJ.d} ${jalaliMonthNames[todayJ.m - 1]} ${todayJ.y}`
-  const activityDayKeys = new Set(
-    activities.map(a => {
-      const p = a.createdAt.split(' · ')[0]?.split('/')
-      return p && p.length === 3 ? `${p[0]}-${Number(p[1])}-${Number(p[2])}` : ''
-    }),
-  )
+  const activityDayKey = (activity: Activity) => {
+    const timestamp = timestampToMs(activity.ts)
+    if (timestamp) {
+      const parts = jalaliParts(new Date(timestamp))
+      return `${parts.y}-${parts.m}-${parts.d}`
+    }
+    const parts = normalizeDigits(activity.createdAt.split(' · ')[0] ?? '').match(/^(\d{3,4})\/(\d{1,2})\/(\d{1,2})$/)
+    return parts ? `${Number(parts[1])}-${Number(parts[2])}-${Number(parts[3])}` : ''
+  }
+  const activityDayKeys = new Set(activities.map(activityDayKey).filter(Boolean))
+  const todayActivityCount = activities.filter(activity => activityDayKey(activity) === `${todayJ.y}-${todayJ.m}-${todayJ.d}`).length
 
   const themeLabels: Record<ThemeMode, { label: string; dot: string }> = {
     light: { label: 'روشن (روز)', dot: '#f1f5f9' },
@@ -686,7 +695,7 @@ export default function App() {
               size="sm"
               className={cn('shrink-0', collapsed && 'hidden')}
               onClick={() => {
-                setSession(null)
+                void handleLogout()
                 playChime('alert')
               }}
               title="خروج از حساب"
@@ -701,8 +710,12 @@ export default function App() {
       <main className={cn('min-h-screen transition-[padding] duration-200', collapsed ? 'lg:pr-20' : 'lg:pr-72')}>
         <header className="sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 backdrop-blur sm:px-6 dark:border-slate-800 dark:bg-slate-950/90">
           <div className="min-w-0 flex-1">
-            <span>
-              خانه / <b>{navItems.find(n => n[0] === page)?.[1]}</b>
+            <span className="block truncate text-sm">
+              <span className="hidden sm:inline">خانه / </span>
+              <b>
+                <span className="hidden sm:inline">{navItems.find(n => n[0] === page)?.[1] ?? 'کارهای من'}</span>
+                <span className="sm:hidden">{compactNavLabels[page]}</span>
+              </b>
             </span>
             <div className="relative hidden sm:block" data-app-popover="calendar">
               <Button
@@ -738,7 +751,7 @@ export default function App() {
             type="button"
             variant="outline"
             size="sm"
-            className="hidden min-w-0 max-w-sm flex-1 justify-start text-slate-500 md:flex dark:text-slate-400"
+            className="!hidden min-w-0 max-w-sm flex-1 justify-start text-slate-500 md:!flex dark:text-slate-400"
             onClick={() => {
               setCalOpen(false)
               setThemeMenuOpen(false)
@@ -754,7 +767,7 @@ export default function App() {
             type="button"
             variant="outline"
             size="icon"
-            className="md:hidden"
+            className="md:!hidden"
             onClick={() => {
               setCalOpen(false)
               setThemeMenuOpen(false)
@@ -813,7 +826,7 @@ export default function App() {
               type="button"
               variant="outline"
               size="icon"
-              className="lg:hidden"
+              className="lg:!hidden"
               onClick={() => {
                 setCalOpen(false)
                 setThemeMenuOpen(false)
@@ -830,7 +843,7 @@ export default function App() {
               type="button"
               variant="primary"
               size="sm"
-              className="hidden sm:inline-flex"
+              className="!hidden sm:!inline-flex"
               onClick={openTasksPage}
               title="ورود به بخش کارهای من"
             >
@@ -838,6 +851,15 @@ export default function App() {
             </Button>
           </div>
         </header>
+
+        {serverMessage && session && (
+          <div className="mx-auto mt-3 w-full max-w-7xl px-4 sm:px-6 lg:px-8" role="alert" aria-live="assertive">
+            <div className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-800 sm:flex-row sm:items-center sm:justify-between dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+              <span>{serverMessage}</span>
+              <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => window.location.reload()}>تازه‌سازی صفحه</Button>
+            </div>
+          </div>
+        )}
 
         <div className="mx-auto w-full max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-8">
           {legacySnapshot && (
@@ -945,7 +967,7 @@ export default function App() {
               people={people}
               activities={activities}
               audit={audit}
-              todayCount={activities.filter(a => a.createdAt.includes(todayJ.d.toString())).length}
+              todayCount={todayActivityCount}
               onExport={exportAllPeople}
               onPrint={() => window.print()}
             />
@@ -970,7 +992,8 @@ export default function App() {
           person={selected}
           notes={notes.filter(n => n.personId === selected.id)}
           history={activities.filter(a => a.personId === selected.id)}
-          meName={currentUser.name}
+          meUsername={currentUser.username}
+          isAdmin={currentUser.role === 'admin'}
           usersList={users}
           canChange={has('change_status')}
           canDelete={has('delete_person')}
@@ -1093,7 +1116,7 @@ export default function App() {
       )}
 
       <nav aria-label="پیمایش موبایل" className="fixed inset-x-0 bottom-0 z-40 flex min-h-16 items-stretch gap-1 border-t border-slate-200 bg-white/95 px-1.5 py-1.5 pb-[max(.375rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden dark:border-slate-800 dark:bg-slate-900/95">
-        {navItems.slice(0, 4).map(([key, label, perm]) => !perm || has(perm) ? (
+        {navItems.slice(0, 4).map(([key, , perm]) => !perm || has(perm) ? (
           <Button
             key={key}
             type="button"
@@ -1109,7 +1132,7 @@ export default function App() {
             }}
             className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1 text-[10px] text-slate-500 dark:text-slate-400', page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
           >
-            <span className="truncate">{label}</span>
+            <span className="truncate">{compactNavLabels[key]}</span>
           </Button>
         ) : null)}
         <div className="relative flex min-w-0 flex-1" data-app-popover="mobile-more">

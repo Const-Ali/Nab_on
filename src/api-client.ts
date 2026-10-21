@@ -2,13 +2,17 @@ import type { User } from './types'
 
 const API_BASE = '/api.php'
 let csrfToken = ''
+let stateVersions: Record<string, string> = {}
+const stateWriteQueues = new Map<string, Promise<void>>()
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status = 0) {
+  code: string
+  constructor(message: string, status = 0, code = '') {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -17,6 +21,7 @@ export interface AppBootstrap {
   users: User[]
   csrf: string
   state: Record<string, unknown[]>
+  state_versions: Record<string, string>
 }
 
 async function request<T>(
@@ -43,7 +48,7 @@ async function request<T>(
     throw new ApiError('اتصال به API هاست برقرار نشد. تنظیم PHP/MySQL و HTTPS را بررسی کنید.')
   }
 
-  let payload: { success?: boolean; error?: string; data?: T; csrf?: string; needs_setup?: boolean }
+  let payload: { success?: boolean; error?: string; code?: string; data?: T; csrf?: string; needs_setup?: boolean }
   try {
     payload = await response.json()
   } catch {
@@ -53,15 +58,43 @@ async function request<T>(
     if (response.status === 401 && signalUnauthorized && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('nab:auth-expired'))
     }
-    throw new ApiError(payload.error || 'درخواست به سرور ناموفق بود.', response.status)
+    throw new ApiError(payload.error || 'درخواست به سرور ناموفق بود.', response.status, payload.code ?? '')
   }
   const nestedCsrf = typeof payload.data === 'object' && payload.data !== null && 'csrf' in payload.data
     ? (payload.data as { csrf?: unknown }).csrf
     : undefined
+  const nestedVersions = typeof payload.data === 'object' && payload.data !== null && 'state_versions' in payload.data
+    ? (payload.data as { state_versions?: unknown }).state_versions
+    : undefined
   if (typeof payload.csrf === 'string') csrfToken = payload.csrf
   else if (typeof nestedCsrf === 'string') csrfToken = nestedCsrf
+  if (nestedVersions && typeof nestedVersions === 'object' && !Array.isArray(nestedVersions)) {
+    stateVersions = Object.fromEntries(
+      Object.entries(nestedVersions).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    )
+  }
   if (payload.data !== undefined) return payload.data as T
   return payload as T
+}
+
+function queueStateWrite(key: string, action: string, body: Record<string, unknown>): Promise<void> {
+  const previous = stateWriteQueues.get(key) ?? Promise.resolve()
+  const current = previous.catch(() => undefined).then(async () => {
+    const expectedVersion = stateVersions[key]
+    if (!expectedVersion) {
+      throw new ApiError('نسخهٔ همگام‌سازی در دسترس نیست؛ صفحه را تازه‌سازی و دوباره وارد شوید.', 428, 'missing_state_version')
+    }
+    const result = await request<{ version: string }>(action, 'POST', { ...body, expected_version: expectedVersion })
+    if (!result || typeof result.version !== 'string' || !/^[a-f0-9]{64}$/.test(result.version)) {
+      throw new ApiError('پاسخ نسخهٔ ذخیره‌سازی معتبر نیست؛ صفحه را تازه‌سازی کنید.')
+    }
+    stateVersions[key] = result.version
+  })
+  stateWriteQueues.set(key, current)
+  void current.finally(() => {
+    if (stateWriteQueues.get(key) === current) stateWriteQueues.delete(key)
+  }).catch(() => undefined)
+  return current
 }
 
 export async function getSetupStatus(): Promise<boolean> {
@@ -84,10 +117,11 @@ export function setupAdmin(input: { setup_key: string; username: string; name: s
 export async function logout(): Promise<void> {
   await request<{ success: boolean }>('logout', 'POST')
   csrfToken = ''
+  stateVersions = {}
 }
 
 export function syncSave(key: string, value: unknown[]): Promise<void> {
-  return request<void>('state_save', 'POST', { key, value })
+  return queueStateWrite(key, 'state_save', { key, value })
 }
 
 export function importLegacyState(state: Record<string, unknown[]>): Promise<void> {
@@ -118,6 +152,6 @@ export function fetchTasks(): Promise<unknown[]> {
   return request<unknown[]>('tasks_get', 'GET')
 }
 
-export function syncTasks(tasks: unknown[]): Promise<void> {
-  return request<void>('tasks_save', 'POST', { tasks })
+export function syncTasks(tasks: unknown[], username: string): Promise<void> {
+  return queueStateWrite(`nab:tasks:${username}`, 'tasks_save', { tasks })
 }

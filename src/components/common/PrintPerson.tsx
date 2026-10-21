@@ -1,11 +1,11 @@
-import { nowStamp, toPersianDigits } from '../../shared'
+import { formatServerTimestamp, nowStamp, toPersianDigits } from '../../shared'
 import { workflow } from '../../app-lib'
 import type { Person, Activity, Note } from '../../types'
 import { QRCodeSvg } from './QRCodeSvg'
 
 export function PrintPerson({ person, notes, history }: { person: Person; notes: Note[]; history: Activity[] }) {
   const currentIndex = workflow.indexOf(person.status)
-  const qrData = `https://nab.internal/verify/person?id=${person.id}&nid=${person.nationalId}&ts=${encodeURIComponent(person.updatedAt)}`
+  const qrData = `https://nab.internal/verify/person?id=${person.id}&nid=${person.nationalId}&ts=${encodeURIComponent(String(person.ts ?? person.updatedAt))}`
 
   return (
     <div className="print-area print-official-form" dir="rtl">
@@ -61,7 +61,7 @@ export function PrintPerson({ person, notes, history }: { person: Person; notes:
           </tr>
           <tr>
             <td>آخرین اقدام</td>
-            <td><b>{person.updatedAt}</b></td>
+            <td><b>{formatServerTimestamp(person.updatedAt, person.ts)}</b></td>
             <td>مرحله جاری</td>
             <td><b>{(currentIndex + 1).toLocaleString('fa-IR')} از {workflow.length.toLocaleString('fa-IR')} ({person.status})</b></td>
           </tr>
@@ -89,7 +89,7 @@ export function PrintPerson({ person, notes, history }: { person: Person; notes:
       <div className="print-log">
         {history.slice(0, 10).map(a => (
           <p key={a.id}>
-            <b>{a.action}</b> {a.previousStatus && a.newStatus ? ` (از «${a.previousStatus}» به «${a.newStatus}»)` : ''} — {a.createdBy} ({a.createdAt})
+            <b>{a.action}</b> {a.previousStatus && a.newStatus ? ` (از «${a.previousStatus}» به «${a.newStatus}»)` : ''} — {a.createdBy} ({formatServerTimestamp(a.createdAt, a.ts)})
           </p>
         ))}
         {!history.length && <p>رویدادی ثبت نشده است.</p>}
@@ -101,7 +101,7 @@ export function PrintPerson({ person, notes, history }: { person: Person; notes:
           <div className="print-notes">
             {notes.slice(0, 8).map(n => (
               <p key={n.id}>
-                <b>{n.author} ({n.title}):</b> {n.text} — <small>{n.createdAt}</small>
+                <b>{n.author} ({n.title}):</b> {n.text} — <small>{formatServerTimestamp(n.createdAt, n.ts)}</small>
               </p>
             ))}
           </div>

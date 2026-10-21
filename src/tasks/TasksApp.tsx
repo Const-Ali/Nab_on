@@ -51,12 +51,12 @@ export default function TasksApp() {
 
   const saveTasksOnHost = useCallback(async (nextTasks: WorkTask[]) => {
     try {
-      await syncTasks(nextTasks)
+      await syncTasks(nextTasks, user?.username ?? '')
       setSyncError('')
     } catch (cause) {
       setSyncError(cause instanceof Error ? cause.message : 'ذخیرهٔ کارها روی هاست ناموفق بود.')
     }
-  }, [])
+  }, [user])
 
   if (error) {
     return <main className="grid min-h-screen place-items-center bg-slate-50 p-6 text-center dark:bg-slate-950" dir="rtl"><div className="max-w-lg rounded-2xl border border-rose-200 bg-white p-6 text-sm leading-7 text-rose-700 dark:border-rose-900/60 dark:bg-slate-900 dark:text-rose-300"><p>{error}</p><a className="mt-4 inline-block font-semibold text-indigo-600" href="/">بازگشت به ورود</a></div></main>

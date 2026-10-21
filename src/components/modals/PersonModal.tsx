@@ -1,6 +1,7 @@
 import { Button } from '../common/Button'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar } from '../../shared-ui'
+import { formatServerTimestamp } from '../../shared'
 import { workflow, nextStatuses, personTags, STALE_LIMIT, deadlineLeft, staleDays } from '../../app-lib'
 import type { Status, Person, Activity, User, Note } from '../../types'
 import { Badge } from '../common/Badge'
@@ -10,7 +11,8 @@ export function PersonModal({
   person,
   notes,
   history,
-  meName,
+  meUsername,
+  isAdmin,
   usersList,
   canChange,
   canDelete,
@@ -27,7 +29,8 @@ export function PersonModal({
   person: Person
   notes: Note[]
   history: Activity[]
-  meName: string
+  meUsername: string
+  isAdmin: boolean
   usersList: User[]
   canChange: boolean
   canDelete: boolean
@@ -74,6 +77,7 @@ export function PersonModal({
   }, [notes.length])
 
   const currentIndex = workflow.indexOf(person.status)
+  const ownsNote = (note: Note) => note.authorUsername === meUsername || (!note.authorUsername && isAdmin)
 
   const submitNote = () => {
     const text = noteText.trim()
@@ -95,7 +99,7 @@ export function PersonModal({
           <Avatar text={person.firstName[0]} src={person.photo} size={44} />
           <span>
             <b>{person.firstName} {person.lastName}</b>
-            <small>آخرین ثبت: {person.updatedAt} · {person.updatedBy}</small>
+            <small>آخرین ثبت: {formatServerTimestamp(person.updatedAt, person.ts)} · {person.updatedBy}</small>
           </span>
           <span className="sum-side">
             <Badge status={person.status} />
@@ -175,15 +179,15 @@ export function PersonModal({
           <>
             <div className="chat" ref={chatRef}>
               {notes.map(note => (
-                <div className={`msg ${note.author === meName ? 'mine' : ''}`} key={note.id}>
+                <div className={`msg ${ownsNote(note) ? 'mine' : ''}`} key={note.id}>
                   <header>
                     <b>{note.author}</b>
                     {note.role === 'admin' && <em className="role-chip">مدیر</em>}
-                    <small>{note.title} · {note.createdAt}{note.edited ? ' · (ویرایش‌شده)' : ''}</small>
+                    <small>{note.title} · {formatServerTimestamp(note.createdAt, note.ts)}{note.edited ? ' · (ویرایش‌شده)' : ''}</small>
                     <span className="msg-tools flex items-center gap-1">
                       <Button type="button" variant="ghost" size="xs" title="پاسخ به یادداشت" aria-label="پاسخ به یادداشت" onClick={() => setReplyTo(note)}>پاسخ</Button>
                     </span>
-                    {note.author === meName && (
+                    {ownsNote(note) && (
                       <span className="msg-tools flex items-center gap-1">
                         <Button type="button" variant="ghost" size="xs" title="ویرایش یادداشت" aria-label="ویرایش یادداشت" onClick={() => { setEditingNote(note.id); setEditText(note.text) }}>ویرایش</Button>
                         <Button type="button" variant="dangerGhost" size="xs" title="حذف یادداشت" aria-label="حذف یادداشت" onClick={() => onDeleteNote(note.id)}>حذف</Button>
@@ -246,7 +250,7 @@ export function PersonModal({
                       {a.action === 'رد پرونده' ? `علت رد: ${a.rejectionReason}` : a.action === 'ویرایش اطلاعات فرد' ? `فیلدهای تغییرکرده: ${a.rejectionReason}` : a.rejectionReason}
                     </span>
                   )}
-                  <small>{a.createdBy} · {a.createdAt}</small>
+                  <small>{a.createdBy} · {formatServerTimestamp(a.createdAt, a.ts)}</small>
                 </div>
               </div>
             ))}

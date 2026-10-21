@@ -143,6 +143,35 @@ function state_value(PDO $pdo, string $key, $fallback = []): array {
     return is_array($value) ? $value : $fallback;
 }
 
+function state_version(PDO $pdo, string $key): string {
+    $stmt = $pdo->prepare('SELECT state_json FROM nab_state WHERE state_key = ? LIMIT 1');
+    $stmt->execute([$key]);
+    $raw = $stmt->fetchColumn();
+    $basis = $raw === false ? "missing\0" . $key : "stored\0" . (string)$raw;
+    return hash('sha256', $basis);
+}
+
+function state_versions(PDO $pdo, array $user): array {
+    $keys = ['nab:people', 'nab:activities', 'nab:audit', 'nab:roles', 'nab:notes', 'nab:tasks:' . (string)$user['username']];
+    $versions = [];
+    foreach ($keys as $key) $versions[$key] = state_version($pdo, $key);
+    return $versions;
+}
+
+function verify_expected_state_version(PDO $pdo, string $key, string $expected): void {
+    if (!preg_match('/^[a-f0-9]{64}$/', $expected)) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        release_state_write_lock($pdo);
+        reply(428, ['success' => false, 'code' => 'missing_state_version', 'error' => 'نسخهٔ ذخیره‌سازی منقضی یا ناسازگار است؛ صفحه را تازه‌سازی کنید.']);
+    }
+    $current = state_version($pdo, $key);
+    if (!hash_equals($current, $expected)) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        release_state_write_lock($pdo);
+        reply(409, ['success' => false, 'code' => 'state_conflict', 'error' => 'این داده از نشست دیگری تغییر کرده است. ذخیره متوقف شد تا تغییرها بازنویسی نشوند؛ صفحه را تازه‌سازی کنید و تغییر خود را دوباره اعمال کنید.']);
+    }
+}
+
 function put_state(PDO $pdo, string $key, array $value, ?int $userId): void {
     $json = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     $stmt = $pdo->prepare('INSERT INTO nab_state (state_key, state_json, updated_at, updated_by) VALUES (?, ?, UTC_TIMESTAMP(), ?) ON DUPLICATE KEY UPDATE state_json = VALUES(state_json), updated_at = VALUES(updated_at), updated_by = VALUES(updated_by)');
@@ -165,9 +194,44 @@ function release_state_write_lock(PDO $pdo): void {
     $stmt->execute([state_write_lock_name($pdo)]);
 }
 
-function list_users(PDO $pdo): array {
+function list_users(PDO $pdo, array $viewer): array {
     $rows = $pdo->query('SELECT * FROM nab_users ORDER BY display_name, username')->fetchAll();
-    return array_map('safe_user', $rows);
+    $canManageUsers = has_permission($viewer, 'manage_users');
+    return array_map(static function (array $row) use ($viewer, $canManageUsers): array {
+        if ($canManageUsers || (int)$row['id'] === (int)$viewer['id']) return safe_user($row);
+        // Non-admin screens need only assignment/mention labels, not other users' permissions or profile photos.
+        return [
+            'name' => (string)$row['display_name'],
+            'username' => (string)$row['username'],
+            'title' => (string)$row['title'],
+            'active' => (bool)$row['is_active'],
+        ];
+    }, $rows);
+}
+
+function note_owner_username(PDO $pdo, array $note): ?string {
+    if (!empty($note['ownerVerified']) && isset($note['authorUsername']) && is_string($note['authorUsername']) && $note['authorUsername'] !== '') {
+        return $note['authorUsername'];
+    }
+    $author = trim((string)($note['author'] ?? ''));
+    if ($author === '') return null;
+    $stmt = $pdo->prepare('SELECT username FROM nab_users WHERE display_name = ? ORDER BY username LIMIT 2');
+    $stmt->execute([$author]);
+    $matches = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    return count($matches) === 1 ? (string)$matches[0] : null;
+}
+
+function notes_payload(PDO $pdo): array {
+    $notes = state_value($pdo, 'nab:notes', []);
+    foreach ($notes as &$note) {
+        if (!is_array($note)) continue;
+        $owner = note_owner_username($pdo, $note);
+        unset($note['ownerVerified']);
+        if ($owner !== null) $note['authorUsername'] = $owner;
+        else unset($note['authorUsername']);
+    }
+    unset($note);
+    return $notes;
 }
 
 function state_payload(PDO $pdo, array $user): array {
@@ -176,14 +240,15 @@ function state_payload(PDO $pdo, array $user): array {
     $canManageUsers = has_permission($user, 'manage_users');
     return [
         'user' => safe_user($user),
-        'users' => list_users($pdo),
+        'users' => list_users($pdo, $user),
         'csrf' => (string)($_SESSION['csrf_token'] ?? ''),
+        'state_versions' => state_versions($pdo, $user),
         'state' => [
             'nab:people' => $canViewPeople ? state_value($pdo, 'nab:people', []) : [],
             'nab:activities' => $canViewActivities ? state_value($pdo, 'nab:activities', []) : [],
             'nab:audit' => ($canManageUsers || has_permission($user, 'view_reports')) ? state_value($pdo, 'nab:audit', []) : [],
             'nab:roles' => $canManageUsers ? state_value($pdo, 'nab:roles', default_roles()) : [],
-            'nab:notes' => $canViewPeople ? state_value($pdo, 'nab:notes', []) : [],
+            'nab:notes' => $canViewPeople ? notes_payload($pdo) : [],
             'tasks' => state_value($pdo, 'nab:tasks:' . (string)$user['username'], []),
             'legacy_tasks_imported' => state_value($pdo, 'nab:legacy_tasks_imported:' . (string)$user['username'], []),
             'legacy_migration_completed' => $canManageUsers ? state_value($pdo, 'nab:legacy_migration_completed', []) : [],
@@ -224,6 +289,14 @@ function valid_national_id(string $value): bool {
     return $check === ($remainder < 2 ? $remainder : 11 - $remainder);
 }
 
+function server_timestamp_ms(): int {
+    return (int)floor(microtime(true) * 1000);
+}
+
+function server_timestamp_iso(): string {
+    return gmdate('Y-m-d\\TH:i:s\\Z');
+}
+
 function clean_person(array $person, array $actor): array {
     $person['id'] = trim((string)($person['id'] ?? ''));
     $person['firstName'] = trim((string)($person['firstName'] ?? ''));
@@ -239,6 +312,8 @@ function clean_person(array $person, array $actor): array {
     if ($deadline !== '' && $deadline !== '—' && !valid_jalali_date($deadline)) fail(422, 'تاریخ مهلت معتبر نیست.');
     if (isset($person['photo']) && is_string($person['photo']) && strlen($person['photo']) > 2 * 1024 * 1024) fail(413, 'حجم عکس بیش از حد مجاز است.');
     $person['updatedBy'] = (string)$actor['display_name'];
+    $person['updatedAt'] = server_timestamp_iso();
+    $person['ts'] = server_timestamp_ms();
     return $person;
 }
 
@@ -278,7 +353,15 @@ function authorize_people_change(PDO $pdo, array $user, array $next): array {
             if (in_array('assignee', $changed, true) && !has_permission($user, 'change_status')) fail(403, 'مجوز ارجاع پرونده را ندارید.');
             $editable = array_diff($changed, ['status', 'assignee']);
             if (count($editable) > 0 && !has_permission($user, 'edit_person')) fail(403, 'مجوز ویرایش اطلاعات پرونده را ندارید.');
-            if (count($changed) > 0) $row = clean_person($row, $user);
+            if (count($changed) > 0) {
+                $row = clean_person($row, $user);
+            } else {
+                // Metadata-only client changes are discarded; an unchanged record keeps the server's stored stamp.
+                foreach (['updatedAt', 'updatedBy', 'ts'] as $serverField) {
+                    if (array_key_exists($serverField, $before)) $row[$serverField] = $before[$serverField];
+                    else unset($row[$serverField]);
+                }
+            }
         }
         $nid = normalize_digits((string)($row['nationalId'] ?? ''));
         if (isset($nationalIds[$nid]) && $nationalIds[$nid] !== $id) fail(409, 'کد ملی تکراری است.');
@@ -289,12 +372,21 @@ function authorize_people_change(PDO $pdo, array $user, array $next): array {
 }
 
 function event_permission(string $action): ?string {
-    if (str_contains($action, 'افزودن') || str_contains($action, 'ثبت پرونده')) return 'create_person';
-    if (str_contains($action, 'تغییر وضعیت') || str_contains($action, 'رد پرونده')) return 'change_status';
-    if (str_contains($action, 'حذف پرونده')) return 'delete_person';
-    if (str_contains($action, 'ویرایش اطلاعات')) return 'edit_person';
-    if (str_contains($action, 'کاربر') || str_contains($action, 'نقش')) return 'manage_users';
-    return 'view_persons';
+    $permissions = [
+        'ثبت پرونده جدید' => 'create_person',
+        'ایجاد پرونده جدید' => 'create_person',
+        'افزودن فرد جدید' => 'create_person',
+        'تغییر وضعیت' => 'change_status',
+        'تغییر وضعیت پرونده' => 'change_status',
+        'رد پرونده' => 'change_status',
+        'ویرایش اطلاعات فرد' => 'edit_person',
+        'حذف پرونده' => 'delete_person',
+        'ورود به سامانه' => 'view_persons',
+        'ثبت یادداشت' => 'view_persons',
+        'ویرایش یادداشت' => 'view_persons',
+        'حذف یادداشت' => 'view_persons',
+    ];
+    return $permissions[$action] ?? null;
 }
 
 function sanitize_append_only(PDO $pdo, array $user, string $key, array $next): array {
@@ -309,22 +401,22 @@ function sanitize_append_only(PDO $pdo, array $user, string $key, array $next): 
         if (isset($seen[$id])) fail(422, 'شناسهٔ رویداد تکراری است.');
         $seen[$id] = true;
         if (isset($oldById[$id])) {
-            if (json_encode($oldById[$id], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !== json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) fail(403, 'رویدادهای ثبت‌شده قابل ویرایش نیستند.');
+            $beforeCompare = $oldById[$id];
+            $afterCompare = $row;
+            foreach (['createdBy', 'createdByRole', 'createdAt', 'ts'] as $serverField) { unset($beforeCompare[$serverField], $afterCompare[$serverField]); }
+            if (json_encode($beforeCompare, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !== json_encode($afterCompare, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) fail(403, 'رویدادهای ثبت‌شده قابل ویرایش نیستند.');
             $out[] = $oldById[$id];
             continue;
         }
         $action = trim((string)($row['action'] ?? ''));
         $needed = event_permission($action);
-        if ($needed !== null && !has_permission($user, $needed)) fail(403, 'مجوز ثبت این رویداد را ندارید.');
+        if ($needed === null) fail(422, 'نوع رویداد معتبر نیست.');
+        if (!has_permission($user, $needed)) fail(403, 'مجوز ثبت این رویداد را ندارید.');
         $row['action'] = text_substring($action, 0, 160);
         $row['createdBy'] = (string)$user['display_name'];
-        if ($key === 'nab:activities') {
-            $row['createdByRole'] = (string)$user['role_id'];
-            $row['createdAt'] = (string)($row['createdAt'] ?? gmdate('Y-m-d H:i:s'));
-            $row['ts'] = time() * 1000;
-        } else {
-            $row['createdAt'] = gmdate('Y-m-d H:i:s');
-        }
+        $row['createdAt'] = server_timestamp_iso();
+        $row['ts'] = server_timestamp_ms();
+        if ($key === 'nab:activities') $row['createdByRole'] = (string)$user['role_id'];
         $out[] = $row;
     }
     // Hidden activity/audit arrays are returned as empty to restricted users. Missing old rows are preserved,
@@ -343,30 +435,72 @@ function authorize_notes(PDO $pdo, array $user, array $next): array {
     foreach ($next as $row) {
         if (!is_array($row) || !isset($row['id'], $row['personId'])) fail(422, 'یادداشت معتبر نیست.');
         $id = (string)$row['id'];
-        if (isset($nextById[$id])) fail(422, 'شناسهٔ یادداشت تکراری است.');
+        if ($id === '' || strlen($id) > 100 || isset($nextById[$id])) fail(422, 'شناسهٔ یادداشت تکراری یا نامعتبر است.');
         $nextById[$id] = $row;
     }
     $isAdmin = (string)$user['role_id'] === 'admin';
+    $username = (string)$user['username'];
     foreach ($oldById as $id => $oldRow) {
-        if (!isset($nextById[$id]) && !$isAdmin && (string)($oldRow['author'] ?? '') !== (string)$user['display_name']) fail(403, 'فقط نویسنده یا مدیر می‌تواند یادداشت را حذف کند.');
+        if (!isset($nextById[$id])) {
+            $owner = note_owner_username($pdo, $oldRow);
+            if (!$isAdmin && $owner !== $username) fail(403, 'فقط نویسنده یا مدیر می‌تواند یادداشت را حذف کند.');
+        }
     }
     $out = [];
     foreach ($nextById as $id => $row) {
         if (isset($oldById[$id])) {
             $before = $oldById[$id];
-            if (json_encode($before, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !== json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) {
-                if (!$isAdmin && (string)($before['author'] ?? '') !== (string)$user['display_name']) fail(403, 'فقط نویسنده یا مدیر می‌تواند یادداشت را ویرایش کند.');
-                $row['author'] = (string)$before['author'];
-                $row['role'] = (string)$before['role'];
-                $row['title'] = (string)$before['title'];
+            $owner = note_owner_username($pdo, $before);
+            $beforeCompare = $before;
+            $afterCompare = $row;
+            foreach (['author', 'authorUsername', 'ownerVerified', 'role', 'title', 'createdAt', 'ts', 'editedAt', 'editedAtTs', 'editedBy', 'editedByUsername'] as $serverField) {
+                unset($beforeCompare[$serverField], $afterCompare[$serverField]);
+            }
+            $changed = json_encode($beforeCompare, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !== json_encode($afterCompare, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($changed) {
+                if (!$isAdmin && $owner !== $username) fail(403, 'فقط نویسنده یا مدیر می‌تواند یادداشت را ویرایش کند.');
+                $text = trim((string)($row['text'] ?? ''));
+                if ($text === '' || text_length($text) > 10000) fail(422, 'متن یادداشت خالی یا بیش از حد طولانی است.');
+                $row['author'] = (string)($before['author'] ?? '');
+                $row['role'] = (string)($before['role'] ?? 'assistant');
+                $row['title'] = (string)($before['title'] ?? 'کارشناس');
+                $row['createdAt'] = (string)($before['createdAt'] ?? server_timestamp_iso());
+                $row['ts'] = $before['ts'] ?? null;
+                if ($owner !== null) {
+                    $row['authorUsername'] = $owner;
+                    $row['ownerVerified'] = true;
+                } else {
+                    unset($row['authorUsername'], $row['ownerVerified']);
+                }
                 $row['edited'] = true;
+                $row['editedAt'] = server_timestamp_iso();
+                $row['editedAtTs'] = server_timestamp_ms();
+                $row['editedBy'] = (string)$user['display_name'];
+                $row['editedByUsername'] = $username;
+            } else {
+                // Ignore metadata-only changes and promote only uniquely identifiable legacy authors.
+                $row = $before;
+                if ($owner !== null) {
+                    $row['authorUsername'] = $owner;
+                    $row['ownerVerified'] = true;
+                } else {
+                    unset($row['authorUsername'], $row['ownerVerified']);
+                }
             }
         } else {
             $text = trim((string)($row['text'] ?? ''));
-            if ($text === '' || text_length($text) > 10000) fail(422, 'متن یادداشت خالی یا بیش از حد طولانی است.');
+            $personId = trim((string)($row['personId'] ?? ''));
+            if ($personId === '' || strlen($personId) > 80 || $text === '' || text_length($text) > 10000) fail(422, 'متن یادداشت خالی یا بیش از حد طولانی است.');
+            $row['personId'] = $personId;
+            $row['text'] = $text;
             $row['author'] = (string)$user['display_name'];
+            $row['authorUsername'] = $username;
+            $row['ownerVerified'] = true;
             $row['role'] = (string)$user['role_id'];
             $row['title'] = (string)$user['title'];
+            $row['createdAt'] = server_timestamp_iso();
+            $row['ts'] = server_timestamp_ms();
+            unset($row['editedAt'], $row['editedAtTs'], $row['editedBy'], $row['editedByUsername']);
         }
         $out[] = $row;
     }
@@ -534,11 +668,14 @@ try {
         $user = require_user($pdo);
         $key = (string)($body['key'] ?? '');
         $value = $body['value'] ?? null;
+        $expectedVersion = $body['expected_version'] ?? '';
         if (!is_array($value)) fail(422, 'دادهٔ ارسالی باید آرایه باشد.');
+        if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ ذخیره‌سازی در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
         $allowed = ['nab:people', 'nab:activities', 'nab:audit', 'nab:roles', 'nab:notes'];
         if (!in_array($key, $allowed, true)) fail(400, 'کلید ذخیره‌سازی مجاز نیست.');
         acquire_state_write_lock($pdo);
         $pdo->beginTransaction();
+        verify_expected_state_version($pdo, $key, $expectedVersion);
         if ($key === 'nab:people') $value = authorize_people_change($pdo, $user, $value);
         elseif ($key === 'nab:notes') $value = authorize_notes($pdo, $user, $value);
         elseif ($key === 'nab:activities' || $key === 'nab:audit') $value = sanitize_append_only($pdo, $user, $key, $value);
@@ -562,9 +699,10 @@ try {
             foreach ($oldBuiltins as $id => $_) if (!isset($ids[$id])) fail(403, 'نقش‌های پیش‌فرض قابل حذف نیستند.');
         }
         put_state($pdo, $key, $value, (int)$user['id']);
+        $version = state_version($pdo, $key);
         $pdo->commit();
         release_state_write_lock($pdo);
-        reply(200, ['success' => true]);
+        reply(200, ['success' => true, 'data' => ['version' => $version]]);
     }
 
     if ($action === 'legacy_import' && $method === 'POST') {
@@ -595,12 +733,10 @@ try {
         $seenNationalIds = [];
         foreach ($people as $person) {
             if (!is_array($person)) fail(422, 'یکی از پرونده‌های قدیمی معتبر نیست.');
-            $oldUpdater = (string)($person['updatedBy'] ?? '');
             $clean = clean_person($person, $user);
             if (isset($seenIds[$clean['id']]) || isset($seenNationalIds[$clean['nationalId']])) fail(422, 'شناسه یا کد ملی در داده‌های قدیمی تکراری است.');
             $seenIds[$clean['id']] = true;
             $seenNationalIds[$clean['nationalId']] = true;
-            if ($oldUpdater !== '') $clean['updatedBy'] = $oldUpdater;
             $cleanPeople[] = $clean;
         }
         put_state($pdo, 'nab:people', $cleanPeople, (int)$user['id']);
@@ -609,11 +745,17 @@ try {
             $rows = $legacy[$legacyKey] ?? [];
             if (!is_array($rows) || count($rows) > 50000) fail(422, 'بخشی از سوابق قدیمی معتبر نیست.');
             $ids = [];
-            foreach ($rows as $row) {
+            foreach ($rows as &$row) {
                 if (!is_array($row) || !isset($row['id']) || isset($ids[(string)$row['id']])) fail(422, 'یکی از سوابق قدیمی معتبر نیست.');
                 $ids[(string)$row['id']] = true;
-                if ($legacyKey === 'nab:notes' && (trim((string)($row['text'] ?? '')) === '' || text_length((string)$row['text']) > 10000)) fail(422, 'متن یکی از یادداشت‌های قدیمی معتبر نیست.');
+                if ($legacyKey === 'nab:notes') {
+                    if (trim((string)($row['text'] ?? '')) === '' || text_length((string)$row['text']) > 10000) fail(422, 'متن یکی از یادداشت‌های قدیمی معتبر نیست.');
+                    // The browser's legacy snapshot cannot claim a verified username owner.
+                    // Older notes are resolved by a unique exact display-name match on read.
+                    unset($row['authorUsername'], $row['ownerVerified'], $row['editedByUsername']);
+                }
             }
+            unset($row);
             put_state($pdo, $legacyKey, $rows, (int)$user['id']);
         }
 
@@ -769,21 +911,27 @@ try {
     if ($action === 'tasks_save' && $method === 'POST') {
         $user = require_user($pdo);
         $tasks = $body['tasks'] ?? null;
+        $expectedVersion = $body['expected_version'] ?? '';
         if (!is_array($tasks) || count($tasks) > 5000) fail(422, 'فهرست کارها معتبر نیست.');
+        if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ ذخیره‌سازی در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
         foreach ($tasks as $task) {
             if (!is_array($task) || !isset($task['id'], $task['title']) || text_length((string)$task['title']) > 500) fail(422, 'یکی از کارها معتبر نیست.');
         }
+        $taskKey = 'nab:tasks:' . (string)$user['username'];
         acquire_state_write_lock($pdo);
         $pdo->beginTransaction();
-        put_state($pdo, 'nab:tasks:' . (string)$user['username'], $tasks, (int)$user['id']);
+        verify_expected_state_version($pdo, $taskKey, $expectedVersion);
+        put_state($pdo, $taskKey, $tasks, (int)$user['id']);
+        $version = state_version($pdo, $taskKey);
         $pdo->commit();
         release_state_write_lock($pdo);
-        reply(200, ['success' => true]);
+        reply(200, ['success' => true, 'data' => ['version' => $version]]);
     }
 
     fail(404, 'مسیر API پیدا نشد.');
 } catch (Throwable $error) {
     if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
-    error_log('[Nab API] ' . $error->getMessage());
-    reply(500, ['success' => false, 'error' => 'خطای داخلی سرور رخ داد. شناسه: ' . bin2hex(random_bytes(4))]);
+    $errorId = bin2hex(random_bytes(4));
+    error_log('[Nab API][' . $errorId . '] ' . $error->getMessage());
+    reply(500, ['success' => false, 'error' => 'خطای داخلی سرور رخ داد. شناسه: ' . $errorId]);
 }
