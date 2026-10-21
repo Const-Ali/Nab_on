@@ -98,6 +98,7 @@ php database/reset-password.php admin
    ```
 
    اگر پوشهٔ `database/` فعلاً فقط در سورس محلی است، آن را برای ابزار CLI در `/home/ACCOUNT/database/` قرار دهید—نه داخل `public_html`. اسکریپت config را از `/home/ACCOUNT/nab-config.php` می‌خواند و درخواست وب را رد می‌کند.
+
 4. در Cron Jobs پنل، اجرای روزانه مثلاً ساعت ۲ بامداد را تنظیم کنید (مسیر PHP را با هاست خود تطبیق دهید):
 
    ```cron

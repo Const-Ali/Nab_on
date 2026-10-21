@@ -1185,7 +1185,7 @@ try {
         $password = (string)($body['password'] ?? '');
         $permissions = validate_permissions($body['permissions'] ?? user_permissions($target), $actor);
         if ($name === '' || text_length($name) > 160) fail(422, 'نام کاربر الزامی است.');
-        if (($role === 'admin' || (string)$target['role_id'] === 'admin') && !is_system_admin($actor)) fail(403, 'تغییر حساب مدیر فقط برای مدیر سیستم مجاز است.');
+        if (($role === 'admin' || (string)$target['role_id'] === 'admin') && !is_system_admin($actor)) fail(403, 'تغییر حساب مدیر فقط برای علی محمدی مجاز است.');
         if ((string)$target['role_id'] === 'admin' && ($role !== 'admin' || !$active)) ensure_another_admin($pdo, (int)$target['id']);
         if ($password !== '') check_password_length($password);
         $photo = isset($body['photo']) ? (string)$body['photo'] : ($target['photo'] ?? null);
