@@ -1,6 +1,8 @@
 import { jalaliJdn, jalaliMonthNames, jalaliParts, jalaliToday, load, normalizeDigits, timestampToMs } from './shared'
 import { validJalaliDate } from './tasks/utils'
 import type { Status, Permission, Role, RoleDef, Person, Activity, Audit, User, AppSettings, Note, FontKey } from './types'
+import { activeStages, defaultWorkflowConfig, stageById, stageIdForPerson } from './workflow'
+import type { WorkflowConfig } from './workflow'
 
 export const workflow: Status[] = ['درخواست پرونده', 'پرونده پرسنلی', 'کارت عادی', 'سه‌برگی عادی', 'تکمیل اطلاعات', 'پرونده فعال', 'ارسال به مرکز', 'بررسی مرکز', 'تأیید شده', 'رد شده', 'ارسال به شرکت', 'پایان کار']
 
@@ -36,8 +38,9 @@ export const tones: Record<Status, string> = {
 export const personTags: Record<string, string> = { 'فوری': 'red', 'مهم': 'amber', 'VIP': 'purple', 'پیگیری': 'blue' }
 export const STALE_LIMIT = 7
 
-export const deadlineLeft = (p: Person): number | null => {
-  if (!p.deadline || p.status === 'پایان کار' || p.status === 'رد شده' || p.status === 'تأیید شده') return null
+export const deadlineLeft = (p: Person, config: WorkflowConfig = defaultWorkflowConfig): number | null => {
+  const stage = stageById(config, stageIdForPerson(p, config))
+  if (!p.deadline || stage?.isFinal || ['approved', 'rejected'].includes(stage?.id ?? '')) return null
   const dl = normalizeDigits(p.deadline.trim())
   if (!validJalaliDate(dl)) return null
   const m = dl.match(/^(\d{3,4})\/(\d{1,2})\/(\d{1,2})$/)
@@ -47,9 +50,10 @@ export const deadlineLeft = (p: Person): number | null => {
 }
 
 export const PAGE_SIZE = 20
-export const staleDays = (p: Person) => {
+export const staleDays = (p: Person, config: WorkflowConfig = defaultWorkflowConfig) => {
   const timestamp = timestampToMs(p.ts)
-  return (!timestamp || p.status === 'پایان کار' || p.status === 'تأیید شده') ? 0 : Math.floor((Date.now() - timestamp) / 86400000)
+  const stage = stageById(config, stageIdForPerson(p, config))
+  return (!timestamp || stage?.isFinal || stage?.id === 'approved') ? 0 : Math.floor((Date.now() - timestamp) / 86400000)
 }
 
 export const seedNames = [
@@ -243,7 +247,7 @@ export const computeUserStats = (acts: Activity[]): [string, UserStat][] => {
   return [...map.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 5)
 }
 
-export const computeBottlenecks = (acts: Activity[]): { status: Status; label: string; count: number }[] => {
+export const computeBottlenecks = (acts: Activity[], config: WorkflowConfig = defaultWorkflowConfig): { status: Status; label: string; count: number }[] => {
   const byPerson = new Map<string, Activity[]>()
   for (const a of acts) {
     if (a.ts && a.newStatus) {
@@ -265,7 +269,8 @@ export const computeBottlenecks = (acts: Activity[]): { status: Status; label: s
       acc.set(cur.newStatus, e)
     }
   }
-  return workflow.map(s => {
+  return activeStages(config).map(stage => {
+    const s = stage.label
     const e = acc.get(s)
     if (!e || !e.count) return { status: s, label: '—', count: 0 }
     const days = e.sum / e.count / 86400000

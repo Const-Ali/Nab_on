@@ -6,7 +6,7 @@ import { defaultSettings, fontOptions } from '../../app-lib'
 import type { AppSettings } from '../../types'
 import { cn, inputCls, labelCls, panelBox, selectCls } from '../ui'
 
-export function Settings({ onSaved }: { onSaved: () => void }) {
+export function Settings({ onSaved, isAdmin, onManageWorkflow }: { onSaved: () => void; isAdmin: boolean; onManageWorkflow: () => void }) {
   const [settings, setSettings] = useState<AppSettings>(() => ({ ...defaultSettings, ...load('nab:settings', defaultSettings) }))
   const update = (patch: Partial<AppSettings>) => setSettings(cur => ({ ...cur, ...patch }))
   const toggles: [keyof Pick<AppSettings, 'twoFactor' | 'auditLog' | 'autoLogout'>, string, string][] = [
@@ -45,6 +45,13 @@ export function Settings({ onSaved }: { onSaved: () => void }) {
             </label>
           )}
         </section>
+        {isAdmin && (
+          <section className={cn(panelBox, 'space-y-3 p-4 sm:p-5')}>
+            <h2>گردش‌کار پرونده</h2>
+            <p className="text-sm leading-6 text-slate-500 dark:text-slate-400">ویرایش مرحله‌ها و تنظیم چک‌لیست دستی هر مرحله. انتقال پرونده تا تکمیل موارد الزامی مسدود می‌شود.</p>
+            <Button type="button" variant="primary" onClick={onManageWorkflow}>مدیریت گردش‌کار</Button>
+          </section>
+        )}
       </div>
     </>
   )

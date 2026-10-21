@@ -1,4 +1,5 @@
 import type { User } from './types'
+import type { WorkflowConfig } from './workflow'
 
 const API_BASE = '/api.php'
 let csrfToken = ''
@@ -122,6 +123,10 @@ export async function logout(): Promise<void> {
 
 export function syncSave(key: string, value: unknown[]): Promise<void> {
   return queueStateWrite(key, 'state_save', { key, value })
+}
+
+export function saveWorkflow(config: WorkflowConfig, expectedVersion: string): Promise<{ version: string }> {
+  return request<{ version: string }>('workflow_save', 'POST', { workflow: config, expected_version: expectedVersion })
 }
 
 export function importLegacyState(state: Record<string, unknown[]>): Promise<void> {

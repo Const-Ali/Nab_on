@@ -25,6 +25,7 @@ import {
   logout as logoutFromServer,
   saveUser as createUserOnServer,
   setupAdmin as setupAdminOnServer,
+  saveWorkflow as saveWorkflowOnServer,
   syncSave,
   updateProfile as updateProfileOnServer,
   updateUser as updateUserOnServer,
@@ -39,7 +40,6 @@ import {
   applySavedFont,
 } from './app-lib'
 import type {
-  Status,
   Page,
   Permission,
   RoleDef,
@@ -61,6 +61,7 @@ import { Users } from './components/pages/Users'
 import { Reports } from './components/pages/Reports'
 import { Settings } from './components/pages/Settings'
 import { PersonModal } from './components/modals/PersonModal'
+import { WorkflowManager } from './components/modals/WorkflowManager'
 import { CreateModal } from './components/modals/CreateModal'
 import { RoleModal } from './components/modals/RoleModal'
 import { AddUserModal } from './components/modals/AddUserModal'
@@ -73,6 +74,8 @@ import { SearchModal } from './components/modals/SearchModal'
 import { PrintPerson } from './components/common/PrintPerson'
 import { PrintReport } from './components/common/PrintReport'
 import { cn } from './components/ui'
+import { defaultWorkflowConfig, normalizeWorkflowConfig, checklistMissing, stageById, stageIdForPerson } from './workflow'
+import type { WorkflowConfig } from './workflow'
 
 const legacyKeys = ['nab:people', 'nab:activities', 'nab:audit', 'nab:roles', 'nab:notes'] as const
 
@@ -169,6 +172,9 @@ export default function App() {
 
   const [page, setPage] = useState<Page>('dashboard')
   const [people, setPeople] = useState<Person[]>([])
+  const [workflowConfig, setWorkflowConfig] = useState<WorkflowConfig>(defaultWorkflowConfig)
+  const [workflowVersion, setWorkflowVersion] = useState('')
+  const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<PersonFilter>('همه وضعیت‌ها')
   const [tagFilter, setTagFilter] = useState('همه برچسب‌ها')
@@ -200,6 +206,8 @@ export default function App() {
     setSession({ username: data.user.username })
     setUsers(data.users.map(normalizeUser))
     setPeople(Array.isArray(data.state['nab:people']) ? data.state['nab:people'] as Person[] : [])
+    setWorkflowConfig(normalizeWorkflowConfig(data.state['nab:workflow']?.[0]))
+    setWorkflowVersion(data.state_versions['nab:workflow'] ?? '')
     setActivities(Array.isArray(data.state['nab:activities']) ? data.state['nab:activities'] as Activity[] : [])
     setAudit(Array.isArray(data.state['nab:audit']) ? data.state['nab:audit'] as Audit[] : [])
     setRoles(Array.isArray(data.state['nab:roles']) && data.state['nab:roles'].length ? data.state['nab:roles'] as RoleDef[] : defaultRoles)
@@ -238,6 +246,8 @@ export default function App() {
       setServerReady(false)
       setUsers([])
       setPeople([])
+      setWorkflowConfig(defaultWorkflowConfig)
+      setWorkflowVersion('')
       setActivities([])
       setAudit([])
       setRoles([])
@@ -338,7 +348,7 @@ export default function App() {
   useEffect(() => {
     if (session) {
       const urgentPeople = people.filter(p => {
-        const left = deadlineLeft(p)
+        const left = deadlineLeft(p, workflowConfig)
         return left !== null && left <= 1
       })
       if (urgentPeople.length > 0) {
@@ -347,7 +357,7 @@ export default function App() {
         })
       }
     }
-  }, [session, people])
+  }, [session, people, workflowConfig])
 
   // کلید میانبر Ctrl+K
   useEffect(() => {
@@ -398,12 +408,32 @@ export default function App() {
     setTimeout(() => setToast(null), 4000)
   }
 
+  const handleSaveWorkflow = async (nextConfig: WorkflowConfig) => {
+    if (currentUser?.role !== 'admin') throw new Error('فقط مدیر سیستم می‌تواند گردش‌کار را مدیریت کند.')
+    if (!workflowVersion) throw new Error('نسخهٔ گردش‌کار در دسترس نیست؛ صفحه را تازه‌سازی کنید.')
+    const result = await saveWorkflowOnServer(nextConfig, workflowVersion)
+    setWorkflowVersion(result.version)
+    setWorkflowConfig(nextConfig)
+    const renamePerson = (person: Person): Person => {
+      const id = stageIdForPerson(person, nextConfig)
+      const stage = stageById(nextConfig, id)
+      return { ...person, stageId: id, status: stage?.label ?? person.status }
+    }
+    setPeople(cur => cur.map(renamePerson))
+    setSelected(cur => cur ? renamePerson(cur) : cur)
+    setWorkflowManagerOpen(false)
+    showToast('گردش‌کار با موفقیت ذخیره شد؛ مسیرهای فعلی حفظ شدند.')
+  }
+
   const handleLogout = async () => {
     try { await logoutFromServer() } catch { /* The local view is cleared even if the host is offline. */ }
     setSession(null)
     setServerReady(false)
     setUsers([])
     setPeople([])
+    setWorkflowConfig(defaultWorkflowConfig)
+    setWorkflowVersion('')
+    setWorkflowManagerOpen(false)
     setActivities([])
     setAudit([])
     setRoles([])
@@ -470,10 +500,26 @@ export default function App() {
     showToast(`پرونده «${p.firstName} ${p.lastName}» ثبت شد.`)
   }
 
-  const handleUpdateStatus = (p: Person, next: Status, reason: string | null) => {
-    const prev = p.status
+  const handleUpdateStatus = (p: Person, targetStageId: string, reason: string | null) => {
+    if (!has('change_status')) { showToast('مجوز تغییر مرحله را ندارید.'); return }
+    const currentStageId = stageIdForPerson(p, workflowConfig)
+    const currentStage = stageById(workflowConfig, currentStageId)
+    const targetStage = stageById(workflowConfig, targetStageId)
+    if (!currentStage || !targetStage || targetStage.archived || !currentStage.nextStageIds.includes(targetStageId)) {
+      showToast('این مسیر انتقال در گردش‌کار تعریف نشده است.')
+      return
+    }
+    const missing = checklistMissing(currentStage, p)
+    if (missing.length) {
+      showToast(`ابتدا چک‌لیست مرحله را تکمیل کنید: ${missing.map(item => item.label).join('، ')}`)
+      return
+    }
+    if (currentStageId === targetStageId) return
+    const prev = currentStage.label
+    const next = targetStage.label
     const updated: Person = {
       ...p,
+      stageId: targetStageId,
       status: next,
       updatedAt: nowStamp(),
       updatedBy: currentUser?.name ?? 'کاربر',
@@ -484,7 +530,7 @@ export default function App() {
       id: uid('ACT'),
       personId: p.id,
       personName: `${p.firstName} ${p.lastName}`,
-      action: next === 'رد شده' ? 'رد پرونده' : 'تغییر وضعیت',
+      action: targetStageId === 'rejected' ? 'رد پرونده' : 'تغییر وضعیت',
       previousStatus: prev,
       newStatus: next,
       rejectionReason: reason,
@@ -496,7 +542,81 @@ export default function App() {
     setActivities(cur => [act, ...cur])
     auditLog('تغییر وضعیت پرونده', `${p.id}: از «${prev}» به «${next}»`)
     playChime('complete')
-    showToast(`وضعیت پرونده به «${next}» به‌روزرسانی شد.`)
+    showToast(`مرحلهٔ پرونده به «${next}» به‌روزرسانی شد.`)
+  }
+
+  const handleChecklistToggle = (p: Person, stageId: string, itemId: string, done: boolean) => {
+    if (!has('change_status') || !done) return
+    const currentStageId = stageIdForPerson(p, workflowConfig)
+    const stage = stageById(workflowConfig, stageId)
+    const item = stage?.checklist.find(rule => rule.id === itemId)
+    const existingMark = p.stageChecklist?.[stageId]?.[itemId]
+    if (stageId !== currentStageId || !stage || !item || existingMark?.done) return
+    const checkedAt = new Date().toISOString()
+    const updated: Person = {
+      ...p,
+      stageChecklist: {
+        ...(p.stageChecklist ?? {}),
+        [stageId]: {
+          ...(p.stageChecklist?.[stageId] ?? {}),
+          [itemId]: { done: true, checkedBy: currentUser?.name ?? 'کاربر', checkedAt },
+        },
+      },
+      updatedAt: nowStamp(),
+      updatedBy: currentUser?.name ?? 'کاربر',
+      ts: nowTs(),
+    }
+    setPeople(cur => cur.map(person => person.id === p.id ? updated : person))
+    setSelected(updated)
+    const activity: Activity = {
+      id: uid('ACT'),
+      personId: p.id,
+      personName: `${p.firstName} ${p.lastName}`,
+      action: 'تکمیل چک‌لیست',
+      previousStatus: null,
+      newStatus: null,
+      rejectionReason: `${stage.label}: ${item.label}`,
+      createdAt: nowStamp(),
+      createdBy: currentUser?.name ?? 'کاربر',
+      createdByRole: currentUser?.role ?? 'admin',
+      ts: nowTs(),
+    }
+    setActivities(cur => [activity, ...cur])
+    auditLog('تکمیل چک‌لیست', `${p.id}: ${stage.label} — ${item.label}`)
+    showToast(`«${item.label}» با نام شما و زمان ثبت ذخیره شد.`)
+  }
+
+  const handleBulkStatus = (ids: string[], targetStageId: string) => {
+    if (!has('change_status')) { showToast('مجوز تغییر مرحله را ندارید.'); return }
+    const selectedPeople = people.filter(person => ids.includes(person.id))
+    if (!selectedPeople.length || selectedPeople.length !== new Set(ids).size) { showToast('فهرست پرونده‌های انتخاب‌شده معتبر نیست.'); return }
+    const sourceIds = new Set(selectedPeople.map(person => stageIdForPerson(person, workflowConfig)))
+    if (sourceIds.size !== 1) { showToast('انتقال گروهی فقط برای پرونده‌های هم‌مرحله ممکن است.'); return }
+    const sourceId = [...sourceIds][0]
+    const sourceStage = stageById(workflowConfig, sourceId)
+    const targetStage = stageById(workflowConfig, targetStageId)
+    if (!sourceStage || !targetStage || targetStage.archived || targetStageId === 'rejected' || !sourceStage.nextStageIds.includes(targetStageId)) {
+      showToast('مرحلهٔ مقصد در مسیر بعدی مشترک این پرونده‌ها نیست.')
+      return
+    }
+    const incomplete = selectedPeople.filter(person => checklistMissing(sourceStage, person).length > 0)
+    if (incomplete.length) { showToast(`چک‌لیست ${incomplete.length.toLocaleString('fa-IR')} پرونده کامل نیست؛ انتقال انجام نشد.`); return }
+    const timestamp = nowStamp()
+    const now = nowTs()
+    const updated = selectedPeople.map(person => ({ ...person, stageId: targetStageId, status: targetStage.label, updatedAt: timestamp, updatedBy: currentUser?.name ?? 'کاربر', ts: now }))
+    const byId = new Map(updated.map(person => [person.id, person]))
+    setPeople(cur => cur.map(person => byId.get(person.id) ?? person))
+    setActivities(cur => [
+      ...updated.map(person => ({
+        id: uid('ACT'), personId: person.id, personName: `${person.firstName} ${person.lastName}`,
+        action: 'تغییر وضعیت', previousStatus: sourceStage.label, newStatus: targetStage.label,
+        rejectionReason: null, createdAt: timestamp, createdBy: currentUser?.name ?? 'کاربر',
+        createdByRole: currentUser?.role ?? 'admin', ts: now,
+      })),
+      ...cur,
+    ])
+    auditLog('تغییر وضعیت پرونده', `انتقال گروهی ${updated.length} پرونده از «${sourceStage.label}» به «${targetStage.label}»`)
+    showToast(`مرحلهٔ ${updated.length.toLocaleString('fa-IR')} پرونده تغییر یافت.`)
   }
 
   const handleDeletePerson = (p: Person) => {
@@ -914,6 +1034,7 @@ export default function App() {
           {page === 'dashboard' && (
             <Dashboard
               people={people}
+              workflowConfig={workflowConfig}
               activities={activities}
               trend={activityTrend}
               canViewActivities={has('view_activities')}
@@ -929,6 +1050,7 @@ export default function App() {
           {page === 'persons' && (
             <Persons
               people={people}
+              workflowConfig={workflowConfig}
               query={query}
               filter={filter}
               tagFilter={tagFilter}
@@ -939,13 +1061,11 @@ export default function App() {
               setTagFilter={setTagFilter}
               setSortBy={setSortBy}
               canCreate={has('create_person')}
+              canChange={has('change_status')}
               canDelete={has('delete_person')}
               onCreate={() => setCreateOpen(true)}
               onSelect={setSelected}
-              onBulkStatus={(ids, st) => {
-                setPeople(cur => cur.map(p => (ids.includes(p.id) ? { ...p, status: st, updatedAt: nowStamp() } : p)))
-                showToast(`وضعیت ${ids.length} پرونده تغییر یافت.`)
-              }}
+              onBulkStatus={handleBulkStatus}
               onBulkDelete={ids => {
                 if (!window.confirm(`حذف ${ids.length} پرونده انتخاب‌شده؟`)) return false
                 setPeople(cur => cur.filter(p => !ids.includes(p.id)))
@@ -958,6 +1078,7 @@ export default function App() {
           {page === 'workflow' && (
             <WorkflowBoard
               people={people}
+              workflowConfig={workflowConfig}
               canChange={has('change_status')}
               onSelect={setSelected}
               onDropPerson={(id, st) => {
@@ -1006,21 +1127,30 @@ export default function App() {
               people={people}
               activities={activities}
               audit={audit}
+              workflowConfig={workflowConfig}
               todayCount={todayActivityCount}
               onExport={exportAllPeople}
               onPrint={() => window.print()}
             />
           )}
 
-          {page === 'settings' && <Settings onSaved={() => showToast('تنظیمات با موفقیت ذخیره شد.')} />}
+          {page === 'settings' && <Settings isAdmin={currentUser.role === 'admin'} onManageWorkflow={() => setWorkflowManagerOpen(true)} onSaved={() => showToast('تنظیمات با موفقیت ذخیره شد.')} />}
         </div>
       </main>
 
       {/* Modals */}
+      {workflowManagerOpen && currentUser.role === 'admin' && (
+        <WorkflowManager
+          config={workflowConfig}
+          onClose={() => setWorkflowManagerOpen(false)}
+          onSave={handleSaveWorkflow}
+        />
+      )}
       {createOpen && (
         <CreateModal
           existing={people}
           creatorName={currentUser.name}
+          workflowConfig={workflowConfig}
           onClose={() => setCreateOpen(false)}
           onCreate={handleCreatePerson}
         />
@@ -1029,6 +1159,7 @@ export default function App() {
       {selected && (
         <PersonModal
           person={selected}
+          workflowConfig={workflowConfig}
           notes={notes.filter(n => n.personId === selected.id)}
           history={activities.filter(a => a.personId === selected.id)}
           meUsername={currentUser.username}
@@ -1039,6 +1170,7 @@ export default function App() {
           canEdit={has('edit_person')}
           onClose={() => setSelected(null)}
           onUpdate={handleUpdateStatus}
+          onChecklistToggle={handleChecklistToggle}
           onDelete={handleDeletePerson}
           onEdit={p => {
             setEditingPerson(p)
@@ -1147,11 +1279,12 @@ export default function App() {
           person={selected}
           notes={notes.filter(n => n.personId === selected.id)}
           history={activities.filter(a => a.personId === selected.id)}
+          workflowConfig={workflowConfig}
         />
       )}
 
       {page === 'reports' && (
-        <PrintReport people={people} activities={activities} printedBy={currentUser.name} />
+        <PrintReport people={people} activities={activities} printedBy={currentUser.name} workflowConfig={workflowConfig} />
       )}
 
       <nav aria-label="پیمایش موبایل" className="fixed inset-x-0 bottom-0 z-40 flex min-h-16 items-stretch gap-1 border-t border-slate-200 bg-white/95 px-1.5 py-1.5 pb-[max(.375rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden dark:border-slate-800 dark:bg-slate-900/95">

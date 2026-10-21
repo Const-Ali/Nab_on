@@ -5,10 +5,13 @@ import { jalaliToday, normalizeDigits, nowStamp } from '../../shared'
 import { BirthDateField } from '../../shared-ui'
 import { validNationalId, validBirthDate, validDeadlineDate } from '../../app-lib'
 import type { Person } from '../../types'
+import type { WorkflowConfig } from '../../workflow'
+import { stageById } from '../../workflow'
 import { PhotoField } from '../common/PhotoField'
 import { backdropCls, cn, errorBox, formGrid, inputCls, labelCls, modalActions, modalBox, modalFormLayout, modalH2, modalP, modalSmall, modalX } from '../ui'
 
-export function CreateModal({ existing, creatorName, onClose, onCreate }: { existing: Person[]; creatorName: string; onClose: () => void; onCreate: (p: Person) => void }) {
+export function CreateModal({ existing, creatorName, workflowConfig, onClose, onCreate }: { existing: Person[]; creatorName: string; workflowConfig: WorkflowConfig; onClose: () => void; onCreate: (p: Person) => void }) {
+  const startStage = stageById(workflowConfig, workflowConfig.startStageId)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [nationalId, setNationalId] = useState('')
@@ -53,7 +56,9 @@ export function CreateModal({ existing, creatorName, onClose, onCreate }: { exis
       fatherName: fatherName.trim(),
       photo: photo || undefined,
       deadline: dl || undefined,
-      status: 'درخواست پرونده',
+      status: startStage?.label ?? 'درخواست پرونده',
+      stageId: startStage?.id ?? workflowConfig.startStageId,
+      stageChecklist: {},
       updatedAt: nowStamp(),
       updatedBy: creatorName,
     })

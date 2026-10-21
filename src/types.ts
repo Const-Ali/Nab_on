@@ -1,16 +1,5 @@
-export type Status =
-  | 'درخواست پرونده'
-  | 'پرونده پرسنلی'
-  | 'کارت عادی'
-  | 'سه‌برگی عادی'
-  | 'تکمیل اطلاعات'
-  | 'پرونده فعال'
-  | 'ارسال به مرکز'
-  | 'بررسی مرکز'
-  | 'تأیید شده'
-  | 'رد شده'
-  | 'ارسال به شرکت'
-  | 'پایان کار'
+// Stage labels are editable by an administrator, so status values are strings at runtime.
+export type Status = string
 
 export type Page =
   | 'dashboard'
@@ -44,6 +33,10 @@ export type Person = {
   birthDate: string
   fatherName: string
   status: Status
+  /** Stable workflow identifier; keeps records intact when an admin renames a stage. */
+  stageId?: string
+  /** Per-stage manual checklist marks, verified by the PHP API. */
+  stageChecklist?: Record<string, Record<string, { done: boolean; checkedBy?: string; checkedAt?: string }>>
   updatedAt: string
   updatedBy: string
   photo?: string

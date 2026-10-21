@@ -1,9 +1,11 @@
 import { jalaliMonthNames, jalaliParts, nowStamp, toPersianDigits } from '../../shared'
-import { workflow, activityMonth, computeUserStats, computeBottlenecks } from '../../app-lib'
+import { activityMonth, computeUserStats, computeBottlenecks } from '../../app-lib'
 import type { Person, Activity } from '../../types'
+import type { WorkflowConfig } from '../../workflow'
+import { activeStages, stageIdForPerson } from '../../workflow'
 import { QRCodeSvg } from './QRCodeSvg'
 
-export function PrintReport({ people, activities, printedBy }: { people: Person[]; activities: Activity[]; printedBy: string }) {
+export function PrintReport({ people, activities, printedBy, workflowConfig }: { people: Person[]; activities: Activity[]; printedBy: string; workflowConfig: WorkflowConfig }) {
   const todayJ = jalaliParts(new Date())
   const monthName = jalaliMonthNames[todayJ.m - 1]
   const monthActs = activities.filter(a => {
@@ -11,7 +13,10 @@ export function PrintReport({ people, activities, printedBy }: { people: Person[
     return am && am.y === todayJ.y && am.m === todayJ.m
   })
   const userStats = computeUserStats(monthActs)
-  const bottlenecks = computeBottlenecks(monthActs)
+  const bottlenecks = computeBottlenecks(monthActs, workflowConfig)
+  const workflowStages = activeStages(workflowConfig)
+  const countByStageId = (id: string) => people.filter(person => stageIdForPerson(person, workflowConfig) === id).length
+  const countByMetric = (metric: string) => people.filter(person => workflowConfig.stages.find(stage => stage.id === stageIdForPerson(person, workflowConfig))?.metric === metric).length
   const qrData = `https://nab.internal/verify/report?m=${todayJ.m}&y=${todayJ.y}&total=${people.length}&by=${encodeURIComponent(printedBy)}`
 
   return (
@@ -47,15 +52,15 @@ export function PrintReport({ people, activities, printedBy }: { people: Person[
           </tr>
           <tr>
             <td>پرونده‌های فعال و جاری</td>
-            <td><b>{people.filter(p => p.status === 'پرونده فعال').length.toLocaleString('fa-IR')}</b></td>
+            <td><b>{countByMetric('active').toLocaleString('fa-IR')}</b></td>
             <td>پرونده‌های رد شده</td>
-            <td><b>{people.filter(p => p.status === 'رد شده').length.toLocaleString('fa-IR')}</b></td>
+            <td><b>{countByMetric('rejected').toLocaleString('fa-IR')}</b></td>
           </tr>
           <tr>
             <td>در انتظار بررسی مرکز</td>
-            <td><b>{people.filter(p => p.status === 'بررسی مرکز').length.toLocaleString('fa-IR')}</b></td>
+            <td><b>{countByMetric('review').toLocaleString('fa-IR')}</b></td>
             <td>مراحل پایان‌یافته</td>
-            <td><b>{people.filter(p => p.status === 'پایان کار').length.toLocaleString('fa-IR')}</b></td>
+            <td><b>{countByMetric('completed').toLocaleString('fa-IR')}</b></td>
           </tr>
         </tbody>
       </table>
@@ -63,12 +68,12 @@ export function PrintReport({ people, activities, printedBy }: { people: Person[
       <h3>توزیع آماری پرونده‌ها در مراحل گردش‌کار</h3>
       <table className="print-table">
         <tbody>
-          {workflow.map(s => (
-            <tr key={s}>
-              <td>{s}</td>
+          {workflowStages.map(stage => (
+            <tr key={stage.id}>
+              <td>{stage.label}</td>
               <td colSpan={3}>
-                <b>{people.filter(p => p.status === s).length.toLocaleString('fa-IR')} پرونده</b>
-                {' '}({people.length > 0 ? ((people.filter(p => p.status === s).length / people.length) * 100).toFixed(1).replace('.', '٫').replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]) : '۰'}٪)
+                <b>{countByStageId(stage.id).toLocaleString('fa-IR')} پرونده</b>
+                {' '}({people.length > 0 ? ((countByStageId(stage.id) / people.length) * 100).toFixed(1).replace('.', '٫').replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]) : '۰'}٪)
               </td>
             </tr>
           ))}

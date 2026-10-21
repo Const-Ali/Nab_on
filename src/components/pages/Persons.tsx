@@ -1,9 +1,11 @@
 import { Button } from '../common/Button'
 import { useState } from 'react'
 import { Avatar, Heading } from '../../shared-ui'
-import { workflow, personTags, STALE_LIMIT, deadlineLeft, PAGE_SIZE, staleDays, downloadCsv } from '../../app-lib'
+import { personTags, STALE_LIMIT, deadlineLeft, PAGE_SIZE, staleDays, downloadCsv } from '../../app-lib'
+import type { WorkflowConfig, WorkflowStage } from '../../workflow'
+import { activeStages, checklistMissing, stageById, stageIdForPerson } from '../../workflow'
 import { formatServerTimestamp, jalaliJdn, jalaliMonthNames, normalizeText, timestampToMs } from '../../shared'
-import type { Status, Person, PersonFilter } from '../../types'
+import type { Person, PersonFilter } from '../../types'
 import { Badge } from '../common/Badge'
 import { cn, emptyBox, panelBox, rowCheck, searchBox, searchInput, selectCls } from '../ui'
 
@@ -16,6 +18,7 @@ const tagToneClasses: Record<string, string> = {
 
 export function Persons({
   people,
+  workflowConfig,
   query,
   filter,
   tagFilter,
@@ -26,6 +29,7 @@ export function Persons({
   setTagFilter,
   setSortBy,
   canCreate,
+  canChange,
   canDelete,
   onCreate,
   onSelect,
@@ -33,6 +37,7 @@ export function Persons({
   onBulkDelete,
 }: {
   people: Person[]
+  workflowConfig: WorkflowConfig
   query: string
   filter: PersonFilter
   tagFilter: string
@@ -43,15 +48,26 @@ export function Persons({
   setTagFilter: (v: string) => void
   setSortBy: (v: string) => void
   canCreate: boolean
+  canChange: boolean
   canDelete: boolean
   onCreate: () => void
   onSelect: (p: Person) => void
-  onBulkStatus: (ids: string[], target: Status) => void
+  onBulkStatus: (ids: string[], targetStageId: string) => void
   onBulkDelete: (ids: string[]) => boolean
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [pageNo, setPageNo] = useState(0)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const workflowStages = activeStages(workflowConfig)
+  const selectedPeople = people.filter(person => selectedIds.has(person.id))
+  const selectedStageIds = new Set(selectedPeople.map(person => stageIdForPerson(person, workflowConfig)))
+  const commonSelectedStage = selectedStageIds.size === 1 ? stageById(workflowConfig, [...selectedStageIds][0]) : undefined
+  const bulkOptions = canChange && commonSelectedStage
+    ? commonSelectedStage.nextStageIds.map(id => stageById(workflowConfig, id)).filter((stage): stage is WorkflowStage => Boolean(stage && !stage.archived && stage.id !== 'rejected'))
+    : []
+  const bulkChecklistIncomplete = commonSelectedStage
+    ? selectedPeople.filter(person => checklistMissing(commonSelectedStage, person).length > 0).length
+    : 0
 
   const reset = <A,>(fn: (v: A) => void) => (value: A) => {
     fn(value)
@@ -63,7 +79,7 @@ export function Persons({
   const filteredPeople = people.filter(person => {
     const fields = [person.id, person.firstName, person.lastName, person.fatherName, person.nationalId, person.birthDate]
     const matchesQuery = !normalizedQuery || fields.some(field => normalizeText(String(field ?? '')).toLocaleLowerCase('fa-IR').includes(normalizedQuery))
-    const dueIn = deadlineLeft(person)
+    const dueIn = deadlineLeft(person, workflowConfig)
     const matchesStatus = filter === 'همه وضعیت‌ها'
       || (filter === 'ارجاع‌شده به من' && person.assignee === selfUsername)
       || (filter === 'سررسید نزدیک' && dueIn !== null && dueIn <= 3)
@@ -94,7 +110,7 @@ export function Persons({
   const sortedPeople = [...filteredPeople]
   if (sortBy === 'recent') sortedPeople.sort((a, b) => updateOrder(b) - updateOrder(a))
   else if (sortBy === 'name') sortedPeople.sort((a, b) => a.lastName.localeCompare(b.lastName, 'fa') || a.firstName.localeCompare(b.firstName, 'fa'))
-  else if (sortBy === 'status') sortedPeople.sort((a, b) => workflow.indexOf(a.status) - workflow.indexOf(b.status))
+  else if (sortBy === 'status') sortedPeople.sort((a, b) => workflowStages.findIndex(stage => stage.id === stageIdForPerson(a, workflowConfig)) - workflowStages.findIndex(stage => stage.id === stageIdForPerson(b, workflowConfig)))
 
   const hasActiveFilters = Boolean(query.trim()) || filter !== 'همه وضعیت‌ها' || tagFilter !== 'همه برچسب‌ها' || sortBy !== 'default'
   const activeFilterCount = Number(filter !== 'همه وضعیت‌ها') + Number(tagFilter !== 'همه برچسب‌ها') + Number(sortBy !== 'default')
@@ -172,7 +188,7 @@ export function Persons({
               <option value="همه وضعیت‌ها">همه وضعیت‌ها</option>
               <option value="ارجاع‌شده به من">ارجاع‌شده به من</option>
               <option value="سررسید نزدیک">سررسید نزدیک</option>
-              {workflow.map(s => <option key={s} value={s}>{s}</option>)}
+              {workflowStages.map(stage => <option key={stage.id} value={stage.label}>{stage.label}</option>)}
             </select>
             <select aria-label="فیلتر بر اساس برچسب" className={cn(selectCls, 'mt-0 w-full lg:w-36')} value={tagFilter} onChange={e => reset(setTagFilter)(e.target.value)}>
               <option value="همه برچسب‌ها">همه برچسب‌ها</option>
@@ -204,17 +220,22 @@ export function Persons({
         {selectedIds.size > 0 && (
           <div className="flex flex-col gap-3 border-b border-indigo-100 bg-indigo-50 p-4 sm:flex-row sm:items-center dark:border-indigo-900/60 dark:bg-indigo-950/30">
             <b className="text-sm text-indigo-800 dark:text-indigo-200">{selectedIds.size.toLocaleString('fa-IR')} پرونده انتخاب شده</b>
-            <select className={cn(selectCls, 'mt-0 sm:w-52')}
-              defaultValue=""
-              onChange={e => {
-                if (!e.target.value) return
-                onBulkStatus([...selectedIds], e.target.value as Status)
-                setSelectedIds(new Set())
-              }}
-            >
-              <option value="" disabled>تغییر وضعیت گروهی...</option>
-              {workflow.filter(s => s !== 'رد شده').map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            {bulkOptions.length > 0 && (
+              <select className={cn(selectCls, 'mt-0 sm:w-52')}
+                defaultValue=""
+                aria-label="انتقال گروهی به مرحلهٔ بعد مجاز"
+                onChange={e => {
+                  if (!e.target.value) return
+                  onBulkStatus([...selectedIds], e.target.value)
+                  setSelectedIds(new Set())
+                }}
+              >
+                <option value="" disabled>انتقال به مرحلهٔ بعد...</option>
+                {bulkOptions.map(stage => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+              </select>
+            )}
+            {canChange && !bulkOptions.length && <small className="text-xs leading-5 text-slate-500 dark:text-slate-400">برای انتقال گروهی، پرونده‌ها باید در یک مرحلهٔ مشترک و دارای مسیر بعدی باشند.</small>}
+            {bulkChecklistIncomplete > 0 && <small className="text-xs leading-5 text-amber-700 dark:text-amber-300">چک‌لیست {bulkChecklistIncomplete.toLocaleString('fa-IR')} پرونده هنوز کامل نیست.</small>}
             <Button type="button" variant="outline" size="xs" onClick={exportSelected}> خروجی اکسل</Button>
             {canDelete && (
               <Button
@@ -272,10 +293,10 @@ export function Persons({
               <b className="font-medium">{p.birthDate}</b>
             </span>
             <span className="col-span-2 flex min-w-0 flex-wrap items-center gap-1.5 lg:col-span-1">
-              <Badge status={p.status} />
-              {staleDays(p) >= STALE_LIMIT && <i className="inline-flex rounded-md bg-rose-50 px-2 py-1 text-xs font-medium not-italic text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{staleDays(p).toLocaleString('fa-IR')} روز توقف</i>}
+              <Badge status={stageById(workflowConfig, stageIdForPerson(p, workflowConfig))?.label ?? p.status} tone={stageById(workflowConfig, stageIdForPerson(p, workflowConfig))?.tone} />
+              {staleDays(p, workflowConfig) >= STALE_LIMIT && <i className="inline-flex rounded-md bg-rose-50 px-2 py-1 text-xs font-medium not-italic text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{staleDays(p, workflowConfig).toLocaleString('fa-IR')} روز توقف</i>}
               {(() => {
-                const l = deadlineLeft(p)
+                const l = deadlineLeft(p, workflowConfig)
                 return l !== null
                   ? <i className={cn('inline-flex rounded-md px-2 py-1 text-xs font-medium not-italic', l < 0 && 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300', l >= 0 && l <= 3 && 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300', l > 3 && 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300')}>{l < 0 ? `${Math.abs(l).toLocaleString('fa-IR')} روز گذشته` : l === 0 ? 'سررسید امروز' : `${l.toLocaleString('fa-IR')} روز مانده`}</i>
                   : null

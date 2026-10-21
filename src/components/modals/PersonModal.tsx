@@ -2,13 +2,16 @@ import { Button } from '../common/Button'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar } from '../../shared-ui'
 import { formatServerTimestamp } from '../../shared'
-import { workflow, nextStatuses, personTags, STALE_LIMIT, deadlineLeft, staleDays } from '../../app-lib'
-import type { Status, Person, Activity, User, Note } from '../../types'
+import { personTags, STALE_LIMIT, deadlineLeft, staleDays } from '../../app-lib'
+import type { Person, Activity, User, Note } from '../../types'
+import type { WorkflowConfig, WorkflowStage } from '../../workflow'
+import { checklistMissing, stageById, stageIdForPerson } from '../../workflow'
 import { Badge } from '../common/Badge'
 import { backdropCls, cn, modalBox, modalFormLayout, personDetailLayout } from '../ui'
 
 export function PersonModal({
   person,
+  workflowConfig,
   notes,
   history,
   meUsername,
@@ -19,6 +22,7 @@ export function PersonModal({
   canEdit,
   onClose,
   onUpdate,
+  onChecklistToggle,
   onDelete,
   onEdit,
   onAssign,
@@ -27,6 +31,7 @@ export function PersonModal({
   onDeleteNote,
 }: {
   person: Person
+  workflowConfig: WorkflowConfig
   notes: Note[]
   history: Activity[]
   meUsername: string
@@ -36,7 +41,8 @@ export function PersonModal({
   canDelete: boolean
   canEdit: boolean
   onClose: () => void
-  onUpdate: (p: Person, s: Status, r: string | null) => void
+  onUpdate: (p: Person, targetStageId: string, r: string | null) => void
+  onChecklistToggle: (p: Person, stageId: string, itemId: string, done: boolean) => void
   onDelete: (p: Person) => void
   onEdit: (p: Person) => void
   onAssign: (p: Person, username: string) => void
@@ -44,9 +50,17 @@ export function PersonModal({
   onEditNote: (noteId: string, text: string) => void
   onDeleteNote: (noteId: string) => void
 }) {
-  const [status, setStatus] = useState(person.status)
+  const currentStageId = stageIdForPerson(person, workflowConfig)
+  const currentStage = stageById(workflowConfig, currentStageId)
+  const [targetStageId, setTargetStageId] = useState(currentStageId)
   const [reason, setReason] = useState('')
-  const options = nextStatuses[person.status] ?? []
+  const options = (currentStage?.nextStageIds ?? []).map(id => stageById(workflowConfig, id)).filter((stage): stage is WorkflowStage => Boolean(stage && !stage.archived))
+  const targetStage = stageById(workflowConfig, targetStageId)
+  const needsReason = targetStageId === 'rejected'
+  const missingChecklist = currentStage ? checklistMissing(currentStage, person) : []
+  const checklistMarks = person.stageChecklist?.[currentStageId] ?? {}
+  const stages = workflowConfig.stages
+  const currentStatus = currentStage?.label ?? person.status
   const [noteText, setNoteText] = useState('')
   const [tab, setTab] = useState<'chat' | 'history'>('chat')
   const [editingNote, setEditingNote] = useState<string | null>(null)
@@ -69,14 +83,14 @@ export function PersonModal({
   const renderText = (text: string) =>
     text.split(/(\s+)/).map((w, i) => (w.startsWith('@') && w.length > 1 ? <span key={i} className="mention">{w}</span> : w))
 
-  const dLeft = deadlineLeft(person)
+  const dLeft = deadlineLeft(person, workflowConfig)
   const chatRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' })
   }, [notes.length])
 
-  const currentIndex = workflow.indexOf(person.status)
+  const currentIndex = stages.findIndex(stage => stage.id === currentStageId)
   const ownsNote = (note: Note) => note.authorUsername === meUsername || (!note.authorUsername && isAdmin)
 
   const submitNote = () => {
@@ -102,13 +116,13 @@ export function PersonModal({
             <small>آخرین ثبت: {formatServerTimestamp(person.updatedAt, person.ts)} · {person.updatedBy}</small>
           </span>
           <span className="sum-side">
-            <Badge status={person.status} />
+            <Badge status={currentStatus} tone={currentStage?.tone} />
             {(person.tags ?? []).map(t => <span className={`tag-chip sm ${personTags[t]}`} key={t}>{t}</span>)}
           </span>
         </div>
-        {staleDays(person) >= STALE_LIMIT && (
+        {staleDays(person, workflowConfig) >= STALE_LIMIT && (
           <div className="modal-note stale-note">
-            ⏰ این پرونده {staleDays(person).toLocaleString('fa-IR')} روز است که در مرحله «{person.status}» متوقف مانده است.
+            ⏰ این پرونده {staleDays(person, workflowConfig).toLocaleString('fa-IR')} روز است که در مرحله «{currentStatus}» متوقف مانده است.
           </div>
         )}
         <div className="details">
@@ -131,26 +145,62 @@ export function PersonModal({
         </div>
         <h3 className="modal-h">مراحل گردش‌کار</h3>
         <div className="steps-list">
-          {workflow.map((s, i) => (
-            <div className={`step-item ${i < currentIndex ? 'done' : ''} ${i === currentIndex ? 'current' : ''}`} key={s}>
+          {stages.map((stage, i) => (
+            <div className={`step-item ${i < currentIndex ? 'done' : ''} ${i === currentIndex ? 'current' : ''}`} key={stage.id}>
               <i>{(i + 1).toLocaleString('fa-IR')}</i>
-              <span>{s}</span>
+              <span>{stage.label}{stage.archived ? ' (بایگانی)' : ''}</span>
               {i === currentIndex && <em>وضعیت فعلی</em>}
             </div>
           ))}
         </div>
+        <section className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">چک‌لیست مرحلهٔ «{currentStatus}»</h3>
+            <small className="text-xs text-slate-500 dark:text-slate-400">{(currentStage?.checklist.length ?? 0) - missingChecklist.length} از {currentStage?.checklist.length ?? 0} مورد</small>
+          </div>
+          {!currentStage?.checklist.length ? (
+            <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">مدیر برای این مرحله چک‌لیستی تعریف نکرده است.</p>
+          ) : (
+            <div className="space-y-2">
+              {currentStage.checklist.map(rule => {
+                const mark = checklistMarks[rule.id]
+                const checked = Boolean(mark?.done)
+                return (
+                  <label key={rule.id} className="flex min-w-0 items-start gap-3 rounded-lg bg-white p-2.5 text-sm dark:bg-slate-900">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 shrink-0 accent-indigo-600"
+                      checked={checked}
+                      disabled={!canChange || checked}
+                      onChange={event => onChecklistToggle(person, currentStageId, rule.id, event.target.checked)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <b className={cn('block font-medium', checked ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-800 dark:text-slate-100')}>{rule.label}</b>
+                      {checked && <small className="mt-1 block text-xs text-slate-500 dark:text-slate-400">ثبت تکمیل توسط {mark?.checkedBy || 'کاربر'} · {formatServerTimestamp(mark?.checkedAt ?? '')}</small>}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+          {missingChecklist.length > 0 && (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              برای انتقال، ابتدا موارد ناقص را تکمیل کنید: {missingChecklist.map(item => item.label).join('، ')}
+            </p>
+          )}
+        </section>
         {canChange
           ? options.length
             ? (
               <label>
-                مرحله بعدی
-                <select value={status} onChange={e => setStatus(e.target.value as Status)}>
-                  <option value={person.status}>{person.status} (فعلی)</option>
-                  {options.map(s => <option key={s} value={s}>{s}</option>)}
+                مرحلهٔ مقصد
+                <select value={targetStageId} onChange={e => setTargetStageId(e.target.value)}>
+                  <option value={currentStageId}>{currentStatus} (فعلی)</option>
+                  {options.map(stage => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
                 </select>
               </label>
             )
-            : <div className="modal-note">این پرونده در وضعیت نهایی قرار دارد.</div>
+            : <div className="modal-note">این پرونده در مرحلهٔ پایانی قرار دارد.</div>
           : <div className="modal-note">شما دسترسی تغییر وضعیت ندارید؛ این صفحه فقط برای مشاهده است.</div>}
         {canChange && (
           <label className="assign-label">
@@ -161,7 +211,7 @@ export function PersonModal({
             </select>
           </label>
         )}
-        {canChange && status === 'رد شده' && (
+        {canChange && needsReason && (
           <label>
             علت رد اجباری
             <textarea required value={reason} onChange={e => setReason(e.target.value)} placeholder="علت رد پرونده را وارد کنید..." />
@@ -266,8 +316,8 @@ export function PersonModal({
             <Button
               type="button"
               variant="primary"
-              disabled={status === person.status || (status === 'رد شده' && !reason.trim())}
-              onClick={() => onUpdate(person, status, status === 'رد شده' ? reason : null)}
+              disabled={targetStageId === currentStageId || missingChecklist.length > 0 || (needsReason && !reason.trim()) || !targetStage}
+              onClick={() => onUpdate(person, targetStageId, needsReason ? reason : null)}
             >
                ذخیره تغییرات
             </Button>

@@ -1,7 +1,9 @@
 import { Button } from '../common/Button'
 import { Avatar, Heading } from '../../shared-ui'
 import { formatServerTimestamp } from '../../shared'
-import type { Status, Person, Activity } from '../../types'
+import type { Person, Activity } from '../../types'
+import type { WorkflowConfig } from '../../workflow'
+import { stageIdForPerson } from '../../workflow'
 import { Badge } from '../common/Badge'
 import { cn, emptyBox, panelBox, panelH2 } from '../ui'
 
@@ -9,6 +11,7 @@ type ActivityTrend = { labels: string[]; fullLabels: string[]; values: number[] 
 
 export function Dashboard({
   people,
+  workflowConfig,
   activities,
   trend,
   canViewActivities,
@@ -20,6 +23,7 @@ export function Dashboard({
   greeting,
 }: {
   people: Person[]
+  workflowConfig: WorkflowConfig
   activities: Activity[]
   trend: ActivityTrend
   canViewActivities: boolean
@@ -30,8 +34,13 @@ export function Dashboard({
   onSelect: (p: Person) => void
   greeting: string
 }) {
-  const count = (status: Status) => people.filter(person => person.status === status).length
-  const otherCount = Math.max(0, people.length - count('پرونده فعال') - count('بررسی مرکز') - count('رد شده'))
+  const countByMetric = (metric: string) => people.filter(person => workflowConfig.stages.find(stage => stage.id === stageIdForPerson(person, workflowConfig))?.metric === metric).length
+  const countByStageId = (stageId: string) => people.filter(person => stageIdForPerson(person, workflowConfig) === stageId).length
+  const activeCount = countByMetric('active')
+  const reviewCount = countByMetric('review')
+  const rejectedCount = countByMetric('rejected')
+  const requestCount = countByStageId(workflowConfig.startStageId)
+  const otherCount = Math.max(0, people.length - activeCount - reviewCount - rejectedCount)
   const trendTotal = trend.values.reduce((sum, value) => sum + value, 0)
   const hasTrend = canViewActivities && trendTotal > 0
   const chart = { left: 48, right: 616, top: 18, bottom: 160, width: 640, height: 194 }
@@ -54,19 +63,19 @@ export function Dashboard({
     },
     {
       label: 'درخواست‌های جدید',
-      value: count('درخواست پرونده'),
+      value: requestCount,
       caption: 'در مرحلهٔ درخواست پرونده',
       icon: <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M7 3.75h7l4 4V20a1.25 1.25 0 0 1-1.25 1.25h-9.5A1.25 1.25 0 0 1 6 20V5a1.25 1.25 0 0 1 1.25-1.25Z"/><path d="M14 4v4h4M9 13h6M9 16.5h6"/></svg>,
     },
     {
       label: 'پرونده‌های فعال',
-      value: count('پرونده فعال'),
+      value: activeCount,
       caption: 'در مرحلهٔ پروندهٔ فعال',
       icon: <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.3 2.3 4.8-5"/></svg>,
     },
     {
       label: 'در انتظار بررسی',
-      value: count('بررسی مرکز'),
+      value: reviewCount,
       caption: 'در مرحلهٔ بررسی مرکز',
       icon: <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg>,
     },
@@ -166,15 +175,15 @@ export function Dashboard({
               <b className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white">{people.length.toLocaleString('fa-IR')}</b>
               <small className="pb-1 text-sm text-slate-500 dark:text-slate-400">کل پرونده</small>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="img" aria-label={`${count('پرونده فعال')} پرونده فعال از ${people.length} پرونده`}>
-              <span className="block h-full rounded-full bg-indigo-600 transition-[width] duration-300 dark:bg-indigo-400" style={{ width: `${people.length ? Math.min(100, (count('پرونده فعال') / people.length) * 100) : 0}%` }} />
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="img" aria-label={`${activeCount} پرونده فعال از ${people.length} پرونده`}>
+              <span className="block h-full rounded-full bg-indigo-600 transition-[width] duration-300 dark:bg-indigo-400" style={{ width: `${people.length ? Math.min(100, (activeCount / people.length) * 100) : 0}%` }} />
             </div>
           </div>
           <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             {[
-              ['فعال', count('پرونده فعال'), 'bg-emerald-500'],
-              ['در انتظار بررسی', count('بررسی مرکز'), 'bg-amber-500'],
-              ['رد شده', count('رد شده'), 'bg-rose-500'],
+              ['فعال', activeCount, 'bg-emerald-500'],
+              ['در انتظار بررسی', reviewCount, 'bg-amber-500'],
+              ['رد شده', rejectedCount, 'bg-rose-500'],
               ['سایر مراحل', otherCount, 'bg-slate-400'],
             ].map(([label, value, color]) => (
               <div className="flex min-w-0 items-center gap-2 text-slate-600 dark:text-slate-300" key={String(label)}>

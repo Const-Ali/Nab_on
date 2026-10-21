@@ -75,6 +75,69 @@ function default_roles(): array {
     ];
 }
 
+function default_workflow_config(): array {
+    return [
+        'version' => 1,
+        'startStageId' => 'request',
+        'stages' => [
+            ['id' => 'request', 'label' => 'درخواست پرونده', 'tone' => 'blue', 'nextStageIds' => ['personnel'], 'checklist' => []],
+            ['id' => 'personnel', 'label' => 'پرونده پرسنلی', 'tone' => 'indigo', 'nextStageIds' => ['ordinary-card'], 'checklist' => []],
+            ['id' => 'ordinary-card', 'label' => 'کارت عادی', 'tone' => 'purple', 'nextStageIds' => ['three-page'], 'checklist' => []],
+            ['id' => 'three-page', 'label' => 'سه‌برگی عادی', 'tone' => 'purple', 'nextStageIds' => ['complete-info'], 'checklist' => []],
+            ['id' => 'complete-info', 'label' => 'تکمیل اطلاعات', 'tone' => 'amber', 'nextStageIds' => ['active'], 'checklist' => []],
+            ['id' => 'active', 'label' => 'پرونده فعال', 'tone' => 'green', 'nextStageIds' => ['center-sent'], 'checklist' => [], 'metric' => 'active'],
+            ['id' => 'center-sent', 'label' => 'ارسال به مرکز', 'tone' => 'cyan', 'nextStageIds' => ['center-review'], 'checklist' => []],
+            ['id' => 'center-review', 'label' => 'بررسی مرکز', 'tone' => 'orange', 'nextStageIds' => ['approved', 'rejected'], 'checklist' => [], 'metric' => 'review'],
+            ['id' => 'approved', 'label' => 'تأیید شده', 'tone' => 'green', 'nextStageIds' => ['company-sent'], 'checklist' => []],
+            ['id' => 'rejected', 'label' => 'رد شده', 'tone' => 'red', 'nextStageIds' => ['complete-info'], 'checklist' => [], 'metric' => 'rejected'],
+            ['id' => 'company-sent', 'label' => 'ارسال به شرکت', 'tone' => 'pink', 'nextStageIds' => ['completed'], 'checklist' => []],
+            ['id' => 'completed', 'label' => 'پایان کار', 'tone' => 'slate', 'nextStageIds' => [], 'checklist' => [], 'isFinal' => true, 'metric' => 'completed'],
+        ],
+    ];
+}
+
+function workflow_config(PDO $pdo): array {
+    $stored = state_value($pdo, 'nab:workflow', []);
+    $candidate = isset($stored[0]) && is_array($stored[0]) ? $stored[0] : $stored;
+    if (!is_array($candidate) || (int)($candidate['version'] ?? 0) !== 1 || !is_array($candidate['stages'] ?? null)) return default_workflow_config();
+    return $candidate;
+}
+
+function workflow_stage(array $workflow, string $id): ?array {
+    foreach (($workflow['stages'] ?? []) as $stage) {
+        if (is_array($stage) && (string)($stage['id'] ?? '') === $id) return $stage;
+    }
+    return null;
+}
+
+function normalize_person_stage(array $person, array $workflow, bool $isNew = false): array {
+    $stage = null;
+    $stageId = trim((string)($person['stageId'] ?? ''));
+    if ($stageId !== '') $stage = workflow_stage($workflow, $stageId);
+    if (!$stage) {
+        $status = trim((string)($person['status'] ?? ''));
+        foreach (($workflow['stages'] ?? []) as $candidate) {
+            if (is_array($candidate) && (string)($candidate['label'] ?? '') === $status) { $stage = $candidate; break; }
+        }
+        // Map legacy records by the original stable IDs even if an administrator already renamed a stage.
+        if (!$stage) {
+            foreach (default_workflow_config()['stages'] as $legacy) {
+                if ((string)$legacy['label'] === $status) {
+                    $stage = workflow_stage($workflow, (string)$legacy['id']);
+                    if ($stage) break;
+                }
+            }
+        }
+    }
+    if (!$stage) fail(422, 'مرحلهٔ پرونده با گردش‌کار فعلی تطبیق ندارد.');
+    if ($isNew && !empty($stage['archived'])) fail(422, 'پروندهٔ جدید نمی‌تواند در مرحلهٔ بایگانی‌شده ثبت شود.');
+    if ($isNew && (string)$stage['id'] !== (string)($workflow['startStageId'] ?? 'request')) fail(422, 'پروندهٔ جدید باید از مرحلهٔ آغازین گردش‌کار شروع شود.');
+    $person['stageId'] = (string)$stage['id'];
+    $person['status'] = (string)$stage['label'];
+    if (!isset($person['stageChecklist']) || !is_array($person['stageChecklist'])) $person['stageChecklist'] = [];
+    return $person;
+}
+
 function user_permissions(array $user): array {
     $permissions = json_decode((string)($user['permissions_json'] ?? '[]'), true);
     if (!is_array($permissions)) return [];
@@ -152,7 +215,7 @@ function state_version(PDO $pdo, string $key): string {
 }
 
 function state_versions(PDO $pdo, array $user): array {
-    $keys = ['nab:people', 'nab:activities', 'nab:audit', 'nab:roles', 'nab:notes', 'nab:tasks:' . (string)$user['username']];
+    $keys = ['nab:people', 'nab:activities', 'nab:audit', 'nab:roles', 'nab:notes', 'nab:workflow', 'nab:tasks:' . (string)$user['username']];
     $versions = [];
     foreach ($keys as $key) $versions[$key] = state_version($pdo, $key);
     return $versions;
@@ -238,13 +301,20 @@ function state_payload(PDO $pdo, array $user): array {
     $canViewPeople = has_permission($user, 'view_persons');
     $canViewActivities = has_permission($user, 'view_activities');
     $canManageUsers = has_permission($user, 'manage_users');
+    $workflow = workflow_config($pdo);
+    $people = $canViewPeople ? state_value($pdo, 'nab:people', []) : [];
+    if ($canViewPeople) {
+        foreach ($people as &$person) if (is_array($person)) $person = normalize_person_stage($person, $workflow, false);
+        unset($person);
+    }
     return [
         'user' => safe_user($user),
         'users' => list_users($pdo, $user),
         'csrf' => (string)($_SESSION['csrf_token'] ?? ''),
         'state_versions' => state_versions($pdo, $user),
         'state' => [
-            'nab:people' => $canViewPeople ? state_value($pdo, 'nab:people', []) : [],
+            'nab:people' => $people,
+            'nab:workflow' => [$workflow],
             'nab:activities' => $canViewActivities ? state_value($pdo, 'nab:activities', []) : [],
             'nab:audit' => ($canManageUsers || has_permission($user, 'view_reports')) ? state_value($pdo, 'nab:audit', []) : [],
             'nab:roles' => $canManageUsers ? state_value($pdo, 'nab:roles', default_roles()) : [],
@@ -297,7 +367,8 @@ function server_timestamp_iso(): string {
     return gmdate('Y-m-d\\TH:i:s\\Z');
 }
 
-function clean_person(array $person, array $actor): array {
+function clean_person(array $person, array $actor, array $workflow, bool $isNew = false): array {
+    $person = normalize_person_stage($person, $workflow, $isNew);
     $person['id'] = trim((string)($person['id'] ?? ''));
     $person['firstName'] = trim((string)($person['firstName'] ?? ''));
     $person['lastName'] = trim((string)($person['lastName'] ?? ''));
@@ -306,8 +377,7 @@ function clean_person(array $person, array $actor): array {
     if ($person['id'] === '' || strlen($person['id']) > 80 || $person['firstName'] === '' || $person['lastName'] === '' || $person['fatherName'] === '') fail(422, 'اطلاعات فرد ناقص است.');
     if (text_length($person['firstName']) > 100 || text_length($person['lastName']) > 100 || text_length($person['fatherName']) > 100) fail(422, 'طول نام بیش از حد مجاز است.');
     if (!valid_national_id($person['nationalId'])) fail(422, 'کد ملی معتبر نیست.');
-    $allowedStatuses = ['درخواست پرونده', 'پرونده پرسنلی', 'کارت عادی', 'سه‌برگی عادی', 'تکمیل اطلاعات', 'پرونده فعال', 'ارسال به مرکز', 'بررسی مرکز', 'تأیید شده', 'رد شده', 'ارسال به شرکت', 'پایان کار'];
-    if (!in_array($person['status'] ?? '', $allowedStatuses, true)) fail(422, 'وضعیت پرونده معتبر نیست.');
+    if (trim((string)($person['status'] ?? '')) === '') fail(422, 'مرحلهٔ پرونده معتبر نیست.');
     $deadline = (string)($person['deadline'] ?? '');
     if ($deadline !== '' && $deadline !== '—' && !valid_jalali_date($deadline)) fail(422, 'تاریخ مهلت معتبر نیست.');
     if (isset($person['photo']) && is_string($person['photo']) && strlen($person['photo']) > 2 * 1024 * 1024) fail(413, 'حجم عکس بیش از حد مجاز است.');
@@ -317,12 +387,73 @@ function clean_person(array $person, array $actor): array {
     return $person;
 }
 
+function workflow_checklist_missing(array $stage, array $person): array {
+    $progress = $person['stageChecklist'][$stage['id'] ?? ''] ?? [];
+    $missing = [];
+    foreach (($stage['checklist'] ?? []) as $rule) {
+        if (!is_array($rule)) continue;
+        $ruleId = (string)($rule['id'] ?? '');
+        if ($ruleId === '' || empty($progress[$ruleId]['done'])) $missing[] = (string)($rule['label'] ?? $ruleId);
+    }
+    return $missing;
+}
+
+function authorize_stage_checklist(array $before, array $candidate, array $user, array $workflow): array {
+    $oldProgress = is_array($before['stageChecklist'] ?? null) ? $before['stageChecklist'] : [];
+    $requested = is_array($candidate['stageChecklist'] ?? null) ? $candidate['stageChecklist'] : [];
+    $currentId = (string)($before['stageId'] ?? '');
+    $stage = workflow_stage($workflow, $currentId);
+    if (!$stage) fail(422, 'مرحلهٔ جاری پرونده در گردش‌کار پیدا نشد.');
+    $oldCurrent = is_array($oldProgress[$currentId] ?? null) ? $oldProgress[$currentId] : [];
+    $requestedCurrent = is_array($requested[$currentId] ?? null) ? $requested[$currentId] : $oldCurrent;
+    if (!has_permission($user, 'change_status') && $requestedCurrent !== $oldCurrent) fail(403, 'مجوز تکمیل چک‌لیست مرحله را ندارید.');
+
+    $allowed = [];
+    foreach (($stage['checklist'] ?? []) as $rule) {
+        if (!is_array($rule) || !isset($rule['id'])) continue;
+        $ruleId = (string)$rule['id'];
+        $allowed[$ruleId] = true;
+    }
+    foreach ($requestedCurrent as $ruleId => $_) {
+        if (!isset($allowed[(string)$ruleId]) && !array_key_exists((string)$ruleId, $oldCurrent)) fail(422, 'چک‌لیست ارسالی با تعریف فعلی مرحله تطبیق ندارد.');
+    }
+
+    $current = [];
+    // Keep completion records for rules an administrator has since removed; do not let clients rewrite them.
+    foreach ($oldCurrent as $ruleId => $mark) if (!isset($allowed[(string)$ruleId])) $current[(string)$ruleId] = $mark;
+    foreach ($allowed as $ruleId => $_) {
+        $oldMark = is_array($oldCurrent[$ruleId] ?? null) ? $oldCurrent[$ruleId] : ['done' => false];
+        $newMark = is_array($requestedCurrent[$ruleId] ?? null) ? $requestedCurrent[$ruleId] : $oldMark;
+        $oldDone = !empty($oldMark['done']);
+        $newDone = !empty($newMark['done']);
+        if ($oldDone && !$newDone) fail(422, 'موارد تکمیل‌شده قابل پاک‌کردن نیستند؛ برای اصلاح از مدیر سامانه کمک بگیرید.');
+        if ($newDone) {
+            if (!$oldDone) {
+                $current[$ruleId] = ['done' => true, 'checkedBy' => (string)$user['display_name'], 'checkedAt' => server_timestamp_iso()];
+            } else {
+                $current[$ruleId] = [
+                    'done' => true,
+                    'checkedBy' => (string)($oldMark['checkedBy'] ?? ''),
+                    'checkedAt' => (string)($oldMark['checkedAt'] ?? ''),
+                ];
+            }
+        } else {
+            $current[$ruleId] = ['done' => false];
+        }
+    }
+    $result = $oldProgress;
+    if ($current) $result[$currentId] = $current;
+    else unset($result[$currentId]);
+    return $result;
+}
+
 function authorize_people_change(PDO $pdo, array $user, array $next): array {
     if (!has_permission($user, 'view_persons')) fail(403, 'مجوز دسترسی به پرونده‌ها را ندارید.');
     if (!is_array($next) || count($next) > 10000) fail(422, 'فهرست پرونده‌ها معتبر نیست.');
+    $workflow = workflow_config($pdo);
     $old = state_value($pdo, 'nab:people', []);
     $oldById = [];
-    foreach ($old as $row) if (is_array($row) && isset($row['id'])) $oldById[(string)$row['id']] = $row;
+    foreach ($old as $row) if (is_array($row) && isset($row['id'])) $oldById[(string)$row['id']] = normalize_person_stage($row, $workflow, false);
     $newById = [];
     foreach ($next as $row) {
         if (!is_array($row) || !isset($row['id'])) fail(422, 'ساختار پرونده معتبر نیست.');
@@ -338,10 +469,25 @@ function authorize_people_change(PDO $pdo, array $user, array $next): array {
     foreach ($newById as $id => $row) {
         if (!isset($oldById[$id])) {
             if (!has_permission($user, 'create_person')) fail(403, 'مجوز ایجاد پرونده را ندارید.');
-            $row = clean_person($row, $user);
+            $row = clean_person($row, $user, $workflow, true);
+            // Never accept checklist completions supplied with a new record.
+            $row['stageChecklist'] = [];
         } else {
             $before = $oldById[$id];
             if ((string)($before['id'] ?? '') !== $id) fail(422, 'شناسهٔ پرونده قابل تغییر نیست.');
+            $row = normalize_person_stage($row, $workflow, false);
+            $row['stageChecklist'] = authorize_stage_checklist($before, $row, $user, $workflow);
+            $beforeStageId = (string)$before['stageId'];
+            $afterStageId = (string)$row['stageId'];
+            $stageChanged = $beforeStageId !== $afterStageId;
+            if ($stageChanged) {
+                if (!has_permission($user, 'change_status')) fail(403, 'مجوز تغییر مرحله را ندارید.');
+                $fromStage = workflow_stage($workflow, $beforeStageId);
+                $toStage = workflow_stage($workflow, $afterStageId);
+                if (!$fromStage || !$toStage || !empty($toStage['archived']) || !in_array($afterStageId, $fromStage['nextStageIds'] ?? [], true)) fail(422, 'این مسیر انتقال در گردش‌کار تعریف نشده است.');
+                $missing = workflow_checklist_missing($fromStage, $row);
+                if ($missing) fail(422, 'ابتدا چک‌لیست «' . implode('، ', $missing) . '» را تکمیل کنید.');
+            }
             $beforeCompare = $before;
             $afterCompare = $row;
             foreach (['updatedAt', 'updatedBy', 'ts'] as $ignored) { unset($beforeCompare[$ignored], $afterCompare[$ignored]); }
@@ -349,12 +495,15 @@ function authorize_people_change(PDO $pdo, array $user, array $next): array {
             foreach (array_unique(array_merge(array_keys($beforeCompare), array_keys($afterCompare))) as $field) {
                 if (($beforeCompare[$field] ?? null) !== ($afterCompare[$field] ?? null)) $changed[] = $field;
             }
-            if (in_array('status', $changed, true) && !has_permission($user, 'change_status')) fail(403, 'مجوز تغییر وضعیت را ندارید.');
+            if (in_array('status', $changed, true) || in_array('stageId', $changed, true)) {
+                if (!has_permission($user, 'change_status')) fail(403, 'مجوز تغییر وضعیت را ندارید.');
+            }
             if (in_array('assignee', $changed, true) && !has_permission($user, 'change_status')) fail(403, 'مجوز ارجاع پرونده را ندارید.');
-            $editable = array_diff($changed, ['status', 'assignee']);
+            if (in_array('stageChecklist', $changed, true) && !has_permission($user, 'change_status')) fail(403, 'مجوز تکمیل چک‌لیست مرحله را ندارید.');
+            $editable = array_diff($changed, ['status', 'stageId', 'assignee', 'stageChecklist']);
             if (count($editable) > 0 && !has_permission($user, 'edit_person')) fail(403, 'مجوز ویرایش اطلاعات پرونده را ندارید.');
             if (count($changed) > 0) {
-                $row = clean_person($row, $user);
+                $row = clean_person($row, $user, $workflow, false);
             } else {
                 // Metadata-only client changes are discarded; an unchanged record keeps the server's stored stamp.
                 foreach (['updatedAt', 'updatedBy', 'ts'] as $serverField) {
@@ -378,6 +527,7 @@ function event_permission(string $action): ?string {
         'افزودن فرد جدید' => 'create_person',
         'تغییر وضعیت' => 'change_status',
         'تغییر وضعیت پرونده' => 'change_status',
+        'تکمیل چک‌لیست' => 'change_status',
         'رد پرونده' => 'change_status',
         'ویرایش اطلاعات فرد' => 'edit_person',
         'حذف پرونده' => 'delete_person',
@@ -552,6 +702,159 @@ function updated_user(PDO $pdo, string $username): array {
     return safe_user($row);
 }
 
+function validate_workflow_definition($input): array {
+    if (!is_array($input) || (int)($input['version'] ?? 0) !== 1 || !is_array($input['stages'] ?? null)) fail(422, 'تعریف گردش‌کار معتبر نیست.');
+    $rawStages = $input['stages'];
+    if (count($rawStages) < 2 || count($rawStages) > 60) fail(422, 'گردش‌کار باید بین ۲ تا ۶۰ مرحله داشته باشد.');
+    $tones = ['blue', 'indigo', 'purple', 'amber', 'orange', 'green', 'cyan', 'red', 'pink', 'slate'];
+    $metrics = ['active', 'review', 'rejected', 'completed'];
+    $stages = [];
+    $ids = [];
+    $labels = [];
+    foreach ($rawStages as $raw) {
+        if (!is_array($raw)) fail(422, 'یکی از مرحله‌های گردش‌کار معتبر نیست.');
+        $id = strtolower(trim((string)($raw['id'] ?? '')));
+        $label = trim((string)($raw['label'] ?? ''));
+        $tone = (string)($raw['tone'] ?? 'slate');
+        if (!preg_match('/^[a-z0-9][a-z0-9_-]{1,63}$/', $id) || isset($ids[$id])) fail(422, 'شناسهٔ مرحله تکراری یا نامعتبر است.');
+        if ($label === '' || text_length($label) > 100 || isset($labels[$label])) fail(422, 'عنوان مرحله خالی، طولانی یا تکراری است.');
+        if (!in_array($tone, $tones, true)) fail(422, 'رنگ مرحله معتبر نیست.');
+        $ids[$id] = true;
+        $labels[$label] = true;
+        $next = $raw['nextStageIds'] ?? [];
+        if (!is_array($next) || count($next) > 20) fail(422, 'مسیرهای مرحله معتبر نیستند.');
+        $next = array_values(array_unique(array_map(static fn($v) => trim((string)$v), $next)));
+        $checklist = $raw['checklist'] ?? [];
+        if (!is_array($checklist) || count($checklist) > 50) fail(422, 'تعداد چک‌لیست یک مرحله بیش از حد مجاز است.');
+        $rules = [];
+        $ruleIds = [];
+        foreach ($checklist as $rule) {
+            if (!is_array($rule)) fail(422, 'یکی از موارد چک‌لیست معتبر نیست.');
+            $ruleId = strtolower(trim((string)($rule['id'] ?? '')));
+            $ruleLabel = trim((string)($rule['label'] ?? ''));
+            if (!preg_match('/^[a-z0-9][a-z0-9_-]{1,63}$/', $ruleId) || isset($ruleIds[$ruleId])) fail(422, 'شناسهٔ مورد چک‌لیست تکراری یا نامعتبر است.');
+            if ($ruleLabel === '' || text_length($ruleLabel) > 200) fail(422, 'عنوان مورد چک‌لیست خالی یا بیش از حد طولانی است.');
+            $ruleIds[$ruleId] = true;
+            $rules[] = ['id' => $ruleId, 'label' => $ruleLabel];
+        }
+        $stage = [
+            'id' => $id,
+            'label' => $label,
+            'tone' => $tone,
+            'nextStageIds' => $next,
+            'checklist' => $rules,
+            'archived' => !empty($raw['archived']),
+            'isFinal' => !empty($raw['isFinal']),
+        ];
+        if (isset($raw['metric']) && in_array((string)$raw['metric'], $metrics, true)) $stage['metric'] = (string)$raw['metric'];
+        $stages[] = $stage;
+    }
+    $start = trim((string)($input['startStageId'] ?? ''));
+    $byId = [];
+    foreach ($stages as $stage) $byId[$stage['id']] = $stage;
+    if (!isset($byId[$start]) || !empty($byId[$start]['archived'])) fail(422, 'مرحلهٔ آغازین باید فعال باشد.');
+    $finals = [];
+    $active = [];
+    foreach ($stages as $stage) {
+        if (!empty($stage['archived'])) continue;
+        $active[$stage['id']] = true;
+        if (!empty($stage['isFinal'])) $finals[$stage['id']] = true;
+        if (!empty($stage['isFinal']) && count($stage['nextStageIds']) > 0) fail(422, 'مرحلهٔ پایانی نمی‌تواند مسیر خروجی داشته باشد.');
+        if (empty($stage['isFinal']) && count($stage['nextStageIds']) === 0) fail(422, 'مرحلهٔ فعال باید مسیر بعدی داشته باشد یا پایانی باشد.');
+        foreach ($stage['nextStageIds'] as $nextId) {
+            if ($nextId === $stage['id'] || !isset($byId[$nextId]) || !empty($byId[$nextId]['archived'])) fail(422, 'یکی از مسیرها به مرحلهٔ غیرفعال یا نامعتبر می‌رسد.');
+        }
+    }
+    if (!$finals) fail(422, 'گردش‌کار دست‌کم به یک مرحلهٔ پایانی نیاز دارد.');
+    $reachable = [];
+    $queue = [$start];
+    while ($queue) {
+        $id = array_shift($queue);
+        if (isset($reachable[$id])) continue;
+        $reachable[$id] = true;
+        foreach (($byId[$id]['nextStageIds'] ?? []) as $nextId) if (isset($active[$nextId]) && !isset($reachable[$nextId])) $queue[] = $nextId;
+    }
+    foreach ($active as $id => $_) if (!isset($reachable[$id])) fail(422, 'همهٔ مرحله‌های فعال باید از مرحلهٔ آغازین قابل دسترسی باشند.');
+    $canFinish = $finals;
+    $changed = true;
+    while ($changed) {
+        $changed = false;
+        foreach ($stages as $stage) {
+            if (empty($stage['archived']) && !isset($canFinish[$stage['id']])) {
+                foreach ($stage['nextStageIds'] as $nextId) if (isset($canFinish[$nextId])) { $canFinish[$stage['id']] = true; $changed = true; break; }
+            }
+        }
+    }
+    foreach ($active as $id => $_) if (!isset($canFinish[$id])) fail(422, 'هر مرحلهٔ فعال باید دست‌کم مسیری به پایان کار داشته باشد.');
+    return ['version' => 1, 'startStageId' => $start, 'stages' => $stages];
+}
+
+function collapse_workflow_route(string $targetId, array $byId, array $stableIds, array $path, array &$outgoing, bool &$endsAtFinal): void {
+    if (isset($stableIds[$targetId])) { $outgoing[$targetId] = true; return; }
+    if (!isset($byId[$targetId]) || isset($path[$targetId])) return;
+    $path[$targetId] = true;
+    $stage = $byId[$targetId];
+    $next = $stage['nextStageIds'] ?? [];
+    if (!$next) {
+        if (!empty($stage['isFinal'])) $endsAtFinal = true;
+        return;
+    }
+    foreach ($next as $nextId) collapse_workflow_route((string)$nextId, $byId, $stableIds, $path, $outgoing, $endsAtFinal);
+}
+
+function collapse_stage_outgoing(array $stage, array $byId, array $stableIds): array {
+    $outgoing = [];
+    $endsAtFinal = false;
+    foreach (($stage['nextStageIds'] ?? []) as $nextId) collapse_workflow_route((string)$nextId, $byId, $stableIds, [], $outgoing, $endsAtFinal);
+    $ids = array_keys($outgoing);
+    sort($ids);
+    return [$ids, $endsAtFinal];
+}
+
+function require_fixed_workflow_routes(array $oldWorkflow, array $nextWorkflow): void {
+    if ((string)($oldWorkflow['startStageId'] ?? '') !== (string)($nextWorkflow['startStageId'] ?? '')) fail(422, 'مرحلهٔ آغازین گردش‌کار قابل تغییر نیست.');
+    $oldById = [];
+    $nextById = [];
+    foreach (($oldWorkflow['stages'] ?? []) as $stage) if (is_array($stage) && isset($stage['id'])) $oldById[(string)$stage['id']] = $stage;
+    foreach (($nextWorkflow['stages'] ?? []) as $stage) if (is_array($stage) && isset($stage['id'])) $nextById[(string)$stage['id']] = $stage;
+    foreach ($oldById as $id => $stage) {
+        if (!isset($nextById[$id])) fail(422, 'برای حفظ پرونده‌ها و سوابق، مرحله‌ها را بایگانی کنید؛ حذف دائمی مجاز نیست.');
+        if (!empty($stage['archived']) && empty($nextById[$id]['archived'])) fail(422, 'مرحلهٔ بایگانی‌شده را نمی‌توان بدون بازیابی کنترل‌شده دوباره فعال کرد.');
+    }
+
+    // Derive the only allowed existing-edge changes: bypassing old stages that were archived.
+    $baseline = $oldById;
+    foreach ($oldById as $id => $stage) {
+        if (!empty($stage['archived']) || empty($nextById[$id]['archived'])) continue;
+        $target = $baseline[$id];
+        $targetNext = $target['nextStageIds'] ?? [];
+        foreach ($baseline as $sourceId => $source) {
+            if ($sourceId === $id || !in_array($id, $source['nextStageIds'] ?? [], true)) continue;
+            $rewired = [];
+            foreach (($source['nextStageIds'] ?? []) as $edge) {
+                if ((string)$edge === $id) foreach ($targetNext as $replacement) $rewired[] = (string)$replacement;
+                else $rewired[] = (string)$edge;
+            }
+            $rewired = array_values(array_unique($rewired));
+            $source['nextStageIds'] = $rewired;
+            $source['isFinal'] = !$rewired && !empty($target['isFinal']);
+            if (!$rewired && !empty($target['isFinal'])) $source['metric'] = $target['metric'] ?? ($source['metric'] ?? null);
+            $baseline[$sourceId] = $source;
+        }
+        $target['archived'] = true;
+        $baseline[$id] = $target;
+    }
+
+    $stableActiveIds = [];
+    foreach ($oldById as $id => $_) if (empty($nextById[$id]['archived'])) $stableActiveIds[$id] = true;
+    foreach ($oldById as $id => $_) {
+        // Existing stages, including archived stages with live records, must keep the same downstream destinations.
+        [$expectedEdges, $expectedFinal] = collapse_stage_outgoing($baseline[$id], $baseline, $stableActiveIds);
+        [$actualEdges, $actualFinal] = collapse_stage_outgoing($nextById[$id], $nextById, $stableActiveIds);
+        if ($expectedEdges !== $actualEdges || $expectedFinal !== $actualFinal) fail(422, 'مسیرهای موجود ثابت هستند؛ فقط افزودن مرحلهٔ میانی یا بایگانیِ امن مجاز است.');
+    }
+}
+
 try {
     $action = (string)($_GET['action'] ?? '');
     $body = json_body();
@@ -664,6 +967,35 @@ try {
         reply(200, ['success' => true]);
     }
 
+    if ($action === 'workflow_save' && $method === 'POST') {
+        $user = require_user($pdo);
+        if (!is_system_admin($user)) fail(403, 'فقط مدیر سیستم می‌تواند گردش‌کار را مدیریت کند.');
+        $expectedVersion = $body['expected_version'] ?? '';
+        if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ گردش‌کار در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
+        $workflow = validate_workflow_definition($body['workflow'] ?? null);
+        acquire_state_write_lock($pdo);
+        $pdo->beginTransaction();
+        verify_expected_state_version($pdo, 'nab:workflow', $expectedVersion);
+        $oldWorkflow = workflow_config($pdo);
+        require_fixed_workflow_routes($oldWorkflow, $workflow);
+        put_state($pdo, 'nab:workflow', [$workflow], (int)$user['id']);
+        $audit = state_value($pdo, 'nab:audit', []);
+        $audit[] = [
+            'id' => 'workflow-' . bin2hex(random_bytes(12)),
+            'action' => 'ویرایش گردش‌کار',
+            'target' => 'تعریف مرحله‌ها و چک‌لیست‌های گردش‌کار',
+            'createdAt' => server_timestamp_iso(),
+            'createdBy' => (string)$user['display_name'],
+            'ts' => server_timestamp_ms(),
+        ];
+        put_state($pdo, 'nab:audit', $audit, (int)$user['id']);
+        $versions = state_versions($pdo, $user);
+        $version = $versions['nab:workflow'];
+        $pdo->commit();
+        release_state_write_lock($pdo);
+        reply(200, ['success' => true, 'data' => ['version' => $version, 'state_versions' => $versions]]);
+    }
+
     if ($action === 'state_save' && $method === 'POST') {
         $user = require_user($pdo);
         $key = (string)($body['key'] ?? '');
@@ -728,12 +1060,13 @@ try {
         }
         $people = $legacy['nab:people'] ?? [];
         if (!is_array($people) || count($people) > 10000) fail(422, 'فهرست پرونده‌های قدیمی معتبر نیست.');
+        $workflow = workflow_config($pdo);
         $cleanPeople = [];
         $seenIds = [];
         $seenNationalIds = [];
         foreach ($people as $person) {
             if (!is_array($person)) fail(422, 'یکی از پرونده‌های قدیمی معتبر نیست.');
-            $clean = clean_person($person, $user);
+            $clean = clean_person($person, $user, $workflow, false);
             if (isset($seenIds[$clean['id']]) || isset($seenNationalIds[$clean['nationalId']])) fail(422, 'شناسه یا کد ملی در داده‌های قدیمی تکراری است.');
             $seenIds[$clean['id']] = true;
             $seenNationalIds[$clean['nationalId']] = true;

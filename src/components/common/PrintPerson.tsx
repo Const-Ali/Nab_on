@@ -1,10 +1,14 @@
 import { formatServerTimestamp, nowStamp, toPersianDigits } from '../../shared'
-import { workflow } from '../../app-lib'
 import type { Person, Activity, Note } from '../../types'
+import type { WorkflowConfig } from '../../workflow'
+import { stageById, stageIdForPerson } from '../../workflow'
 import { QRCodeSvg } from './QRCodeSvg'
 
-export function PrintPerson({ person, notes, history }: { person: Person; notes: Note[]; history: Activity[] }) {
-  const currentIndex = workflow.indexOf(person.status)
+export function PrintPerson({ person, notes, history, workflowConfig }: { person: Person; notes: Note[]; history: Activity[]; workflowConfig: WorkflowConfig }) {
+  const workflowStages = workflowConfig.stages
+  const currentStageId = stageIdForPerson(person, workflowConfig)
+  const currentStage = stageById(workflowConfig, currentStageId)
+  const currentIndex = workflowStages.findIndex(stage => stage.id === currentStageId)
   const qrData = `https://nab.internal/verify/person?id=${person.id}&nid=${person.nationalId}&ts=${encodeURIComponent(String(person.ts ?? person.updatedAt))}`
 
   return (
@@ -39,7 +43,7 @@ export function PrintPerson({ person, notes, history }: { person: Person; notes:
         <div>
           <h1>{person.firstName} {person.lastName}</h1>
           <p>
-            شناسه پرونده: <b>{person.id}</b> · وضعیت: <b>{person.status}</b>
+            شناسه پرونده: <b>{person.id}</b> · وضعیت: <b>{currentStage?.label ?? person.status}</b>
             {(person.tags ?? []).length > 0 ? ` · برچسب‌ها: ${(person.tags ?? []).join('، ')}` : ''}
           </p>
         </div>
@@ -63,7 +67,7 @@ export function PrintPerson({ person, notes, history }: { person: Person; notes:
             <td>آخرین اقدام</td>
             <td><b>{formatServerTimestamp(person.updatedAt, person.ts)}</b></td>
             <td>مرحله جاری</td>
-            <td><b>{(currentIndex + 1).toLocaleString('fa-IR')} از {workflow.length.toLocaleString('fa-IR')} ({person.status})</b></td>
+            <td><b>{(currentIndex + 1).toLocaleString('fa-IR')} از {workflowStages.length.toLocaleString('fa-IR')} ({currentStage?.label ?? person.status})</b></td>
           </tr>
           {person.deadline && (
             <tr>
@@ -78,9 +82,9 @@ export function PrintPerson({ person, notes, history }: { person: Person; notes:
 
       <h3>مراحل گردش‌کار پرونده</h3>
       <ol className="print-steps">
-        {workflow.map((s, i) => (
-          <li key={s} className={i < currentIndex ? 'd' : i === currentIndex ? 'c' : ''}>
-            {s} {i === currentIndex && '(مرحله جاری)'}
+        {workflowStages.map((stage, i) => (
+          <li key={stage.id} className={i < currentIndex ? 'd' : i === currentIndex ? 'c' : ''}>
+            {stage.label}{stage.archived ? ' (بایگانی)' : ''} {i === currentIndex && '(مرحله جاری)'}
           </li>
         ))}
       </ol>
