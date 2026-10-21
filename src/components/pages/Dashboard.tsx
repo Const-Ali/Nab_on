@@ -80,14 +80,14 @@ export function Dashboard({
         action={canCreate ? <Button variant="primary" onClick={onCreate}>ثبت پروندهٔ جدید</Button> : <Button variant="outline" onClick={onPersons}>مشاهدهٔ پرونده‌ها</Button>}
       />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 sm:gap-4">
+      <div className="grid grid-cols-1 gap-2.5 min-[360px]:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         {kpis.map(item => (
-          <article className="flex min-w-0 items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-[border-color,box-shadow] hover:border-indigo-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-900" key={item.label}>
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">{item.icon}</span>
+          <article className="flex min-w-0 items-start gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-[border-color,box-shadow] hover:border-indigo-200 hover:shadow-md sm:gap-3 sm:p-4 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-900" key={item.label}>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-700 sm:h-10 sm:w-10 dark:bg-indigo-950/50 dark:text-indigo-300">{item.icon}</span>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{item.label}</p>
-              <b className="mt-1 block text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{item.value.toLocaleString('fa-IR')}</b>
-              <small className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">{item.caption}</small>
+              <p className="text-xs font-medium leading-5 text-slate-500 sm:text-sm dark:text-slate-400">{item.label}</p>
+              <b className="mt-1 block text-xl font-bold tracking-tight text-slate-950 sm:text-2xl dark:text-white">{item.value.toLocaleString('fa-IR')}</b>
+              <small className="mt-1 block text-[11px] leading-4 text-slate-500 sm:text-xs sm:leading-5 dark:text-slate-400">{item.caption}</small>
             </div>
           </article>
         ))}

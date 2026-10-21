@@ -51,6 +51,7 @@ export function Persons({
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [pageNo, setPageNo] = useState(0)
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   const reset = <A,>(fn: (v: A) => void) => (value: A) => {
     fn(value)
@@ -96,6 +97,7 @@ export function Persons({
   else if (sortBy === 'status') sortedPeople.sort((a, b) => workflow.indexOf(a.status) - workflow.indexOf(b.status))
 
   const hasActiveFilters = Boolean(query.trim()) || filter !== 'همه وضعیت‌ها' || tagFilter !== 'همه برچسب‌ها' || sortBy !== 'default'
+  const activeFilterCount = Number(filter !== 'همه وضعیت‌ها') + Number(tagFilter !== 'همه برچسب‌ها') + Number(sortBy !== 'default')
   const pageCount = Math.max(1, Math.ceil(sortedPeople.length / PAGE_SIZE))
   const safePage = Math.min(pageNo, pageCount - 1)
   const pageItems = sortedPeople.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE)
@@ -134,34 +136,55 @@ export function Persons({
         action={canCreate ? <Button variant="primary" onClick={onCreate}> افزودن فرد</Button> : undefined}
       />
       <section className={cn(panelBox, 'overflow-hidden')}>
-        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:p-5 lg:flex-row dark:border-slate-800">
-          <div className={searchBox}>
-            <input
-              type="search"
-              value={query}
-              onChange={e => reset(setQuery)(e.target.value)}
-              className={searchInput}
-              placeholder="جست‌وجو بر اساس نام، نام خانوادگی، نام پدر یا کد ملی..."
-              aria-label="جست‌وجوی پرونده‌ها"
-              autoComplete="off"
-            />
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-3 sm:p-4 lg:flex-row lg:items-start lg:p-5 dark:border-slate-800">
+          <div className="flex min-w-0 items-center gap-2 lg:flex-1">
+            <div className={cn(searchBox, 'min-w-0 w-full')}>
+              <input
+                type="search"
+                value={query}
+                onChange={e => reset(setQuery)(e.target.value)}
+                className={searchInput}
+                placeholder="جست‌وجو بر اساس نام، نام خانوادگی، نام پدر یا کد ملی..."
+                aria-label="جست‌وجوی پرونده‌ها"
+                autoComplete="off"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5 px-2.5 lg:!hidden"
+              aria-expanded={filtersOpen}
+              aria-controls="person-filters"
+              onClick={() => setFiltersOpen(open => !open)}
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <path d="M4 6h16M7 12h10m-7 6h4" strokeLinecap="round" />
+                <circle cx="8" cy="6" r="1.5" fill="currentColor" stroke="none" />
+                <circle cx="15" cy="12" r="1.5" fill="currentColor" stroke="none" />
+              </svg>
+              فیلترها
+              {activeFilterCount > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white">{activeFilterCount.toLocaleString('fa-IR')}</span>}
+            </Button>
           </div>
-          <select aria-label="فیلتر بر اساس وضعیت پرونده" className={cn(selectCls, 'mt-0 w-full lg:w-48')} value={filter} onChange={e => reset(setFilter)(e.target.value as PersonFilter)}>
-            <option value="همه وضعیت‌ها">همه وضعیت‌ها</option>
-            <option value="ارجاع‌شده به من">ارجاع‌شده به من</option>
-            <option value="سررسید نزدیک">سررسید نزدیک</option>
-            {workflow.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select aria-label="فیلتر بر اساس برچسب" className={cn(selectCls, 'mt-0 w-full lg:w-40')} value={tagFilter} onChange={e => reset(setTagFilter)(e.target.value)}>
-            <option value="همه برچسب‌ها">همه برچسب‌ها</option>
-            {Object.keys(personTags).map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <select aria-label="مرتب‌سازی پرونده‌ها" className={cn(selectCls, 'mt-0 w-full lg:w-40')} value={sortBy} onChange={e => reset(setSortBy)(e.target.value)}>
-            <option value="default">ترتیب پیش‌فرض</option>
-            <option value="recent">جدیدترین تغییر</option>
-            <option value="name">نام خانوادگی</option>
-            <option value="status">مرحله گردش‌کار</option>
-          </select>
+          <div id="person-filters" className={cn('grid grid-cols-1 gap-2 sm:grid-cols-3 lg:flex lg:shrink-0', !filtersOpen && 'hidden lg:grid')}>
+            <select aria-label="فیلتر بر اساس وضعیت پرونده" className={cn(selectCls, 'mt-0 w-full lg:w-44')} value={filter} onChange={e => reset(setFilter)(e.target.value as PersonFilter)}>
+              <option value="همه وضعیت‌ها">همه وضعیت‌ها</option>
+              <option value="ارجاع‌شده به من">ارجاع‌شده به من</option>
+              <option value="سررسید نزدیک">سررسید نزدیک</option>
+              {workflow.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select aria-label="فیلتر بر اساس برچسب" className={cn(selectCls, 'mt-0 w-full lg:w-36')} value={tagFilter} onChange={e => reset(setTagFilter)(e.target.value)}>
+              <option value="همه برچسب‌ها">همه برچسب‌ها</option>
+              {Object.keys(personTags).map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <select aria-label="مرتب‌سازی پرونده‌ها" className={cn(selectCls, 'mt-0 w-full lg:w-36')} value={sortBy} onChange={e => reset(setSortBy)(e.target.value)}>
+              <option value="default">ترتیب پیش‌فرض</option>
+              <option value="recent">جدیدترین تغییر</option>
+              <option value="name">نام خانوادگی</option>
+              <option value="status">مرحله گردش‌کار</option>
+            </select>
+          </div>
         </div>
         <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 dark:border-slate-800">
           <span className="text-xs text-slate-500 dark:text-slate-400" aria-live="polite" aria-atomic="true">
@@ -217,8 +240,8 @@ export function Persons({
           <span>ثبت‌کننده</span>
         </div>
         {pageItems.map(p => (
-          <div className="grid w-full grid-cols-1 gap-3 border-b border-slate-100 px-4 py-4 text-right hover:bg-slate-50 sm:px-5 lg:grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] lg:items-center lg:gap-4 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id}>
-            <span className="flex min-w-0 items-center gap-3">
+          <article className="grid w-full grid-cols-2 gap-x-4 gap-y-3 border-b border-slate-100 px-3 py-3 text-right transition-colors hover:bg-slate-50 sm:px-5 sm:py-4 lg:grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] lg:items-center lg:gap-4 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id}>
+            <span className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
               <input
                 type="checkbox"
                 className={rowCheck}
@@ -236,13 +259,19 @@ export function Persons({
                 title="نمایش پرونده"
               >
                 <Avatar text={p.firstName?.[0] ?? '؟'} src={p.photo} />
-                <b className="min-w-0 text-sm text-slate-800 dark:text-slate-100">{p.firstName} {p.lastName}<small className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">{p.id}</small></b>
+                <b className="min-w-0 truncate text-sm text-slate-800 dark:text-slate-100">{p.firstName} {p.lastName}<small className="mt-1 block truncate text-xs font-normal text-slate-500 dark:text-slate-400">{p.id}</small></b>
                 {(p.tags ?? []).map(t => <span className={cn('hidden rounded-md px-2 py-1 text-xs font-medium sm:inline-flex', tagToneClasses[personTags[t]] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')} key={t}>{t}</span>)}
               </Button>
             </span>
-            <span className="text-sm text-slate-600 dark:text-slate-300"><small className="ml-2 inline lg:hidden">کد ملی:</small>{p.nationalId}</span>
-            <span className="text-sm text-slate-600 dark:text-slate-300"><small className="ml-2 inline lg:hidden">تولد:</small>{p.birthDate}</span>
-            <span className="flex flex-wrap gap-1.5">
+            <span className="min-w-0 text-xs leading-5 text-slate-600 sm:text-sm dark:text-slate-300">
+              <small className="block text-[10px] text-slate-500 lg:hidden">کد ملی</small>
+              <b className="font-medium tabular-nums" dir="ltr">{p.nationalId}</b>
+            </span>
+            <span className="min-w-0 text-xs leading-5 text-slate-600 sm:text-sm dark:text-slate-300">
+              <small className="block text-[10px] text-slate-500 lg:hidden">تولد</small>
+              <b className="font-medium">{p.birthDate}</b>
+            </span>
+            <span className="col-span-2 flex min-w-0 flex-wrap items-center gap-1.5 lg:col-span-1">
               <Badge status={p.status} />
               {staleDays(p) >= STALE_LIMIT && <i className="inline-flex rounded-md bg-rose-50 px-2 py-1 text-xs font-medium not-italic text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{staleDays(p).toLocaleString('fa-IR')} روز توقف</i>}
               {(() => {
@@ -252,9 +281,15 @@ export function Persons({
                   : null
               })()}
             </span>
-            <span className="text-sm text-slate-500 dark:text-slate-400"><small className="ml-2 inline lg:hidden">فعالیت:</small>{formatServerTimestamp(p.updatedAt, p.ts)}</span>
-            <span className="text-sm text-slate-500 dark:text-slate-400"><small className="ml-2 inline lg:hidden">کاربر:</small>{p.updatedBy}</span>
-          </div>
+            <span className="min-w-0 text-xs leading-5 text-slate-500 sm:text-sm dark:text-slate-400">
+              <small className="block text-[10px] text-slate-500 lg:hidden">آخرین فعالیت</small>
+              <span className="block truncate">{formatServerTimestamp(p.updatedAt, p.ts)}</span>
+            </span>
+            <span className="min-w-0 text-xs leading-5 text-slate-500 sm:text-sm dark:text-slate-400">
+              <small className="block text-[10px] text-slate-500 lg:hidden">ثبت‌کننده</small>
+              <span className="block truncate">{p.updatedBy}</span>
+            </span>
+          </article>
         ))}
         {!sortedPeople.length && (
           <div className={cn(emptyBox, 'm-4')}>

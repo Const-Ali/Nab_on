@@ -4,7 +4,7 @@ import { formatServerTimestamp, normalizeText, playChime } from '../../shared'
 import { Avatar } from '../../shared-ui'
 import type { Person, Activity, Note, ThemeMode } from '../../types'
 import { Badge } from '../common/Badge'
-import { backdropCls, cn, modalSearchLayout, modalX, searchBox, searchInput } from '../ui'
+import { backdropCls, cn, modalBox, modalSearchLayout, modalX, searchInput } from '../ui'
 
 interface CommandItem {
   id: string
@@ -228,10 +228,11 @@ export function SearchModal({
 
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className={cn(searchBox, modalSearchLayout, 'max-h-[min(42rem,calc(100vh-2rem))] overflow-y-auto')} onClick={e => e.stopPropagation()} dir="rtl">
+      <div role="dialog" aria-modal="true" aria-label="جست‌وجو و دستورات سریع" className={cn(modalBox, modalSearchLayout, 'flex min-h-0 flex-col !p-0 sm:max-h-[min(42rem,calc(100vh-2rem))]')} onClick={e => e.stopPropagation()} dir="rtl">
         <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
           <input
             autoFocus
+            aria-label="جست‌وجو در دستورات، افراد، یادداشت‌ها و رویدادها"
             className={searchInput}
             value={q}
             onChange={e => setQ(e.target.value)}

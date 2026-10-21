@@ -13,13 +13,13 @@ export function Avatar({ text, tone = 'blue', src, size }: { text: string; tone?
 
 export function Heading({ title, subtitle, action }: { title: string; subtitle: string; action?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
-      <div>
+    <div className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-8 sm:flex-row sm:items-end sm:justify-between sm:gap-5">
+      <div className="min-w-0">
         <small className="text-xs font-medium text-slate-500 dark:text-slate-400">سامانه ناب</small>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl dark:text-white">{title}</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">{subtitle}</p>
+        <h1 className="mt-1 break-words text-[1.375rem] font-bold leading-tight tracking-tight text-slate-950 sm:text-3xl dark:text-white">{title}</h1>
+        <p className="mt-2 max-w-2xl text-[13px] leading-6 text-slate-500 sm:text-sm dark:text-slate-400">{subtitle}</p>
       </div>
-      {action}
+      {action && <div className="w-full shrink-0 sm:w-auto [&>button]:w-full sm:[&>button]:w-auto">{action}</div>}
     </div>
   )
 }

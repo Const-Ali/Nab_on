@@ -89,3 +89,253 @@ select,
 textarea {
   font: inherit;
 }
+
+.print-area {
+  display: none;
+}
+
+@media screen and (max-width: 639px) {
+  .person-modal .modal-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .person-modal .modal-actions > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 0 !important;
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-area,
+  .print-area * {
+    visibility: visible !important;
+  }
+
+  .print-area {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    direction: rtl;
+    color: #111 !important;
+    background: #fff !important;
+    font-family: var(--font-main, 'Vazirmatn'), system-ui, sans-serif !important;
+    font-size: 9pt;
+    line-height: 1.65;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print-area h1,
+  .print-area h2,
+  .print-area h3,
+  .print-area p {
+    margin-block: 2mm;
+  }
+
+  .print-area h1 {
+    font-size: 18pt;
+  }
+
+  .print-area h2 {
+    font-size: 13pt;
+  }
+
+  .print-area h3 {
+    margin-top: 5mm;
+    border-bottom: 1px solid #666;
+    padding-bottom: 1mm;
+    font-size: 10pt;
+  }
+
+  .print-official-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 4mm;
+    border-bottom: 2px solid #222;
+    padding-bottom: 4mm;
+    margin-bottom: 5mm;
+  }
+
+  .print-header-emblem {
+    display: flex;
+    align-items: center;
+    gap: 3mm;
+  }
+
+  .print-emblem-badge {
+    display: grid;
+    width: 16mm;
+    height: 16mm;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1.5px solid #222;
+    border-radius: 50%;
+    font-weight: 700;
+  }
+
+  .print-header-emblem h2,
+  .print-header-emblem h3,
+  .print-header-emblem small {
+    display: block;
+    margin: 0;
+  }
+
+  .print-header-emblem h3 {
+    border: 0;
+    padding: 0;
+    font-size: 9pt;
+  }
+
+  .print-header-emblem small,
+  .print-header-meta,
+  .print-header-qr small {
+    font-size: 7.5pt;
+  }
+
+  .print-header-meta {
+    display: grid;
+    gap: 1mm;
+  }
+
+  .print-header-qr {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1mm;
+  }
+
+  .print-header-qr svg {
+    width: 18mm;
+    height: 18mm;
+  }
+
+  .pp-head {
+    display: flex;
+    align-items: center;
+    gap: 4mm;
+    margin-block: 4mm;
+  }
+
+  .pp-head img,
+  .print-no-photo {
+    display: grid;
+    width: 20mm;
+    height: 20mm;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid #666;
+    border-radius: 3mm;
+    object-fit: cover;
+    font-size: 18pt;
+  }
+
+  .pp-head h1,
+  .pp-head p {
+    margin: 0;
+  }
+
+  .print-table {
+    width: 100%;
+    margin: 3mm 0;
+    border-collapse: collapse;
+    break-inside: auto;
+  }
+
+  .print-table tr {
+    break-inside: avoid;
+    break-after: auto;
+  }
+
+  .print-table td,
+  .print-table th {
+    border: 1px solid #777;
+    padding: 1.5mm 2mm;
+    text-align: right;
+    vertical-align: top;
+  }
+
+  .print-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5mm;
+    padding: 0;
+    list-style: none;
+  }
+
+  .print-steps li {
+    border: 1px solid #aaa;
+    border-radius: 1mm;
+    padding: 1mm 1.5mm;
+    break-inside: avoid;
+  }
+
+  .print-steps li.d {
+    border-color: #555;
+    font-weight: 700;
+  }
+
+  .print-steps li.c {
+    border: 1.5px solid #111;
+    font-weight: 700;
+  }
+
+  .print-log p,
+  .print-notes p {
+    border-bottom: 1px solid #ddd;
+    padding: 1mm 0;
+    margin: 0;
+    break-inside: avoid;
+  }
+
+  .print-signatures {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10mm;
+    margin-top: 10mm;
+    break-inside: avoid;
+  }
+
+  .print-sign-box {
+    display: grid;
+    justify-items: center;
+    gap: 2mm;
+    text-align: center;
+  }
+
+  .print-sign-space {
+    width: 75%;
+    height: 14mm;
+    border-bottom: 1px solid #555;
+  }
+
+  .print-area footer {
+    margin-top: 5mm;
+    border-top: 1px solid #777;
+    padding-top: 2mm;
+    font-size: 7.5pt;
+    text-align: center;
+  }
+}

@@ -83,7 +83,7 @@ export function EditModal({ person, existing, onClose, onSave }: { person: Perso
 
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className={cn(modalBox, modalFormLayout, 'max-h-[calc(100vh-2rem)] max-w-3xl overflow-y-auto')} onSubmit={submit}>
+      <form className={cn(modalBox, modalFormLayout, 'max-h-[calc(100dvh-1rem-env(safe-area-inset-bottom))] max-w-3xl overflow-y-auto sm:max-h-[calc(100vh-2rem)]')} onSubmit={submit}>
         <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
         <small>ویرایش پرونده · {person.id}</small>
         <h2>ویرایش اطلاعات فرد</h2>

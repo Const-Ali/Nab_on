@@ -143,6 +143,22 @@ function downloadLegacySnapshot(snapshot: LegacySnapshot) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+function PageIcon({ name }: { name: Page | 'more' }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {name === 'dashboard' && <><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></>}
+      {name === 'persons' && <><circle cx="10" cy="8" r="3.4" /><path d="M3.7 20v-1.5a3.4 3.4 0 0 1 3.4-3.4h5.8a3.4 3.4 0 0 1 3.4 3.4V20" /><path d="M16.2 4.8a3.4 3.4 0 0 1 0 6.4M18.1 15.2a3.3 3.3 0 0 1 2.2 3.1V20" /></>}
+      {name === 'workflow' && <><circle cx="6" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><circle cx="18" cy="6" r="2" /><path d="M8 6h4a6 6 0 0 1 6 6v4M6 8v8a2 2 0 0 0 2 2h8" /></>}
+      {name === 'activities' && <><path d="M4 12h3l2.2-5 4.4 10 2.2-5H20" /><path d="M4 4v16M20 4v16" opacity=".35" /></>}
+      {name === 'users' && <><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.4" /><path d="M3.5 20v-1.3a3.7 3.7 0 0 1 3.7-3.7h3.6a3.7 3.7 0 0 1 3.7 3.7V20M15 15.2a3.3 3.3 0 0 1 5.5 2.5V20" /></>}
+      {name === 'reports' && <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>}
+      {name === 'settings' && <><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1a1.8 1.8 0 1 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3 .9v.2a1.8 1.8 0 1 1-3.6 0v-.2a1.8 1.8 0 0 0-3-.9l-.1.1a1.8 1.8 0 1 1-2.5-2.5l.1-.1a1.8 1.8 0 0 0-.9-3h-.2a1.8 1.8 0 1 1 0-3.6h.2a1.8 1.8 0 0 0 .9-3l-.1-.1a1.8 1.8 0 1 1 2.5-2.5l.1.1a1.8 1.8 0 0 0 3-.9v-.2a1.8 1.8 0 1 1 3.6 0v.2a1.8 1.8 0 0 0 3 .9l.1-.1a1.8 1.8 0 1 1 2.5 2.5l-.1.1a1.8 1.8 0 0 0 .9 3h.2a1.8 1.8 0 1 1 0 3.6h-.2a1.8 1.8 0 0 0-.9 3Z" transform="translate(0 1) scale(.92)" /></>}
+      {name === 'tasks' && <><path d="M9 6h11M9 12h11M9 18h11" /><path d="m3.5 6 .9.9L6 5.2M3.5 12l.9.9L6 11.2M3.5 18l.9.9L6 17.2" /></>}
+      {name === 'more' && <><circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.2" fill="currentColor" stroke="none" /></>}
+    </svg>
+  )
+}
+
 export default function App() {
   const [session, setSession] = useState<{ username: string } | null>(null)
   const [authReady, setAuthReady] = useState(false)
@@ -569,7 +585,20 @@ export default function App() {
   }
 
   if (!authReady) {
-    return <main className="grid min-h-screen place-items-center bg-slate-50 text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400" dir="rtl">در حال اتصال امن به هاست…</main>
+    return (
+      <main className="grid min-h-screen min-h-[100svh] place-items-center bg-slate-50 px-4 text-center text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400" dir="rtl" role="status" aria-live="polite">
+        <div className="flex flex-col items-center">
+          <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300">
+            <svg className="h-6 w-6 animate-spin motion-reduce:animate-none" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle className="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" />
+              <path d="M21 12a9 9 0 0 1-9 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          </span>
+          <p className="font-medium text-slate-700 dark:text-slate-200">در حال اتصال امن به هاست…</p>
+          <small className="mt-2 max-w-sm leading-5 text-slate-500 dark:text-slate-400">اطلاعات پرونده‌ها فقط پس از تأیید اتصال به پایگاه داده بارگذاری می‌شوند.</small>
+        </div>
+      </main>
+    )
   }
 
   if (setupOpen && needsSetup) {
@@ -708,7 +737,7 @@ export default function App() {
       </aside>
 
       <main className={cn('min-h-screen transition-[padding] duration-200', collapsed ? 'lg:pr-20' : 'lg:pr-72')}>
-        <header className="sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 backdrop-blur sm:px-6 dark:border-slate-800 dark:bg-slate-950/90">
+        <header className="sticky top-0 z-30 flex min-h-16 items-center gap-2 border-b border-slate-200 bg-slate-50/95 px-3 py-2.5 backdrop-blur sm:gap-3 sm:px-6 sm:py-3 dark:border-slate-800 dark:bg-slate-950/95">
           <div className="min-w-0 flex-1">
             <span className="block truncate text-sm">
               <span className="hidden sm:inline">خانه / </span>
@@ -717,6 +746,15 @@ export default function App() {
                 <span className="sm:hidden">{compactNavLabels[page]}</span>
               </b>
             </span>
+            <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[10px] leading-4 text-slate-500 sm:hidden dark:text-slate-400">
+              <time className="shrink-0">{headerDate}</time>
+              {isServerConnected !== null && (
+                <span className="inline-flex min-w-0 items-center gap-1" role="status" title={isServerConnected ? 'داده‌ها روی هاست ذخیره و همگام می‌شوند' : 'اتصال هاست برقرار نیست؛ ذخیره‌سازی روی هاست تأیید نمی‌شود'}>
+                  <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', isServerConnected ? 'bg-emerald-500' : 'bg-amber-500')} />
+                  <span className="truncate">{isServerConnected ? 'همگام‌سازی هاست' : 'اتصال هاست قطع'}</span>
+                </span>
+              )}
+            </div>
             <div className="relative hidden sm:block" data-app-popover="calendar">
               <Button
                 type="button"
@@ -740,9 +778,9 @@ export default function App() {
             {isServerConnected !== null && (
               <span
                 className="mr-2 hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 sm:inline-flex dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
-                title={isServerConnected ? 'داده‌ها روی هاست ذخیره و همگام می‌شوند' : 'اتصال هاست برقرار نیست؛ ذخیره در مرورگر'}
+                title={isServerConnected ? 'داده‌ها روی هاست ذخیره و همگام می‌شوند' : 'اتصال هاست برقرار نیست؛ ذخیره‌سازی روی هاست تأیید نمی‌شود'}
               >
-                {isServerConnected ? 'ذخیره در هاست فعال' : 'حالت محلی'}
+                {isServerConnected ? 'ذخیره در هاست فعال' : 'اتصال هاست قطع'}
               </span>
             )}
           </div>
@@ -790,7 +828,7 @@ export default function App() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="shrink-0 text-xs"
+                className="shrink-0 px-2 text-[11px] sm:px-3 sm:text-xs"
                 onClick={() => {
                   setCalOpen(false)
                   setMobileMoreOpen(false)
@@ -801,7 +839,8 @@ export default function App() {
                 aria-expanded={themeMenuOpen}
                 aria-controls="theme-menu"
               >
-                انتخاب تم
+                <span className="sm:hidden">تم</span>
+                <span className="hidden sm:inline">انتخاب تم</span>
               </Button>
               {themeMenuOpen && (
                 <div id="theme-menu" role="group" aria-label="تم‌های رنگی" className="absolute left-0 top-full z-50 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={() => setThemeMenuOpen(false)}>
@@ -861,7 +900,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="mx-auto w-full max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-8">
+        <div className="mx-auto w-full max-w-7xl px-4 py-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:pb-8">
           {legacySnapshot && (
             <LegacyDataMigration
               snapshot={legacySnapshot}
@@ -1130,9 +1169,10 @@ export default function App() {
               setThemeMenuOpen(false)
               setMobileMoreOpen(false)
             }}
-            className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1 text-[10px] text-slate-500 dark:text-slate-400', page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
+            className={cn('flex min-h-[3.25rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[10px] leading-tight text-slate-500 dark:text-slate-400', page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
           >
-            <span className="truncate">{compactNavLabels[key]}</span>
+            <PageIcon name={key} />
+            <span className="max-w-full truncate">{compactNavLabels[key]}</span>
           </Button>
         ) : null)}
         <div className="relative flex min-w-0 flex-1" data-app-popover="mobile-more">
@@ -1145,12 +1185,13 @@ export default function App() {
             aria-expanded={mobileMoreOpen}
             aria-controls="mobile-more-menu"
             onClick={() => setMobileMoreOpen(open => !open)}
-            className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1 text-[10px] text-slate-500 dark:text-slate-400', mobileMoreOpen && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
+            className={cn('flex min-h-[3.25rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[10px] leading-tight text-slate-500 dark:text-slate-400', mobileMoreOpen && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
           >
+            <PageIcon name="more" />
             <span>بیشتر</span>
           </Button>
           {mobileMoreOpen && (
-            <div id="mobile-more-menu" className="absolute bottom-full left-0 z-50 mb-2 grid max-h-[70vh] w-[min(19rem,calc(100vw-1rem))] grid-cols-1 gap-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+            <div id="mobile-more-menu" className="absolute bottom-full left-0 z-50 mb-2 grid max-h-[70dvh] w-[min(19rem,calc(100vw-1rem))] grid-cols-1 gap-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
               {navItems.slice(4).map(([key, label, perm]) => !perm || has(perm) ? (
                 <Button
                   key={key}
@@ -1177,7 +1218,7 @@ export default function App() {
           )}
         </div>
       </nav>
-      {toast && <div className="fixed bottom-20 left-4 z-[60] max-w-sm rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-xl lg:bottom-6">{toast}</div>}
+      {toast && <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-3 right-3 z-[60] rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-xl sm:left-4 sm:right-auto sm:max-w-sm lg:bottom-6" role="status" aria-live="polite">{toast}</div>}
     </div>
   )
 }

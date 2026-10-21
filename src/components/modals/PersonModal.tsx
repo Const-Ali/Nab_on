@@ -91,7 +91,7 @@ export function PersonModal({
 
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className={cn(modalBox, modalFormLayout, personDetailLayout, 'max-h-[calc(100vh-2rem)] max-w-5xl overflow-y-auto')} onClick={e => e.stopPropagation()}>
+      <div className={cn(modalBox, modalFormLayout, personDetailLayout, 'person-modal max-h-[calc(100dvh-1rem-env(safe-area-inset-bottom))] max-w-5xl overflow-y-auto sm:max-h-[calc(100vh-2rem)]')} onClick={e => e.stopPropagation()}>
         <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
         <small>جزئیات فرد · {person.id}</small>
         <h2>{person.firstName} {person.lastName}</h2>
