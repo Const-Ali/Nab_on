@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '../common/Button'
+import { ThemeToggle } from '../common/ThemeToggle'
 import { PasswordField } from '../common/PasswordField'
+import type { ThemeMode } from '../../types'
 import { errorBox, inputCls, labelCls } from '../ui'
 
-export function SetupAdmin({ onSetup, onBack }: { onSetup: (input: { setup_key: string; username: string; name: string; password: string }) => Promise<void>; onBack: () => void }) {
+export function SetupAdmin({ onSetup, onBack, theme, onToggleTheme }: { onSetup: (input: { setup_key: string; username: string; name: string; password: string }) => Promise<void>; onBack: () => void; theme: ThemeMode; onToggleTheme: () => void }) {
   const [setupKey, setSetupKey] = useState('')
   const [username, setUsername] = useState('')
   const [name, setName] = useState('')
@@ -37,7 +39,8 @@ export function SetupAdmin({ onSetup, onBack }: { onSetup: (input: { setup_key: 
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4 dark:bg-slate-950" dir="rtl">
+    <main className="relative flex min-h-screen items-center justify-center bg-slate-50 p-4 dark:bg-slate-950" dir="rtl">
+      <ThemeToggle theme={theme} onToggle={onToggleTheme} className="absolute left-4 top-4" />
       <form className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900 sm:p-8" onSubmit={submit}>
         <div className="mb-6"><span className="grid h-11 w-11 place-items-center rounded-xl bg-indigo-600 text-lg font-black text-white">ن</span><h1 className="mt-4 text-2xl font-bold text-slate-950 dark:text-white">راه‌اندازی امن سامانه</h1><p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">این مرحله فقط یک‌بار، برای ساخت مدیر اولیهٔ هاست انجام می‌شود. کلید راه‌اندازی را از فایل پیکربندی خصوصی هاست وارد کنید.</p></div>
         <label className={labelCls} htmlFor="setup-key">کلید راه‌اندازی<input id="setup-key" className={inputCls} type="password" dir="ltr" autoComplete="off" required value={setupKey} onChange={event => { setSetupKey(event.target.value); setError('') }} aria-describedby="setup-key-help" /></label>

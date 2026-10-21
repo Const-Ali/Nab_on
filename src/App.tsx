@@ -1,9 +1,11 @@
 import { Button } from './components/common/Button'
+import { ThemeToggle } from './components/common/ThemeToggle'
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import {
   jalaliMonthNames,
   jalaliParts,
   load,
+  loadTheme,
   nowStamp,
   nowTs,
   timestampToMs,
@@ -195,8 +197,8 @@ export default function App() {
   const [notes, setNotes] = useState<Note[]>([])
   const [toast, setToast] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(() => load('nab:sidebar-collapsed', false))
-  const [theme, setTheme] = useState<ThemeMode>(() => load<ThemeMode>('nab:theme', 'light'))
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+  // Old saved color themes are folded into the single dark mode for compatibility.
+  const [theme, setTheme] = useState<ThemeMode>(loadTheme)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [isServerConnected, setIsServerConnected] = useState<boolean | null>(null)
   const [legacySnapshot, setLegacySnapshot] = useState<LegacySnapshot | null>(null)
@@ -298,7 +300,8 @@ export default function App() {
   useLayoutEffect(() => {
     applySavedFont()
     document.documentElement.dataset.theme = theme
-    document.documentElement.classList.toggle('dark', theme !== 'light')
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    document.documentElement.style.colorScheme = theme
     save('nab:theme', theme)
   }, [theme])
   useEffect(() => { save('nab:sidebar-collapsed', collapsed) }, [collapsed])
@@ -311,6 +314,7 @@ export default function App() {
   const activityTrend = useMemo(() => buildMonthlyActivityTrend(activities), [activities])
 
   const has = (p: Permission) => Boolean(currentUser?.permissions.includes(p))
+  const toggleTheme = () => setTheme(current => current === 'dark' ? 'light' : 'dark')
 
   // داده‌های پرونده فقط روی هاست ذخیره می‌شوند؛ اگر نوشتن ناموفق باشد، وضعیت به کاربر اعلام می‌شود.
   useEffect(() => {
@@ -364,7 +368,6 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
-        setThemeMenuOpen(false)
         setMobileMoreOpen(false)
         setCalOpen(false)
         setSearchOpen(o => !o)
@@ -375,17 +378,15 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!themeMenuOpen && !mobileMoreOpen && !calOpen) return
+    if (!mobileMoreOpen && !calOpen) return
     const handlePointerDown = (event: PointerEvent) => {
       if (!(event.target instanceof Element)) return
       const popover = event.target.closest('[data-app-popover]')?.getAttribute('data-app-popover')
-      if (themeMenuOpen && popover !== 'theme') setThemeMenuOpen(false)
       if (mobileMoreOpen && popover !== 'mobile-more') setMobileMoreOpen(false)
       if (calOpen && popover !== 'calendar') setCalOpen(false)
     }
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setThemeMenuOpen(false)
         setMobileMoreOpen(false)
         setCalOpen(false)
       }
@@ -396,7 +397,7 @@ export default function App() {
       document.removeEventListener('pointerdown', handlePointerDown)
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [themeMenuOpen, mobileMoreOpen, calOpen])
+  }, [mobileMoreOpen, calOpen])
 
   const auditLog = (action: string, target: string) => {
     const entry: Audit = { id: uid('AUD'), action, target, createdAt: nowStamp(), createdBy: currentUser?.name ?? 'کاربر' }
@@ -470,7 +471,6 @@ export default function App() {
 
   const openTasksPage = () => {
     setMobileMoreOpen(false)
-    setThemeMenuOpen(false)
     setCalOpen(false)
     if (window.location.pathname !== '/tasks') {
       window.history.pushState({}, '', '/tasks')
@@ -722,16 +722,23 @@ export default function App() {
   }
 
   if (setupOpen && needsSetup) {
-    return <SetupAdmin onBack={() => setSetupOpen(false)} onSetup={async input => {
-      const data = await setupAdminOnServer(input)
-      applyServerBootstrap(data)
-      playChime('success')
-    }} />
+    return <SetupAdmin
+      theme={theme}
+      onToggleTheme={toggleTheme}
+      onBack={() => setSetupOpen(false)}
+      onSetup={async input => {
+        const data = await setupAdminOnServer(input)
+        applyServerBootstrap(data)
+        playChime('success')
+      }}
+    />
   }
 
   if (!session || !currentUser) {
     return (
       <Login
+        theme={theme}
+        onToggleTheme={toggleTheme}
         showSetup={needsSetup}
         serverMessage={serverMessage}
         onShowSetup={() => setSetupOpen(true)}
@@ -770,16 +777,8 @@ export default function App() {
   const activityDayKeys = new Set(activities.map(activityDayKey).filter(Boolean))
   const todayActivityCount = activities.filter(activity => activityDayKey(activity) === `${todayJ.y}-${todayJ.m}-${todayJ.d}`).length
 
-  const themeLabels: Record<ThemeMode, { label: string; dot: string }> = {
-    light: { label: 'روشن (روز)', dot: '#f1f5f9' },
-    dark: { label: 'تاریک (شب)', dot: '#0f172a' },
-    midnight: { label: 'سرمه‌ای سلطنتی', dot: '#0b132b' },
-    emerald: { label: 'زمردی سازمانی', dot: '#06281e' },
-    cobalt: { label: 'آبی کاربنی', dot: '#0d1b2a' },
-  }
-
   return (
-    <div className={cn('min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100', theme !== 'light' && 'dark')} dir="rtl">
+    <div className={cn('min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100', theme === 'dark' && 'dark')} dir="rtl">
       <aside className={cn('fixed inset-y-0 right-0 z-40 hidden flex-col border-l border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 lg:flex dark:border-slate-800 dark:bg-slate-900', collapsed ? 'w-20' : 'w-72')}>
         <Button
           type="button"
@@ -882,7 +881,6 @@ export default function App() {
                 size="xs"
                 className="rounded-lg text-xs text-slate-500 dark:text-slate-400"
                 onClick={() => {
-                  setThemeMenuOpen(false)
                   setMobileMoreOpen(false)
                   setCalOpen(o => !o)
                 }}
@@ -912,7 +910,6 @@ export default function App() {
             className="!hidden min-w-0 max-w-sm flex-1 justify-start text-slate-500 md:!flex dark:text-slate-400"
             onClick={() => {
               setCalOpen(false)
-              setThemeMenuOpen(false)
               setMobileMoreOpen(false)
               setSearchOpen(true)
             }}
@@ -928,7 +925,6 @@ export default function App() {
             className="md:!hidden"
             onClick={() => {
               setCalOpen(false)
-              setThemeMenuOpen(false)
               setMobileMoreOpen(false)
               setSearchOpen(true)
             }}
@@ -942,44 +938,7 @@ export default function App() {
           </Button>
 
           <div className="flex items-center gap-2">
-            {/* Theme Multi-Picker */}
-            <div className="relative" data-app-popover="theme">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0 px-2 text-[11px] sm:px-3 sm:text-xs"
-                onClick={() => {
-                  setCalOpen(false)
-                  setMobileMoreOpen(false)
-                  setThemeMenuOpen(o => !o)
-                }}
-                title="انتخاب تم رنگی"
-                aria-label="انتخاب تم رنگی"
-                aria-expanded={themeMenuOpen}
-                aria-controls="theme-menu"
-              >
-                <span className="sm:hidden">تم</span>
-                <span className="hidden sm:inline">انتخاب تم</span>
-              </Button>
-              {themeMenuOpen && (
-                <div id="theme-menu" role="group" aria-label="تم‌های رنگی" className="absolute left-0 top-full z-50 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={() => setThemeMenuOpen(false)}>
-                  {(['light', 'dark', 'midnight', 'emerald', 'cobalt'] as ThemeMode[]).map(t => (
-                    <Button
-                      key={t}
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      active={theme === t}
-                      className={cn('w-full justify-start rounded-lg text-right', theme === t && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
-                      onClick={() => setTheme(t)}
-                    >
-                      <span>{themeLabels[t].label}</span>
-                    </Button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
 
             <Button
               type="button"
@@ -988,7 +947,6 @@ export default function App() {
               className="lg:!hidden"
               onClick={() => {
                 setCalOpen(false)
-                setThemeMenuOpen(false)
                 setMobileMoreOpen(false)
                 setProfileOpen(true)
               }}
@@ -1268,7 +1226,6 @@ export default function App() {
           }}
           onOpenCreatePerson={() => setCreateOpen(true)}
           onOpenCreateTask={openTasksPage}
-          onChangeTheme={t => setTheme(t)}
           onExportData={exportAllPeople}
         />
       )}
@@ -1299,7 +1256,6 @@ export default function App() {
             onClick={() => {
               setPage(key)
               setCalOpen(false)
-              setThemeMenuOpen(false)
               setMobileMoreOpen(false)
             }}
             className={cn('flex min-h-[3.25rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[10px] leading-tight text-slate-500 dark:text-slate-400', page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
@@ -1337,7 +1293,6 @@ export default function App() {
                   onClick={() => {
                     setPage(key)
                     setCalOpen(false)
-                    setThemeMenuOpen(false)
                     setMobileMoreOpen(false)
                   }}
                 >

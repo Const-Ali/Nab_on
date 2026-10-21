@@ -1,4 +1,4 @@
-const CACHE = 'nab-v6'
+const CACHE = 'nab-v7'
 const SHELL = ['./', './index.html', './manifest.webmanifest']
 
 self.addEventListener('install', event => {

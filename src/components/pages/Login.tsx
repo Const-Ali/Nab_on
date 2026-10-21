@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '../common/Button'
+import { ThemeToggle } from '../common/ThemeToggle'
 import { PasswordField } from '../common/PasswordField'
+import type { ThemeMode } from '../../types'
 import { errorBox, inputCls, labelCls } from '../ui'
 
-export function Login({ onLogin, onShowSetup, showSetup, serverMessage }: { onLogin: (username: string, password: string, remember: boolean) => Promise<void>; onShowSetup: () => void; showSetup: boolean; serverMessage?: string }) {
+export function Login({ onLogin, onShowSetup, showSetup, serverMessage, theme, onToggleTheme }: { onLogin: (username: string, password: string, remember: boolean) => Promise<void>; onShowSetup: () => void; showSetup: boolean; serverMessage?: string; theme: ThemeMode; onToggleTheme: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
@@ -26,7 +28,8 @@ export function Login({ onLogin, onShowSetup, showSetup, serverMessage }: { onLo
   }
 
   return (
-    <div className="grid min-h-screen bg-slate-50 lg:grid-cols-2 dark:bg-slate-950" dir="rtl">
+    <div className="relative grid min-h-screen bg-slate-50 lg:grid-cols-2 dark:bg-slate-950" dir="rtl">
+      <ThemeToggle theme={theme} onToggle={onToggleTheme} className="absolute left-4 top-4 z-20" />
       <section className="hidden flex-col justify-between bg-slate-950 p-10 text-white lg:flex">
         <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-500 text-xl font-black shadow-lg shadow-indigo-500/25">ن</div>
         <div>

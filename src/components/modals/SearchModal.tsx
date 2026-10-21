@@ -2,7 +2,7 @@ import { Button } from '../common/Button'
 import { useMemo, useState } from 'react'
 import { formatServerTimestamp, normalizeText, playChime } from '../../shared'
 import { Avatar } from '../../shared-ui'
-import type { Person, Activity, Note, ThemeMode } from '../../types'
+import type { Person, Activity, Note } from '../../types'
 import { Badge } from '../common/Badge'
 import { backdropCls, cn, modalBox, modalSearchLayout, modalX, searchInput } from '../ui'
 
@@ -10,7 +10,7 @@ interface CommandItem {
   id: string
   title: string
   subtitle: string
-  category: 'فرمان‌های سریع' | 'پیمایش صفحات' | 'شخصی‌سازی و تم'
+  category: 'فرمان‌های سریع' | 'پیمایش صفحات'
   keywords: string[]
   action: () => void
 }
@@ -24,7 +24,6 @@ export function SearchModal({
   onNavigate,
   onOpenCreatePerson,
   onOpenCreateTask,
-  onChangeTheme,
   onExportData,
 }: {
   people: Person[]
@@ -35,7 +34,6 @@ export function SearchModal({
   onNavigate?: (page: 'dashboard' | 'persons' | 'workflow' | 'activities' | 'users' | 'reports' | 'settings' | 'tasks') => void
   onOpenCreatePerson?: () => void
   onOpenCreateTask?: () => void
-  onChangeTheme?: (theme: ThemeMode) => void
   onExportData?: () => void
 }) {
   const [q, setQ] = useState('')
@@ -120,64 +118,9 @@ export function SearchModal({
           onNavigate?.('reports')
         },
       },
-      {
-        id: 'cmd-theme-light',
-        title: 'تغییر تم به حالت روشن (Light)',
-        subtitle: 'قالب استاندارد روز با پس‌زمینه روشن',
-        category: 'شخصی‌سازی و تم',
-        keywords: ['تم', 'روشن', 'سفید', 'light', 'day'],
-        action: () => {
-          onClose()
-          onChangeTheme?.('light')
-        },
-      },
-      {
-        id: 'cmd-theme-dark',
-        title: 'تغییر تم به حالت تاریک (Dark)',
-        subtitle: 'قالب تیره و ملایم برای شب',
-        category: 'شخصی‌سازی و تم',
-        keywords: ['تم', 'تاریک', 'تیره', 'شب', 'dark', 'night'],
-        action: () => {
-          onClose()
-          onChangeTheme?.('dark')
-        },
-      },
-      {
-        id: 'cmd-theme-midnight',
-        title: 'تغییر تم به سرمه‌ای سلطنتی (Midnight Navy)',
-        subtitle: 'قالب اختصاصی با آبی تیره و جزئیات نئونی',
-        category: 'شخصی‌سازی و تم',
-        keywords: ['تم', 'سرمه ای', 'سرمه‌ای', 'midnight', 'navy', 'blue'],
-        action: () => {
-          onClose()
-          onChangeTheme?.('midnight')
-        },
-      },
-      {
-        id: 'cmd-theme-emerald',
-        title: 'تغییر تم به زمردی سازمانی (Emerald)',
-        subtitle: 'قالب لوکس سبز تیره زمردی',
-        category: 'شخصی‌سازی و تم',
-        keywords: ['تم', 'سبز', 'زمردی', 'emerald', 'green'],
-        action: () => {
-          onClose()
-          onChangeTheme?.('emerald')
-        },
-      },
-      {
-        id: 'cmd-theme-cobalt',
-        title: 'تغییر تم به آبی کاربنی (Cobalt)',
-        subtitle: 'قالب مدرن آبی کاربنی با کنتراست بالا',
-        category: 'شخصی‌سازی و تم',
-        keywords: ['تم', 'کاربنی', 'نیلگون', 'cobalt'],
-        action: () => {
-          onClose()
-          onChangeTheme?.('cobalt')
-        },
-      },
     ]
     return list
-  }, [onClose, onOpenCreatePerson, onOpenCreateTask, onExportData, onNavigate, onChangeTheme])
+  }, [onClose, onOpenCreatePerson, onOpenCreateTask, onExportData, onNavigate])
 
   const matchedCommands = useMemo(() => {
     if (!nq) return commands.slice(0, 4)

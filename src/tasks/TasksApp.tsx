@@ -1,14 +1,15 @@
-import { Button } from '../components/common/Button'
+import { ThemeToggle } from '../components/common/ThemeToggle'
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
-import { load, save } from '../shared'
+import { loadTheme, save } from '../shared'
 import { applySavedFont } from '../app-lib'
 import { ApiError, bootstrap, fetchTasks, syncTasks } from '../api-client'
 import WorkManagementPage from './WorkManagementPage'
 import { normalizeTask } from './utils'
+import type { ThemeMode } from '../types'
 import type { UserLite, WorkTask } from './types'
 
 export default function TasksApp() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => load<string>('nab:theme', 'light') === 'light' ? 'light' : 'dark')
+  const [theme, setTheme] = useState<ThemeMode>(loadTheme)
   const [user, setUser] = useState<UserLite | null>(null)
   const [users, setUsers] = useState<UserLite[]>([])
   const [tasks, setTasks] = useState<WorkTask[] | null>(null)
@@ -19,6 +20,8 @@ export default function TasksApp() {
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme
     document.documentElement.classList.toggle('dark', theme === 'dark')
+    document.documentElement.style.colorScheme = theme
+    save('nab:theme', theme)
   }, [theme])
 
   useEffect(() => {
@@ -70,20 +73,12 @@ export default function TasksApp() {
           <a className="tasks-back" href="/" onClick={event => { event.preventDefault(); window.history.pushState({}, '', '/'); window.dispatchEvent(new PopStateEvent('popstate')) }} title="بازگشت به سامانه ناب">بازگشت به ناب</a>
           <span className="tasks-brand"><b>مدیریت کارهای من</b><small>داشبورد خصوصی {user.name} · سامانه ناب</small></span>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          active={theme === 'dark'}
-          onClick={() => {
-            const next = theme === 'dark' ? 'light' : 'dark'
-            setTheme(next)
-            save('nab:theme', next)
+        <ThemeToggle
+          theme={theme}
+          onToggle={() => {
+            setTheme(current => current === 'dark' ? 'light' : 'dark')
           }}
-          title={theme === 'dark' ? 'حالت روشن' : 'حالت تیره'}
-          aria-label={theme === 'dark' ? 'تغییر به حالت روشن' : 'تغییر به حالت تیره'}
-        >
-          {theme === 'dark' ? 'حالت روشن' : 'حالت تیره'}
-        </Button>
+        />
       </header>
       {syncError && <div className="mx-auto mt-3 max-w-5xl rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">ذخیره‌سازی روی هاست ناموفق بود: {syncError}</div>}
       <main className="tasks-content">

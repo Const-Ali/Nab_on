@@ -83,7 +83,7 @@ export type User = {
 }
 
 export type FontKey = 'vazir' | 'estedad' | 'samim' | 'shabnam' | 'lalezar'
-export type ThemeMode = 'light' | 'dark' | 'midnight' | 'emerald' | 'cobalt'
+export type ThemeMode = 'light' | 'dark'
 
 export type AppSettings = {
   appName: string

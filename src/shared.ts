@@ -41,6 +41,11 @@ export const save = (key: string, value: unknown) => {
   }
 }
 
+export const loadTheme = (): 'light' | 'dark' => {
+  const saved = load<unknown>('nab:theme', 'light')
+  return saved === 'dark' || saved === 'midnight' || saved === 'emerald' || saved === 'cobalt' ? 'dark' : 'light'
+}
+
 export const jalaliMonthNames = [
   'فروردین',
   'اردیبهشت',
