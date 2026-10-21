@@ -1,5 +1,5 @@
 import { Button } from './components/common/Button'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import {
   jalaliMonthNames,
   jalaliParts,
@@ -29,6 +29,7 @@ import {
 import { Avatar, MiniCalendar } from './shared-ui'
 import {
   deadlineLeft,
+  buildMonthlyActivityTrend,
   defaultRoles,
   normalizeUser,
   downloadCsv,
@@ -265,9 +266,10 @@ export default function App() {
   }, [])
 
   // تنظیم فونت، تم و نوار کناری؛ این‌ها ترجیح‌های غیرحساسِ همین مرورگر هستند.
-  useEffect(() => {
+  useLayoutEffect(() => {
     applySavedFont()
     document.documentElement.dataset.theme = theme
+    document.documentElement.classList.toggle('dark', theme !== 'light')
     save('nab:theme', theme)
   }, [theme])
   useEffect(() => { save('nab:sidebar-collapsed', collapsed) }, [collapsed])
@@ -277,6 +279,7 @@ export default function App() {
     () => sessionUsername ? users.find(user => user.username === sessionUsername && user.active) ?? null : null,
     [users, sessionUsername],
   )
+  const activityTrend = useMemo(() => buildMonthlyActivityTrend(activities), [activities])
 
   const has = (p: Permission) => Boolean(currentUser?.permissions.includes(p))
 
@@ -597,7 +600,7 @@ export default function App() {
     ['reports', 'گزارش‌ها و تحلیل', 'view_reports'],
     ['settings', 'تنظیمات'],
   ]
-  const mobileMorePageActive = navItems.slice(4).some(([key, , perm]) => key === page && (!perm || has(perm)))
+  const mobileMorePageActive = page === 'tasks' || navItems.slice(4).some(([key, , perm]) => key === page && (!perm || has(perm)))
   const compactNavLabels: Record<Page, string> = { dashboard: 'داشبورد', persons: 'افراد', workflow: 'گردش‌کار', activities: 'رویدادها', users: 'کاربران', reports: 'گزارش‌ها', settings: 'تنظیمات', tasks: 'کارها' }
 
   const todayJ = jalaliParts(new Date())
@@ -619,18 +622,20 @@ export default function App() {
 
   return (
     <div className={cn('min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100', theme !== 'light' && 'dark')} dir="rtl">
-      <aside className={cn('fixed inset-y-0 right-0 z-40 hidden w-72 flex-col border-l border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 lg:flex dark:border-slate-800 dark:bg-slate-900', collapsed && 'w-20')}>
+      <aside className={cn('fixed inset-y-0 right-0 z-40 hidden flex-col border-l border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 lg:flex dark:border-slate-800 dark:bg-slate-900', collapsed ? 'w-20' : 'w-72')}>
         <Button
           type="button"
           variant="outline"
-          size="xs"
-          className="absolute -left-4 top-8 -translate-x-full rounded-full px-2 text-xs"
+          size="none"
+          className="absolute left-3 top-16 z-10 grid h-9 w-9 min-h-9 place-items-center rounded-full p-0"
           onClick={() => setCollapsed(c => !c)}
           title={collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'}
           aria-label={collapsed ? 'باز کردن نوار کناری' : 'جمع کردن نوار کناری'}
           aria-pressed={collapsed}
         >
-          {collapsed ? 'باز کردن' : 'جمع کردن'}
+          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            {collapsed ? <path d="m7 4 6 6-6 6" /> : <path d="m13 4-6 6 6 6" />}
+          </svg>
         </Button>
         <div className="flex items-center gap-3 px-2 py-3">
           <b className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-600 text-lg font-black text-white shadow-sm">ن</b>
@@ -693,7 +698,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className={cn('min-h-screen transition-[padding] duration-200 lg:pr-72', collapsed && 'lg:pr-20')}>
+      <main className={cn('min-h-screen transition-[padding] duration-200', collapsed ? 'lg:pr-20' : 'lg:pr-72')}>
         <header className="sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 backdrop-blur sm:px-6 dark:border-slate-800 dark:bg-slate-950/90">
           <div className="min-w-0 flex-1">
             <span>
@@ -806,6 +811,23 @@ export default function App() {
 
             <Button
               type="button"
+              variant="outline"
+              size="icon"
+              className="lg:hidden"
+              onClick={() => {
+                setCalOpen(false)
+                setThemeMenuOpen(false)
+                setMobileMoreOpen(false)
+                setProfileOpen(true)
+              }}
+              title="نمایش پروفایل"
+              aria-label={`نمایش پروفایل ${currentUser.name}`}
+            >
+              <Avatar text={currentUser.name[0] ?? 'ک'} src={currentUser.photo} size={28} />
+            </Button>
+
+            <Button
+              type="button"
               variant="primary"
               size="sm"
               className="hidden sm:inline-flex"
@@ -832,13 +854,12 @@ export default function App() {
             <Dashboard
               people={people}
               activities={activities}
-              trend={{
-                labels: ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور'],
-                values: [12, 19, 15, 27, 34, activities.length],
-              }}
+              trend={activityTrend}
+              canViewActivities={has('view_activities')}
               canCreate={has('create_person')}
               onCreate={() => setCreateOpen(true)}
               onPersons={() => setPage('persons')}
+              onActivities={() => setPage('activities')}
               onSelect={setSelected}
               greeting={`خوش آمدید، ${currentUser.name}`}
             />
@@ -851,6 +872,7 @@ export default function App() {
               filter={filter}
               tagFilter={tagFilter}
               sortBy={sortBy}
+              selfUsername={currentUser.username}
               setQuery={setQuery}
               setFilter={setFilter}
               setTagFilter={setTagFilter}

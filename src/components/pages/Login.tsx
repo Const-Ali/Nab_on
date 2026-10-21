@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '../common/Button'
+import { PasswordField } from '../common/PasswordField'
 import { errorBox, inputCls, labelCls } from '../ui'
 
 export function Login({ onLogin, onShowSetup, showSetup, serverMessage }: { onLogin: (username: string, password: string, remember: boolean) => Promise<void>; onShowSetup: () => void; showSetup: boolean; serverMessage?: string }) {
@@ -37,10 +38,10 @@ export function Login({ onLogin, onShowSetup, showSetup, serverMessage }: { onLo
       <main className="flex items-center justify-center p-5 sm:p-8">
         <form className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none" onSubmit={submit}>
           <div className="mb-8"><div className="grid h-11 w-11 place-items-center rounded-xl bg-indigo-600 text-lg font-black text-white lg:hidden">ن</div><h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-950 dark:text-white">خوش آمدید</h2><p className="mt-2 text-sm text-slate-500 dark:text-slate-400">برای ورود به سامانه اطلاعات حساب خود را وارد کنید.</p></div>
-          {serverMessage && <div className={`${errorBox} mb-4`}>{serverMessage}</div>}
-          <label className={labelCls}>نام کاربری<input className={inputCls} value={username} onChange={event => { setUsername(event.target.value); setError('') }} autoComplete="username" /></label>
-          <label className={`${labelCls} mt-4`}>رمز عبور<input className={inputCls} type="password" value={password} onChange={event => { setPassword(event.target.value); setError('') }} autoComplete="current-password" /></label>
-          {error && <div className={`${errorBox} mt-4`}>{error}</div>}
+          {serverMessage && <div className={`${errorBox} mb-4`} role="status">{serverMessage}</div>}
+          <label className={labelCls} htmlFor="login-username">نام کاربری<input id="login-username" className={inputCls} value={username} onChange={event => { setUsername(event.target.value); setError('') }} autoComplete="username" required /></label>
+          <div className={`${labelCls} mt-4`}><label htmlFor="login-password">رمز عبور</label><PasswordField id="login-password" value={password} onChange={event => { setPassword(event.target.value); setError('') }} autoComplete="current-password" dir="ltr" required /></div>
+          {error && <div className={`${errorBox} mt-4`} role="alert" aria-live="assertive">{error}</div>}
           <div className="mt-5 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
             <label className="flex items-center gap-2 text-slate-600 dark:text-slate-300"><input className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} /> مرا به خاطر بسپار</label>
             <span className="text-xs text-slate-500 dark:text-slate-400">برای بازیابی رمز با مدیر سیستم تماس بگیرید.</span>

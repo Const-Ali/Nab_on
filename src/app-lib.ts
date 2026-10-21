@@ -301,6 +301,65 @@ export const validBirthDate = (value: string) => {
 
 export const validDeadlineDate = (value: string) => parseJalaliDate(value) !== null
 
+export function buildMonthlyActivityTrend(activities: Activity[], now = new Date()) {
+  const current = jalaliParts(now)
+  const periods = Array.from({ length: 6 }, (_, index) => {
+    const rawMonth = current.m - 5 + index
+    const year = current.y + Math.floor((rawMonth - 1) / 12)
+    const month = (((rawMonth - 1) % 12) + 12) % 12 + 1
+    return { year, month, key: `${year}-${month}` }
+  })
+  const counts = new Map(periods.map(period => [period.key, 0]))
+
+  for (const activity of activities) {
+    let period: { year: number; month: number } | null = null
+    if (typeof activity.ts === 'number' && Number.isFinite(activity.ts) && activity.ts > 0) {
+      const timestamp = activity.ts < 100_000_000_000 ? activity.ts * 1000 : activity.ts
+      const date = new Date(timestamp)
+      if (!Number.isNaN(date.getTime())) {
+        const parts = jalaliParts(date)
+        period = { year: parts.y, month: parts.m }
+      }
+    }
+    if (!period) {
+      const dateText = normalizeDigits(String(activity.createdAt ?? '').split(/[·•,،]/u)[0].trim())
+      const match = dateText.match(/^(\d{3,4})[/-](\d{1,2})[/-](\d{1,2})$/)
+      if (match) {
+        const year = Number(match[1])
+        const month = Number(match[2])
+        const day = Number(match[3])
+        if (year >= 1300 && year <= 1600 && validJalaliDate(`${year}/${month}/${day}`)) {
+          period = { year, month }
+        } else if (year >= 1900 && year <= 2200 && month >= 1 && month <= 12 && day >= 1) {
+          const date = new Date(year, month - 1, day, 12)
+          if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) {
+            const parts = jalaliParts(date)
+            period = { year: parts.y, month: parts.m }
+          }
+        }
+      } else {
+        const namedMatch = dateText.match(/^(\d{1,2})\s+(.+?)\s+(\d{3,4})$/u)
+        if (namedMatch) {
+          const day = Number(namedMatch[1])
+          const month = jalaliMonthNames.indexOf(namedMatch[2].trim() as typeof jalaliMonthNames[number]) + 1
+          const year = Number(namedMatch[3])
+          if (month > 0 && validJalaliDate(`${year}/${month}/${day}`)) period = { year, month }
+        }
+      }
+    }
+    if (period) {
+      const key = `${period.year}-${period.month}`
+      if (counts.has(key)) counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+  }
+
+  return {
+    labels: periods.map(period => jalaliMonthNames[period.month - 1]),
+    fullLabels: periods.map(period => `${jalaliMonthNames[period.month - 1]} ${period.year.toLocaleString('fa-IR')}`),
+    values: periods.map(period => counts.get(period.key) ?? 0),
+  }
+}
+
 export const downloadCsv = (filename: string, headers: string[], rows: (string | number | null | undefined)[][]) => {
   const csvCell = (cell: string | number | null | undefined) => {
     let value = String(cell ?? '')

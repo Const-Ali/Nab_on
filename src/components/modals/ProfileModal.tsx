@@ -1,4 +1,5 @@
 import { Button } from '../common/Button'
+import { PasswordField } from '../common/PasswordField'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import type { User } from '../../types'
@@ -35,17 +36,17 @@ export function ProfileModal({ user, onClose, onSave, onLogout }: { user: User; 
         <h2>حساب کاربری</h2>
         <PhotoField value={photo} fallbackInitial={name.trim()[0] ?? 'ن'} onChange={setPhoto} />
         <div className="form-grid">
-          <label>نام و نام خانوادگی *<input required value={name} onChange={e => setName(e.target.value)} /></label>
+          <label>نام و نام خانوادگی *<input required maxLength={160} autoComplete="name" value={name} onChange={e => setName(e.target.value)} /></label>
           <label>سمت<input value={user.title} disabled /></label>
         </div>
         <h3 className="modal-h">تغییر رمز عبور <small>— خالی بگذارید اگر نمی‌خواهید تغییر کند</small></h3>
         <div className="form-grid">
-          <label>رمز فعلی<input type="password" dir="ltr" autoComplete="current-password" value={current} onChange={e => { setCurrent(e.target.value); setError('') }} /></label>
-          <span />
-          <label>رمز جدید<input type="password" minLength={12} dir="ltr" autoComplete="new-password" value={next} onChange={e => { setNext(e.target.value); setError('') }} /></label>
-          <label>تکرار رمز جدید<input type="password" dir="ltr" autoComplete="new-password" value={confirm} onChange={e => { setConfirm(e.target.value); setError('') }} /></label>
+          <div className="block text-sm font-medium text-slate-700 dark:text-slate-200"><label htmlFor="profile-current-password">رمز فعلی</label><PasswordField id="profile-current-password" dir="ltr" autoComplete="current-password" value={current} onChange={e => { setCurrent(e.target.value); setError('') }} /></div>
+          <span aria-hidden="true" />
+          <div className="block text-sm font-medium text-slate-700 dark:text-slate-200"><label htmlFor="profile-new-password">رمز جدید</label><PasswordField id="profile-new-password" minLength={12} dir="ltr" autoComplete="new-password" value={next} onChange={e => { setNext(e.target.value); setError('') }} /></div>
+          <div className="block text-sm font-medium text-slate-700 dark:text-slate-200"><label htmlFor="profile-confirm-password">تکرار رمز جدید</label><PasswordField id="profile-confirm-password" dir="ltr" autoComplete="new-password" value={confirm} onChange={e => { setConfirm(e.target.value); setError('') }} /></div>
         </div>
-        {error && <div className="error">{error}</div>}
+        {error && <div className="error" role="alert" aria-live="assertive">{error}</div>}
         <div className="modal-actions">
           <Button type="button" variant="outline" onClick={onClose}> بستن</Button>
           <Button type="button" variant="danger" onClick={onLogout}> خروج از حساب</Button>

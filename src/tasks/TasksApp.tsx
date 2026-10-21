@@ -1,5 +1,5 @@
 import { Button } from '../components/common/Button'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { load, save } from '../shared'
 import { applySavedFont } from '../app-lib'
 import { ApiError, bootstrap, fetchTasks, syncTasks } from '../api-client'
@@ -8,7 +8,7 @@ import { normalizeTask } from './utils'
 import type { UserLite, WorkTask } from './types'
 
 export default function TasksApp() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => load('nab:theme', 'light'))
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => load<string>('nab:theme', 'light') === 'light' ? 'light' : 'dark')
   const [user, setUser] = useState<UserLite | null>(null)
   const [users, setUsers] = useState<UserLite[]>([])
   const [tasks, setTasks] = useState<WorkTask[] | null>(null)
@@ -16,7 +16,10 @@ export default function TasksApp() {
   const [syncError, setSyncError] = useState('')
 
   useEffect(() => { applySavedFont() }, [])
-  useEffect(() => { document.documentElement.dataset.theme = theme; save('nab:theme', theme) }, [theme])
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
 
   useEffect(() => {
     let active = true
@@ -71,7 +74,11 @@ export default function TasksApp() {
           variant="outline"
           size="sm"
           active={theme === 'dark'}
-          onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+          onClick={() => {
+            const next = theme === 'dark' ? 'light' : 'dark'
+            setTheme(next)
+            save('nab:theme', next)
+          }}
           title={theme === 'dark' ? 'حالت روشن' : 'حالت تیره'}
           aria-label={theme === 'dark' ? 'تغییر به حالت روشن' : 'تغییر به حالت تیره'}
         >

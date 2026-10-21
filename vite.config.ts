@@ -8,5 +8,12 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     allowedHosts: true,
+    // During local development Vite serves the UI; forward the PHP API to PHP's dev server.
+    proxy: {
+      '/api.php': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+    },
   },
 })

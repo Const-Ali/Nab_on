@@ -1,4 +1,5 @@
 import { Button } from '../common/Button'
+import { PasswordField } from '../common/PasswordField'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { permissionLabels } from '../../app-lib'
@@ -18,7 +19,7 @@ export function AddUserModal({ existing, roles, onClose, onCreate }: { existing:
     e.preventDefault()
     const cleanUsername = username.trim().toLowerCase()
     if (!name.trim() || !cleanUsername) { setError('نام و نام کاربری الزامی هستند.'); return }
-    if (!/^[a-z0-9_.-]+$/.test(cleanUsername)) { setError('نام کاربری فقط می‌تواند شامل حروف لاتین، عدد و ._- باشد.'); return }
+    if (!/^[a-z0-9_.-]{3,64}$/.test(cleanUsername)) { setError('نام کاربری باید ۳ تا ۶۴ نویسه و شامل حروف لاتین، عدد، نقطه، خط تیره یا زیرخط باشد.'); return }
     if (existing.some(u => u.username === cleanUsername)) { setError('این نام کاربری قبلاً استفاده شده است.'); return }
     if (password.length < 12) { setError('رمز عبور باید حداقل ۱۲ نویسه باشد.'); return }
     setSaving(true)
@@ -38,17 +39,17 @@ export function AddUserModal({ existing, roles, onClose, onCreate }: { existing:
         <small>کاربر جدید</small>
         <h2>ایجاد حساب ورود</h2>
         <p>کاربر با همین نام کاربری و رمز عبور وارد سامانه می‌شود؛ سطح دسترسی را مشخص کنید.</p>
-        <div className={formGrid}>
-          <label>نام و نام خانوادگی *<input required value={name} onChange={e => setName(e.target.value)} /></label>
-          <label>نام کاربری *<input required dir="ltr" autoComplete="off" value={username} onChange={e => { setUsername(e.target.value); setError('') }} /></label>
-          <label>رمز عبور *<input type="password" required minLength={12} dir="ltr" autoComplete="new-password" value={password} onChange={e => { setPassword(e.target.value); setError('') }} /></label>
+        <div className={cn(formGrid, 'form-grid')}>
+          <label>نام و نام خانوادگی *<input required maxLength={160} autoComplete="name" value={name} onChange={e => setName(e.target.value)} /></label>
+          <label>نام کاربری *<input required minLength={3} maxLength={64} dir="ltr" autoComplete="username" value={username} onChange={e => { setUsername(e.target.value); setError('') }} /></label>
+          <div className="block text-sm font-medium text-slate-700 dark:text-slate-200"><label htmlFor="add-user-password">رمز عبور *</label><PasswordField id="add-user-password" required minLength={12} dir="ltr" autoComplete="new-password" value={password} onChange={e => { setPassword(e.target.value); setError('') }} /></div>
           <label>نقش<select value={role} onChange={e => setRole(e.target.value as Role)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>
         <h3 className="modal-h">مجوزهای این نقش <small>— بعداً برای هر کاربر قابل ویرایش است</small></h3>
         <div className="permission-list">
           {(roles.find(r => r.id === role)?.permissions ?? []).map(p => <span key={p}>{permissionLabels[p]}</span>)}
         </div>
-        {error && <div className={errorBox}>{error}</div>}
+        {error && <div className={errorBox} role="alert" aria-live="assertive">{error}</div>}
         <div className={modalActions}>
           <Button type="button" variant="outline" onClick={onClose}> انصراف</Button>
           <Button type="submit" variant="primary" loading={saving} loadingText="در حال ایجاد..."> ایجاد کاربر</Button>

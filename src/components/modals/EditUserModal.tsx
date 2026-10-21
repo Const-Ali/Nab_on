@@ -1,4 +1,5 @@
 import { Button } from '../common/Button'
+import { PasswordField } from '../common/PasswordField'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { permissionLabels, allPermissions } from '../../app-lib'
@@ -42,9 +43,9 @@ export function EditUserModal({ user, roles, isSelf, onClose, onSave }: { user: 
         <small>تنظیم دسترسی · {user.username}@</small>
         <h2>سطح دسترسی کاربر</h2>
         <div className="form-grid">
-          <label>نام و نام خانوادگی *<input required value={name} onChange={e => setName(e.target.value)} /></label>
+          <label>نام و نام خانوادگی *<input required maxLength={160} autoComplete="name" value={name} onChange={e => setName(e.target.value)} /></label>
           <label>نقش<select value={role} onChange={e => changeRole(e.target.value as Role)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label>رمز عبور جدید<input type="password" minLength={12} dir="ltr" autoComplete="new-password" value={password} onChange={e => { setPassword(e.target.value); setError('') }} placeholder="فقط برای تغییر وارد کنید" /></label>
+          <div className="block text-sm font-medium text-slate-700 dark:text-slate-200"><label htmlFor="edit-user-password">رمز عبور جدید</label><PasswordField id="edit-user-password" minLength={12} dir="ltr" autoComplete="new-password" value={password} onChange={e => { setPassword(e.target.value); setError('') }} placeholder="فقط برای تغییر وارد کنید" /></div>
         </div>
         <h3 className="modal-h">مجوزها <small>— با تغییر نقش به‌صورت خودکار پر می‌شود</small></h3>
         <div className="perm-grid">
@@ -54,7 +55,7 @@ export function EditUserModal({ user, roles, isSelf, onClose, onSave }: { user: 
           <span>امکان ورود به سامانه{isSelf ? ' (حساب خود شما)' : ''}</span>
           <label className="remember"><input type="checkbox" checked={active} disabled={isSelf} onChange={e => setActive(e.target.checked)} /> {active ? 'فعال' : 'غیرفعال'}</label>
         </div>
-        {error && <div className="error">{error}</div>}
+        {error && <div className="error" role="alert" aria-live="assertive">{error}</div>}
         <div className="modal-actions">
           <Button type="button" variant="outline" onClick={onClose}> انصراف</Button>
           <Button type="submit" variant="primary" loading={saving} loadingText="در حال ذخیره..."> ذخیره دسترسی</Button>
