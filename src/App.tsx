@@ -304,6 +304,12 @@ export default function App() {
     document.documentElement.style.colorScheme = theme
     save('nab:theme', theme)
   }, [theme])
+
+  // Keep internal page navigation predictable, especially after leaving long mobile lists.
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
+  }, [page])
+
   useEffect(() => { save('nab:sidebar-collapsed', collapsed) }, [collapsed])
 
   const sessionUsername = session?.username ?? ''

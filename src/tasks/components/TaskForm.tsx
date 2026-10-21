@@ -1,5 +1,5 @@
 import { Button } from '../../components/common/Button'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { BirthDateField } from '../../shared-ui'
 import { normalizeDigits } from '../../shared'
@@ -28,6 +28,13 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
   const [tagsText, setTagsText] = useState((initial?.tags ?? []).join('، '))
   const [note, setNote] = useState(initial?.note ?? '')
   const [error, setError] = useState('')
+  const titleInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (window.matchMedia('(min-width: 641px) and (pointer: fine)').matches) {
+      titleInputRef.current?.focus({ preventScroll: true })
+    }
+  }, [])
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -73,7 +80,7 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
             عنوان کار *
             <input
               className={inputCls}
-              autoFocus
+              ref={titleInputRef}
               required
               value={title}
               onChange={e => { setTitle(e.target.value); setError('') }}

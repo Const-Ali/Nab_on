@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Button } from '../../components/common/Button'
-import { jalaliMonthNames, jalaliParts, toPersianDigits } from '../../shared'
+import { jalaliJdn, jalaliMonthNames, jalaliParts, toPersianDigits } from '../../shared'
 import { taskPriorityLabels, taskPriorityTones, taskStatusLabels } from '../types'
 import type { WorkTask } from '../types'
 
@@ -18,7 +18,9 @@ export default function TaskGantt({ tasks, onOpen }: Props) {
     const list: { y: number; m: number; d: number; label: string; dateStr: string; isToday: boolean }[] = []
     const curYear = todayJ.y
     const curMonth = todayJ.m
-    const maxDays = curMonth <= 6 ? 31 : curMonth <= 11 ? 30 : 29
+    const nextMonthYear = curMonth === 12 ? curYear + 1 : curYear
+    const nextMonth = curMonth === 12 ? 1 : curMonth + 1
+    const maxDays = jalaliJdn(nextMonthYear, nextMonth, 1) - jalaliJdn(curYear, curMonth, 1)
 
     for (let d = 1; d <= maxDays; d++) {
       const dateStr = `${curYear}/${String(curMonth).padStart(2, '0')}/${String(d).padStart(2, '0')}`
@@ -58,8 +60,9 @@ export default function TaskGantt({ tasks, onOpen }: Props) {
         <b> تایم‌لاین و گانت‌چارت کارها · {jalaliMonthNames[todayJ.m - 1]} {toPersianDigits(todayJ.y)}</b>
         <small>نمایش بازه زمانی، مهلت انجام و پیشرفت تسک‌ها روی خط زمان</small>
       </div>
+      <p className="wm-gantt-scroll-hint" role="note">برای دیدن روزهای بیشتر، جدول زمان‌بندی را به‌صورت افقی بکشید.</p>
 
-      <div className="wm-gantt-container">
+      <div className="wm-gantt-container" role="region" aria-label="نمودار زمان‌بندی کارها؛ برای دیدن روزهای دیگر افقی پیمایش کنید" tabIndex={0}>
         {/* Left column: Task list */}
         <div className="wm-gantt-tasks-col">
           <div className="wm-gantt-cell-head">عنوان کار</div>
