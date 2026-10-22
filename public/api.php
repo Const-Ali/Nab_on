@@ -153,7 +153,7 @@ function legacy_role_permissions(): array {
     ];
 }
 
-function same_permission_set($left, $right): bool {
+function same_permission_set(mixed $left, mixed $right): bool {
     if (!is_array($left) || !is_array($right)) return false;
     $left = array_values(array_unique(array_filter($left, 'is_string')));
     $right = array_values(array_unique(array_filter($right, 'is_string')));
@@ -635,7 +635,7 @@ function encrypt_backup_payload(array $payload, string $passphrase): string {
     return "NABDB2\0" . pack('N', $iterations) . $salt . $nonce . $tag . $ciphertext;
 }
 
-function validate_backup_payload($payload, ?string $expectedFormat = null): array {
+function validate_backup_payload(mixed $payload, ?string $expectedFormat = null): array {
     $payloadFormat = is_array($payload) ? (string)($payload['format'] ?? '') : '';
     if (!is_array($payload) || !in_array($payloadFormat, ['nab-encrypted-backup-v1', 'nab-encrypted-backup-v2'], true)
         || ($expectedFormat !== null && $payloadFormat !== $expectedFormat) || (int)($payload['schema_version'] ?? 0) !== 1) {
@@ -982,7 +982,7 @@ function gregorian_jdn(int $year, int $month, int $day): int {
     return $day + intdiv(153 * $m + 2, 5) + 365 * $y + intdiv($y, 4) - intdiv($y, 100) + intdiv($y, 400) - 32045;
 }
 
-function notification_timestamp_ms($value): int {
+function notification_timestamp_ms(mixed $value): int {
     if (is_numeric($value)) {
         $number = (int)$value;
         if ($number > 0) return $number < 100000000000 ? $number * 1000 : $number;
@@ -1445,7 +1445,7 @@ function is_system_admin(array $user): bool {
     return (string)$user['role_id'] === 'admin';
 }
 
-function validate_permissions($permissions, array $actor): array {
+function validate_permissions(mixed $permissions, array $actor): array {
     if (!is_array($permissions)) fail(422, 'فهرست مجوزها معتبر نیست.');
     $permissions = array_values(array_unique(array_intersect(all_permissions(), $permissions)));
     $dependencyError = permission_dependency_error($permissions);
@@ -1454,7 +1454,7 @@ function validate_permissions($permissions, array $actor): array {
     return $permissions;
 }
 
-function validate_updated_permissions($permissions, array $actor, array $target): array {
+function validate_updated_permissions(mixed $permissions, array $actor, array $target): array {
     if (!is_array($permissions)) fail(422, 'فهرست مجوزها معتبر نیست.');
     $permissions = array_values(array_unique(array_intersect(all_permissions(), $permissions)));
     $dependencyError = permission_dependency_error($permissions);
@@ -1478,7 +1478,7 @@ function updated_user(PDO $pdo, string $username): array {
     return safe_user($row);
 }
 
-function validate_workflow_definition($input): array {
+function validate_workflow_definition(mixed $input): array {
     if (!is_array($input) || (int)($input['version'] ?? 0) !== 1 || !is_array($input['stages'] ?? null)) fail(422, 'تعریف گردش‌کار معتبر نیست.');
     $rawStages = $input['stages'];
     if (count($rawStages) < 2 || count($rawStages) > 60) fail(422, 'گردش‌کار باید بین ۲ تا ۶۰ مرحله داشته باشد.');
