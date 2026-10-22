@@ -102,8 +102,8 @@ export function WorkflowManager({ config, onClose, onSave }: {
 
   return (
     <div className={backdropCls} onClick={event => { if (event.target === event.currentTarget && !saving) onClose() }}>
-      <section className={cn(modalBox, 'max-h-[calc(100dvh-1rem-env(safe-area-inset-bottom))] w-full max-w-5xl overflow-hidden p-0 sm:max-h-[calc(100vh-2rem)]')} role="dialog" aria-modal="true" aria-labelledby="workflow-manager-title">
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900">
+      <section className={cn(modalBox, 'mobile-fill-modal flex max-h-[calc(100dvh-1rem-env(safe-area-inset-bottom))] w-full max-w-5xl flex-col overflow-hidden p-0 sm:max-h-[calc(100vh-2rem)]')} role="dialog" aria-modal="true" aria-labelledby="workflow-manager-title">
+        <header className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900">
           <div>
             <h2 id="workflow-manager-title" className="text-lg font-bold text-slate-950 dark:text-white">مدیریت گردش‌کار</h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400">
@@ -113,7 +113,7 @@ export function WorkflowManager({ config, onClose, onSave }: {
           <Button type="button" variant="ghost" size="xs" onClick={onClose} disabled={saving} aria-label="بستن">بستن</Button>
         </header>
 
-        <div className="max-h-[calc(100dvh-13rem)] space-y-4 overflow-y-auto p-4 sm:max-h-[calc(100vh-14rem)] sm:p-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
           <section className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 dark:border-indigo-900/70 dark:bg-indigo-950/30">
             <h3 className="text-sm font-bold text-indigo-950 dark:text-indigo-100">افزودن مرحله</h3>
             <p className="mt-1 text-xs leading-5 text-indigo-800 dark:text-indigo-200">مرحلهٔ جدید پس از مرحلهٔ انتخابی درج می‌شود و مسیر بعدی موجود به آن منتقل خواهد شد.</p>
@@ -186,11 +186,11 @@ export function WorkflowManager({ config, onClose, onSave }: {
           {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200" role="alert">{error}</div>}
         </div>
 
-        <footer className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5 dark:border-slate-800 dark:bg-slate-900">
+        <footer className="sticky bottom-0 flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5 dark:border-slate-800 dark:bg-slate-900">
           <small className="text-xs leading-5 text-slate-500 dark:text-slate-400">مرحلهٔ بایگانی‌شده حذف دائمی نمی‌شود تا سوابق پرونده‌ها حفظ بمانند.</small>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" disabled={saving} onClick={onClose}>انصراف</Button>
-            <Button type="button" variant="primary" disabled={saving} onClick={() => void save()}>{saving ? 'در حال ذخیره…' : 'ذخیرهٔ گردش‌کار'}</Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" disabled={saving} onClick={onClose}>انصراف</Button>
+            <Button type="button" variant="primary" className="w-full sm:w-auto" disabled={saving} onClick={() => void save()}>{saving ? 'در حال ذخیره…' : 'ذخیرهٔ گردش‌کار'}</Button>
           </div>
         </footer>
       </section>

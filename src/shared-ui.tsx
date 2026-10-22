@@ -86,12 +86,12 @@ export function MiniCalendar({
 
   return (
     <div
-      className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[17rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl shadow-slate-950/10 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/30"
+      className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[min(17rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl shadow-slate-950/10 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/30"
       dir="rtl"
       onClick={e => e.stopPropagation()}
       onMouseDown={e => e.stopPropagation()}
     >
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <Button type="button" variant="outline" size="xs" className="shrink-0" onClick={() => move(1)} title="ماه بعد" aria-label="رفتن به ماه بعد">ماه بعد</Button>
         <div className="flex items-center gap-1">
           <select
@@ -121,7 +121,7 @@ export function MiniCalendar({
           ? (
             <Button
               type="button"
-              className={`relative flex h-9 w-full items-center justify-center rounded-lg text-[11px] font-semibold ${transition} ${
+              className={`mobile-calendar-day relative flex h-9 w-full items-center justify-center rounded-lg text-[11px] font-semibold ${transition} ${
                 cell.isSelected
                   ? 'bg-indigo-600 font-extrabold text-white shadow-sm shadow-indigo-600/30'
                   : cell.isToday

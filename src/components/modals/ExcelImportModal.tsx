@@ -133,8 +133,8 @@ export function ExcelImportModal({ workflowConfig, onClose, onImport }: {
 
   return (
     <div className={backdropCls} onClick={event => { if (event.target === event.currentTarget && !saving) onClose() }}>
-      <section className={cn(modalBox, 'max-h-[calc(100dvh-1rem-env(safe-area-inset-bottom))] w-full max-w-5xl overflow-hidden p-0 sm:max-h-[calc(100vh-2rem)]')} role="dialog" aria-modal="true" aria-labelledby="excel-import-title" dir="rtl">
-        <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4 sm:p-5 dark:border-slate-800">
+      <section className={cn(modalBox, 'mobile-fill-modal flex max-h-[calc(100dvh-1rem-env(safe-area-inset-bottom))] w-full max-w-5xl flex-col overflow-hidden p-0 sm:max-h-[calc(100vh-2rem)]')} role="dialog" aria-modal="true" aria-labelledby="excel-import-title" dir="rtl">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 p-4 sm:p-5 dark:border-slate-800">
           <div className="min-w-0">
             <h2 id="excel-import-title" className="text-lg font-bold text-slate-950 dark:text-white">ورود گروهی پرونده‌ها از Excel</h2>
             <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">اطلاعات به‌صورت واقعی از سرور خوانده و پیش از ثبت با پرونده‌های موجود تطبیق داده می‌شود.</p>
@@ -142,7 +142,7 @@ export function ExcelImportModal({ workflowConfig, onClose, onImport }: {
           <Button type="button" variant="ghost" size="xs" disabled={saving} onClick={onClose} aria-label="بستن">بستن</Button>
         </header>
 
-        <div className="max-h-[calc(100dvh-12rem)] space-y-4 overflow-y-auto p-4 sm:max-h-[calc(100vh-13rem)] sm:p-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:max-h-[calc(100vh-14rem)] sm:p-5">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/25">
               <b className="text-sm text-indigo-950 dark:text-indigo-100">۱. قالب خالی برای پرونده‌های تازه</b>
@@ -201,11 +201,11 @@ export function ExcelImportModal({ workflowConfig, onClose, onImport }: {
           {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200" role="alert" aria-live="assertive">{error}</div>}
         </div>
 
-        <footer className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5 dark:border-slate-800 dark:bg-slate-900">
+        <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5 dark:border-slate-800 dark:bg-slate-900">
           <small className="text-xs leading-5 text-slate-500 dark:text-slate-400">{workflowConfig.stages.find(stage => stage.id === workflowConfig.startStageId)?.label ?? 'مرحلهٔ آغازین'} · پیش‌نمایش تا زمان تأیید هیچ داده‌ای را ثبت نمی‌کند.</small>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" disabled={saving} onClick={onClose}>لغو</Button>
-            <Button type="button" variant="primary" disabled={saving || loading || !previewRows.length || invalidCount > 0} loading={saving} loadingText="در حال ثبت روی سرور…" onClick={() => void confirmImport()}>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" disabled={saving} onClick={onClose}>لغو</Button>
+            <Button type="button" variant="primary" className="w-full sm:w-auto" disabled={saving || loading || !previewRows.length || invalidCount > 0} loading={saving} loadingText="در حال ثبت روی سرور…" onClick={() => void confirmImport()}>
               تأیید و ثبت {validCount.toLocaleString('fa-IR')} پرونده
             </Button>
           </div>

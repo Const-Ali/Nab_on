@@ -34,8 +34,8 @@ export function Login({ onLogin, onShowSetup, showSetup, serverMessage, theme, o
   }
 
   return (
-    <div className="relative grid min-h-screen bg-slate-50 lg:grid-cols-2 dark:bg-slate-950" dir="rtl">
-      <ThemeToggle theme={theme} onToggle={onToggleTheme} className="absolute left-4 top-4 z-20" />
+    <div className="auth-safe-shell relative grid min-h-svh bg-slate-50 lg:grid-cols-2 dark:bg-slate-950" dir="rtl">
+      <ThemeToggle theme={theme} onToggle={onToggleTheme} className="auth-safe-toggle absolute z-20" />
       <section className="hidden flex-col justify-between bg-slate-950 p-10 text-white lg:flex">
         <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-500 text-xl font-black shadow-lg shadow-indigo-500/25">ن</div>
         <div>

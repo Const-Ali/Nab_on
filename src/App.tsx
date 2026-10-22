@@ -950,7 +950,7 @@ export default function App() {
 
   if (!authReady) {
     return (
-      <main className="grid min-h-screen min-h-[100svh] place-items-center bg-slate-50 px-4 text-center text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400" dir="rtl" role="status" aria-live="polite">
+      <main className="grid min-h-svh place-items-center bg-slate-50 px-4 text-center text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400" dir="rtl" role="status" aria-live="polite">
         <div className="flex flex-col items-center">
           <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300">
             <svg className="h-6 w-6 animate-spin motion-reduce:animate-none" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1026,7 +1026,7 @@ export default function App() {
   const todayActivityCount = activities.filter(activity => activityDayKey(activity) === `${todayJ.y}-${todayJ.m}-${todayJ.d}`).length
 
   return (
-    <div className={cn('min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100', theme === 'dark' && 'dark')} dir="rtl">
+    <div className={cn('min-h-svh bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100', theme === 'dark' && 'dark')} dir="rtl">
       <aside className={cn('fixed inset-y-0 right-0 z-40 hidden flex-col border-l border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 lg:flex dark:border-slate-800 dark:bg-slate-900', collapsed ? 'w-20' : 'w-72')}>
         <Button
           type="button"
@@ -1100,8 +1100,8 @@ export default function App() {
         </div>
       </aside>
 
-      <main className={cn('min-h-screen transition-[padding] duration-200', collapsed ? 'lg:pr-20' : 'lg:pr-72')}>
-        <header className="sticky top-0 z-30 flex min-h-16 items-center gap-2 border-b border-slate-200 bg-slate-50/95 px-3 py-2.5 backdrop-blur sm:gap-3 sm:px-6 sm:py-3 dark:border-slate-800 dark:bg-slate-950/95">
+      <main className={cn('min-h-svh transition-[padding] duration-200', collapsed ? 'lg:pr-20' : 'lg:pr-72')}>
+        <header className="app-mobile-header sticky top-0 z-30 flex min-h-16 items-center gap-2 border-b border-slate-200 bg-slate-50/95 px-3 py-2.5 backdrop-blur sm:gap-3 sm:px-6 sm:py-3 dark:border-slate-800 dark:bg-slate-950/95">
           <div className="min-w-0 flex-1">
             <span className="block truncate text-sm">
               <span className="hidden sm:inline">خانه / </span>
@@ -1111,7 +1111,7 @@ export default function App() {
               </b>
             </span>
             <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[10px] leading-4 text-slate-500 sm:hidden dark:text-slate-400">
-              <time className="shrink-0">{headerDate}</time>
+              <time className="shrink-0 max-[360px]:hidden">{headerDate}</time>
               {isServerConnected !== null && (
                 <span className="inline-flex min-w-0 items-center gap-1" role="status" title={isServerConnected ? 'داده‌ها روی هاست ذخیره و همگام می‌شوند' : 'اتصال هاست برقرار نیست؛ ذخیره‌سازی روی هاست تأیید نمی‌شود'}>
                   <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', isServerConnected ? 'bg-emerald-500' : 'bg-amber-500')} />
@@ -1152,7 +1152,7 @@ export default function App() {
             type="button"
             variant="outline"
             size="sm"
-            className="!hidden min-w-0 max-w-sm flex-1 justify-start text-slate-500 md:!flex dark:text-slate-400"
+            className="hidden! min-w-0 max-w-sm flex-1 justify-start text-slate-500 md:flex! dark:text-slate-400"
             onClick={() => {
               setCalOpen(false)
               setMobileMoreOpen(false)
@@ -1167,7 +1167,7 @@ export default function App() {
             type="button"
             variant="outline"
             size="icon"
-            className="md:!hidden"
+            className="md:hidden!"
             onClick={() => {
               setCalOpen(false)
               setMobileMoreOpen(false)
@@ -1239,7 +1239,7 @@ export default function App() {
               type="button"
               variant="outline"
               size="icon"
-              className="lg:!hidden"
+              className="lg:hidden!"
               onClick={() => {
                 setCalOpen(false)
                 setMobileMoreOpen(false)
@@ -1255,7 +1255,7 @@ export default function App() {
               type="button"
               variant="primary"
               size="sm"
-              className="!hidden sm:!inline-flex"
+              className="hidden! sm:inline-flex!"
               onClick={openTasksPage}
               title="ورود به بخش کارهای من"
             >
@@ -1272,7 +1272,7 @@ export default function App() {
             </div>
           </div>
         )}
-        <div className="mx-auto w-full max-w-7xl px-4 py-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:pb-8">
+        <div className="app-mobile-page-content mx-auto w-full max-w-7xl px-4 py-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:pb-8">
           {legacySnapshot && (
             <LegacyDataMigration
               snapshot={legacySnapshot}
@@ -1631,7 +1631,7 @@ export default function App() {
         <PrintReport people={has('view_persons') ? people : []} activities={has('view_activities') ? activities : []} printedBy={currentUser.name} workflowConfig={workflowConfig} />
       )}
 
-      <nav aria-label="پیمایش موبایل" className="fixed inset-x-0 bottom-0 z-40 flex min-h-16 items-stretch gap-1 border-t border-slate-200 bg-white/95 px-1.5 py-1.5 pb-[max(.375rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden dark:border-slate-800 dark:bg-slate-900/95">
+      <nav aria-label="پیمایش موبایل" className="app-mobile-nav fixed inset-x-0 bottom-0 z-40 flex min-h-16 items-stretch gap-1 border-t border-slate-200 bg-white/95 px-1.5 py-1.5 pb-[max(.375rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden dark:border-slate-800 dark:bg-slate-900/95">
         {mobileNavItems.map(([key]) => (
           <Button
             key={key}
@@ -1645,7 +1645,7 @@ export default function App() {
               setCalOpen(false)
               setMobileMoreOpen(false)
             }}
-            className={cn('flex min-h-[3.25rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[10px] leading-tight text-slate-500 dark:text-slate-400', page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
+            className={cn('flex min-h-13 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[10px] leading-tight text-slate-500 dark:text-slate-400', page === key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
           >
             <PageIcon name={key} />
             <span className="max-w-full truncate">{compactNavLabels[key]}</span>
@@ -1661,7 +1661,7 @@ export default function App() {
             aria-expanded={mobileMoreOpen}
             aria-controls="mobile-more-menu"
             onClick={() => setMobileMoreOpen(open => !open)}
-            className={cn('flex min-h-[3.25rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[10px] leading-tight text-slate-500 dark:text-slate-400', mobileMoreOpen && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
+            className={cn('flex min-h-13 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[10px] leading-tight text-slate-500 dark:text-slate-400', mobileMoreOpen && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300')}
           >
             <PageIcon name="more" />
             <span>بیشتر</span>
@@ -1691,7 +1691,7 @@ export default function App() {
           )}
         </div>
       </nav>
-      {toast && <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-3 right-3 z-[60] rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-xl sm:left-4 sm:right-auto sm:max-w-sm lg:bottom-6" role="status" aria-live="polite">{toast}</div>}
+      {toast && <div className="app-mobile-toast fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-3 right-3 z-60 rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-xl sm:left-4 sm:right-auto sm:max-w-sm lg:bottom-6" role="status" aria-live="polite">{toast}</div>}
     </div>
   )
 }

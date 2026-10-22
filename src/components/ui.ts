@@ -16,8 +16,8 @@ export const panelPad = 'p-3.5 sm:p-5'
 export const panelH2 = 'text-base font-bold tracking-tight text-slate-950 dark:text-white'
 export const panelH2Small = 'mt-1 block text-xs font-normal leading-5 text-slate-500 dark:text-slate-400'
 
-export const backdropCls = 'fixed inset-0 z-50 grid place-items-end overflow-y-auto overscroll-contain bg-slate-950/50 p-2 pb-[max(.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:place-items-center sm:p-4'
-export const modalBox = 'relative sm:my-auto max-h-[calc(100dvh-1rem-env(safe-area-inset-bottom))] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:max-h-[calc(100vh-2rem)] sm:rounded-2xl sm:p-6 dark:border-slate-800 dark:bg-slate-900'
+export const backdropCls = 'mobile-safe-backdrop fixed inset-0 z-50 grid place-items-end overflow-y-auto overscroll-contain bg-slate-950/50 p-2 pb-[max(.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:place-items-center sm:p-4'
+export const modalBox = 'mobile-safe-modal relative sm:my-auto max-h-[calc(100dvh-1rem-env(safe-area-inset-bottom))] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:max-h-[calc(100vh-2rem)] sm:rounded-2xl sm:p-6 dark:border-slate-800 dark:bg-slate-900'
 export const modalX = cn('absolute left-4 top-4 inline-flex h-9 items-center justify-center rounded-lg px-2 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-800 dark:hover:text-white', focusRing, transition)
 export const modalSmall = 'block text-xs text-slate-500 dark:text-slate-400'
 export const modalH2 = 'mt-1 text-xl font-bold tracking-tight text-slate-950 dark:text-white'

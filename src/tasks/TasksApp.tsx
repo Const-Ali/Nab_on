@@ -68,9 +68,9 @@ export default function TasksApp() {
   }, [user])
 
   if (error) {
-    return <main className="grid min-h-screen place-items-center bg-slate-50 p-6 text-center dark:bg-slate-950" dir="rtl"><div className="max-w-lg rounded-2xl border border-rose-200 bg-white p-6 text-sm leading-7 text-rose-700 dark:border-rose-900/60 dark:bg-slate-900 dark:text-rose-300"><p>{error}</p><a className="mt-4 inline-block font-semibold text-indigo-600" href="/">بازگشت به ورود</a></div></main>
+    return <main className="auth-safe-shell grid min-h-svh place-items-center bg-slate-50 p-6 text-center dark:bg-slate-950" dir="rtl"><div className="max-w-lg rounded-2xl border border-rose-200 bg-white p-6 text-sm leading-7 text-rose-700 dark:border-rose-900/60 dark:bg-slate-900 dark:text-rose-300"><p>{error}</p><a className="mt-4 inline-block font-semibold text-indigo-600" href="/">بازگشت به ورود</a></div></main>
   }
-  if (!user || !tasks) return <main className="grid min-h-screen place-items-center bg-slate-50 text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400" dir="rtl">در حال دریافت کارها از هاست…</main>
+  if (!user || !tasks) return <main className="auth-safe-shell grid min-h-svh place-items-center bg-slate-50 text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400" dir="rtl">در حال دریافت کارها از هاست…</main>
 
   return (
     <div className={`tasks-app${theme === 'dark' ? ' dark' : ''}`} dir="rtl">

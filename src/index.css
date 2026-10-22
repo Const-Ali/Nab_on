@@ -339,3 +339,103 @@ textarea {
     text-align: center;
   }
 }
+
+/* Mobile viewport, safe-area and touch-target support. */
+.auth-safe-toggle {
+  top: 1rem;
+  left: 1rem;
+}
+
+@media screen and (max-width: 1023px) {
+  .app-mobile-header {
+    padding-top: max(.625rem, env(safe-area-inset-top));
+    padding-left: max(.75rem, env(safe-area-inset-left));
+    padding-right: max(.75rem, env(safe-area-inset-right));
+  }
+
+  .app-mobile-page-content {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .app-mobile-nav {
+    padding-left: max(.375rem, env(safe-area-inset-left));
+    padding-right: max(.375rem, env(safe-area-inset-right));
+  }
+
+  .app-mobile-toast {
+    left: max(.75rem, env(safe-area-inset-left));
+    right: max(.75rem, env(safe-area-inset-right));
+  }
+
+  .auth-safe-shell {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .auth-safe-toggle {
+    top: max(1rem, env(safe-area-inset-top));
+    left: max(1rem, env(safe-area-inset-left));
+  }
+
+  .mobile-safe-backdrop {
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+  }
+}
+
+@media screen and (min-width: 640px) and (max-width: 1023px) {
+  .app-mobile-header {
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+  }
+
+  .app-mobile-page-content {
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+  }
+}
+
+@media screen and (max-width: 639px) {
+  .mobile-safe-backdrop {
+    padding-top: max(.5rem, env(safe-area-inset-top));
+    padding-right: max(.5rem, env(safe-area-inset-right));
+    padding-bottom: max(.5rem, env(safe-area-inset-bottom));
+    padding-left: max(.5rem, env(safe-area-inset-left));
+  }
+
+  .mobile-safe-modal {
+    max-height: calc(100dvh - 1rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .mobile-fill-modal {
+    height: calc(100dvh - 1rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .mobile-safe-modal .x {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .mobile-safe-modal .modal-actions > button,
+  .mobile-safe-modal > header button,
+  .mobile-safe-modal > footer button {
+    min-height: 44px;
+  }
+
+  .mobile-calendar-day {
+    min-height: 44px;
+  }
+
+  .mobile-notification-popover {
+    position: fixed;
+    top: max(4.5rem, calc(env(safe-area-inset-top) + 3rem));
+    right: max(.75rem, env(safe-area-inset-right));
+    left: max(.75rem, env(safe-area-inset-left));
+    width: auto;
+    max-height: min(75dvh, calc(100dvh - max(4.5rem, calc(env(safe-area-inset-top) + 3rem)) - 5rem - env(safe-area-inset-bottom)));
+    margin-top: 0;
+  }
+}

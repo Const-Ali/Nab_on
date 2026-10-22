@@ -33,11 +33,11 @@ const variants: Record<Exclude<ButtonVariant, 'unstyled'>, string> = {
 
 const sizes: Record<ButtonSize, string> = {
   none: '',
-  xs: 'min-h-9 px-2.5 py-1.5 text-xs sm:min-h-8 sm:py-1',
-  sm: 'min-h-10 px-3 py-2 text-xs sm:min-h-9',
-  md: 'min-h-10 px-4 py-2.5 text-sm',
+  xs: 'min-h-10 px-2.5 py-1.5 text-xs sm:min-h-8 sm:py-1',
+  sm: 'min-h-11 px-3 py-2 text-xs sm:min-h-9',
+  md: 'min-h-11 px-4 py-2.5 text-sm sm:min-h-10',
   lg: 'min-h-11 px-5 py-3 text-sm',
-  icon: 'h-10 w-10 min-h-10 p-0 text-sm',
+  icon: 'h-11 w-11 min-h-11 p-0 text-sm sm:h-10 sm:w-10 sm:min-h-10',
 }
 
 const activeStyles: Partial<Record<ButtonVariant, string>> = {

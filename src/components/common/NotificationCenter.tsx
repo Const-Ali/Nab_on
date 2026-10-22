@@ -30,7 +30,7 @@ export function NotificationCenter({
     <div className="relative" data-app-popover="notifications">
       <button
         type="button"
-        className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/40"
+        className="relative inline-flex h-11 w-11 min-h-11 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:h-10 sm:w-10 sm:min-h-10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/40"
         onClick={onToggle}
         aria-label={`اعلان‌ها${unread ? `، ${unread.toLocaleString('fa-IR')} خوانده‌نشده` : ''}`}
         aria-expanded={isOpen}
@@ -44,13 +44,13 @@ export function NotificationCenter({
       </button>
 
       {isOpen && (
-        <section className="absolute left-0 top-full z-[80] mt-2 flex max-h-[min(75dvh,34rem)] w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900" role="dialog" aria-label="صندوق اعلان‌ها" dir="rtl">
+        <section className="mobile-notification-popover absolute left-0 top-full z-[80] mt-2 flex max-h-[min(75dvh,34rem)] w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900" role="dialog" aria-label="صندوق اعلان‌ها" dir="rtl">
           <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">اعلان‌های من</h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">اعلان‌ها روی سرور نگهداری می‌شوند.</p>
             </div>
-            {unread > 0 && <button type="button" className="min-h-9 rounded-lg px-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40" onClick={onMarkAllRead}>خواندن همه</button>}
+            {unread > 0 && <button type="button" className="min-h-10 rounded-lg px-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40" onClick={onMarkAllRead}>خواندن همه</button>}
           </header>
 
           {error && <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">تازه‌سازی اعلان‌ها ناموفق بود؛ اعلان‌های ذخیره‌شده نمایش داده می‌شوند.</p>}
@@ -72,7 +72,7 @@ export function NotificationCenter({
                         <span className="mt-1 block text-xs leading-5 text-slate-600 dark:text-slate-300">{item.body}</span>
                         <time className="mt-1 block text-[10px] text-slate-400">{formatServerTimestamp(item.createdAt, item.ts)}</time>
                       </button>
-                      {!item.readAt && <button type="button" className="min-h-9 shrink-0 rounded-lg px-2 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 dark:text-indigo-300 dark:hover:bg-indigo-900/40" onClick={() => onMarkRead(item.id)} aria-label={`علامت‌گذاری به‌عنوان خوانده‌شده: ${item.title}`}>خواندم</button>}
+                      {!item.readAt && <button type="button" className="min-h-10 shrink-0 rounded-lg px-2 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 dark:text-indigo-300 dark:hover:bg-indigo-900/40" onClick={() => onMarkRead(item.id)} aria-label={`علامت‌گذاری به‌عنوان خوانده‌شده: ${item.title}`}>خواندم</button>}
                     </div>
                   </li>
                 ))}
