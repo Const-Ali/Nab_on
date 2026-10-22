@@ -14,6 +14,18 @@ function reply(int $status, array $payload): never {
     exit;
 }
 
+function reply_file(string $contents, string $filename): never {
+    http_response_code(200);
+    header_remove('Content-Type');
+    header('Content-Type: application/octet-stream');
+    $safeFilename = preg_replace('/[^A-Za-z0-9._-]/', '_', $filename) ?: 'nab-backup.nabbak';
+    header('Content-Disposition: attachment; filename="' . $safeFilename . '"');
+    header('Content-Length: ' . strlen($contents));
+    header('X-Content-Type-Options: nosniff');
+    echo $contents;
+    exit;
+}
+
 function fail(int $status, string $message): never {
     reply($status, ['success' => false, 'error' => $message]);
 }
@@ -64,15 +76,268 @@ function normalize_digits(string $value): string {
 }
 
 function all_permissions(): array {
-    return ['view_persons', 'create_person', 'edit_person', 'change_status', 'view_activities', 'manage_users', 'view_reports', 'delete_person'];
+    return [
+        'view_dashboard', 'view_persons', 'create_person', 'edit_person', 'delete_person',
+        'change_status', 'assign_person', 'complete_checklist', 'view_person_notes',
+        'create_person_note', 'edit_person_note', 'delete_person_note', 'manage_any_person_note',
+        'print_person', 'export_people_csv', 'export_people_excel', 'import_people_excel',
+        'view_workflow', 'manage_workflow', 'view_activities', 'export_activities',
+        'view_reports', 'print_reports', 'view_audit_log', 'view_users', 'create_user', 'edit_user', 'delete_user', 'manage_users',
+        'view_roles', 'create_role', 'edit_role', 'delete_role', 'manage_roles', 'export_backup', 'restore_backup', 'purge_server_data', 'view_settings', 'manage_settings', 'view_tasks', 'create_task', 'edit_task', 'change_task_status', 'delete_task',
+    ];
+}
+
+function permission_dependency_error(array $permissions): ?string {
+    $permissions = array_values(array_unique($permissions));
+    $personOperations = [
+        'create_person', 'edit_person', 'delete_person', 'change_status', 'assign_person',
+        'complete_checklist', 'view_person_notes', 'create_person_note', 'edit_person_note',
+        'delete_person_note', 'manage_any_person_note', 'print_person', 'export_people_csv',
+        'export_people_excel', 'import_people_excel',
+    ];
+    if (array_intersect($personOperations, $permissions) && !in_array('view_persons', $permissions, true)) return 'عملیات پرونده به مجوز «مشاهدهٔ پرونده‌ها» نیز نیاز دارد.';
+    if (in_array('import_people_excel', $permissions, true) && !in_array('create_person', $permissions, true)) return 'ورود Excel به مجوز «ایجاد پرونده» نیز نیاز دارد.';
+    if (in_array('create_person_note', $permissions, true) && !in_array('view_person_notes', $permissions, true)) return 'ثبت یادداشت به مجوز «مشاهدهٔ گفتگو و یادداشت» نیز نیاز دارد.';
+    if (in_array('edit_person_note', $permissions, true) && !in_array('view_person_notes', $permissions, true)) return 'ویرایش یادداشت به مجوز «مشاهدهٔ گفتگو و یادداشت» نیز نیاز دارد.';
+    if (in_array('delete_person_note', $permissions, true) && !in_array('view_person_notes', $permissions, true)) return 'حذف یادداشت به مجوز «مشاهدهٔ گفتگو و یادداشت» نیز نیاز دارد.';
+    if (in_array('manage_any_person_note', $permissions, true)
+        && (!in_array('view_person_notes', $permissions, true) || (!in_array('edit_person_note', $permissions, true) && !in_array('delete_person_note', $permissions, true)))) {
+        return 'مدیریت یادداشت دیگران به مشاهدهٔ یادداشت و دست‌کم یکی از مجوزهای ویرایش/حذف نیاز دارد.';
+    }
+    if (in_array('export_activities', $permissions, true) && !in_array('view_activities', $permissions, true)) return 'خروجی رویدادها به مجوز «مشاهدهٔ رویدادها» نیز نیاز دارد.';
+    if (in_array('print_reports', $permissions, true) && !in_array('view_reports', $permissions, true)) return 'چاپ گزارش به مجوز «مشاهدهٔ گزارش‌ها» نیز نیاز دارد.';
+    foreach (['create_task', 'edit_task', 'change_task_status', 'delete_task'] as $taskPermission) if (in_array($taskPermission, $permissions, true) && !in_array('view_tasks', $permissions, true)) return 'عملیات کارها به مجوز «مشاهدهٔ کارهای من» نیز نیاز دارد.';
+    foreach (['create_user', 'edit_user', 'delete_user'] as $userPermission) if (in_array($userPermission, $permissions, true) && !in_array('view_users', $permissions, true)) return 'مدیریت حساب‌ها به مجوز «مشاهدهٔ فهرست حساب‌های کاربری» نیز نیاز دارد.';
+    foreach (['create_role', 'edit_role', 'delete_role'] as $rolePermission) if (in_array($rolePermission, $permissions, true) && !in_array('view_roles', $permissions, true)) return 'مدیریت نقش‌ها به مجوز «مشاهدهٔ نقش‌ها» نیز نیاز دارد.';
+    return null;
+}
+
+function default_role_permissions(): array {
+    return [
+        'admin' => all_permissions(),
+        'assistant' => [
+            'view_dashboard', 'view_persons', 'create_person', 'edit_person',
+            'view_person_notes', 'create_person_note', 'edit_person_note', 'delete_person_note',
+            'print_person', 'view_workflow', 'view_settings', 'manage_settings', 'view_tasks', 'create_task', 'edit_task', 'change_task_status', 'delete_task',
+        ],
+        'reviewer' => [
+            'view_dashboard', 'view_persons', 'change_status', 'assign_person', 'complete_checklist',
+            'view_activities', 'view_person_notes', 'create_person_note', 'edit_person_note',
+            'delete_person_note', 'print_person', 'view_workflow', 'view_settings',
+            'manage_settings', 'view_tasks', 'create_task', 'edit_task', 'change_task_status', 'delete_task',
+        ],
+    ];
 }
 
 function default_roles(): array {
+    $permissions = default_role_permissions();
     return [
-        ['id' => 'admin', 'title' => 'مدیر سیستم', 'permissions' => all_permissions(), 'builtin' => true],
-        ['id' => 'assistant', 'title' => 'کارشناس پرونده', 'permissions' => ['view_persons', 'create_person', 'edit_person'], 'builtin' => true],
-        ['id' => 'reviewer', 'title' => 'کارشناس مرکز', 'permissions' => ['view_persons', 'change_status', 'view_activities'], 'builtin' => true],
+        ['id' => 'admin', 'title' => 'مدیر سیستم', 'permissions' => $permissions['admin'], 'builtin' => true],
+        ['id' => 'assistant', 'title' => 'کارشناس پرونده', 'permissions' => $permissions['assistant'], 'builtin' => true],
+        ['id' => 'reviewer', 'title' => 'کارشناس مرکز', 'permissions' => $permissions['reviewer'], 'builtin' => true],
     ];
+}
+
+function role_definition(PDO $pdo, string $roleId): ?array {
+    foreach (state_value($pdo, 'nab:roles', default_roles()) as $role) {
+        if (is_array($role) && (string)($role['id'] ?? '') === $roleId) return $role;
+    }
+    return null;
+}
+
+function legacy_role_permissions(): array {
+    return [
+        'admin' => ['view_persons', 'create_person', 'edit_person', 'change_status', 'view_activities', 'manage_users', 'view_reports', 'delete_person', 'import_people_excel'],
+        'assistant' => ['view_persons', 'create_person', 'edit_person'],
+        'reviewer' => ['view_persons', 'change_status', 'view_activities'],
+    ];
+}
+
+function same_permission_set($left, $right): bool {
+    if (!is_array($left) || !is_array($right)) return false;
+    $left = array_values(array_unique(array_filter($left, 'is_string')));
+    $right = array_values(array_unique(array_filter($right, 'is_string')));
+    sort($left);
+    sort($right);
+    return $left === $right;
+}
+
+/** Upgrade only untouched built-in permission bundles; customized user grants remain unchanged. */
+function upgrade_permission_catalog(PDO $pdo, int $actorId): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+
+    $legacy = legacy_role_permissions();
+    $defaults = default_role_permissions();
+    $markerExists = static function (PDO $pdo, string $key): bool {
+        $stmt = $pdo->prepare('SELECT 1 FROM nab_state WHERE state_key = ? LIMIT 1');
+        $stmt->execute([$key]);
+        return $stmt->fetchColumn() !== false;
+    };
+    $upgradeExactDefaults = static function (array $baseline, array $target) use ($pdo, $actorId): void {
+        $rows = $pdo->query('SELECT id, role_id, permissions_json FROM nab_users')->fetchAll();
+        $update = $pdo->prepare('UPDATE nab_users SET permissions_json = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
+        foreach ($rows as $row) {
+            $role = (string)$row['role_id'];
+            if (!isset($baseline[$role], $target[$role])) continue;
+            $permissions = json_decode((string)$row['permissions_json'], true);
+            if (!same_permission_set($permissions, $baseline[$role])) continue;
+            $update->execute([json_encode($target[$role], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['id']]);
+        }
+
+        $stmt = $pdo->prepare('SELECT state_json FROM nab_state WHERE state_key = ? LIMIT 1');
+        $stmt->execute(['nab:roles']);
+        $raw = $stmt->fetchColumn();
+        if ($raw === false) return;
+        $roles = json_decode((string)$raw, true);
+        if (!is_array($roles)) return;
+        $changed = false;
+        foreach ($roles as &$role) {
+            if (!is_array($role)) continue;
+            $id = (string)($role['id'] ?? '');
+            if (!isset($baseline[$id], $target[$id]) || !same_permission_set($role['permissions'] ?? null, $baseline[$id])) continue;
+            $role['permissions'] = $target[$id];
+            $changed = true;
+        }
+        unset($role);
+        if ($changed) put_state($pdo, 'nab:roles', $roles, $actorId);
+    };
+
+    // Existing v2 migration from the earlier permission catalog.
+    if (!$markerExists($pdo, 'nab:permissions_catalog_v2')) {
+        $rows = $pdo->query('SELECT id, role_id, permissions_json FROM nab_users')->fetchAll();
+        $update = $pdo->prepare('UPDATE nab_users SET permissions_json = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
+        foreach ($rows as $row) {
+            $role = (string)$row['role_id'];
+            if (!isset($legacy[$role], $defaults[$role])) continue;
+            $permissions = json_decode((string)$row['permissions_json'], true);
+            if (!same_permission_set($permissions, $legacy[$role])) continue;
+            $update->execute([json_encode($defaults[$role], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['id']]);
+        }
+        $stmt = $pdo->prepare('SELECT state_json FROM nab_state WHERE state_key = ? LIMIT 1');
+        $stmt->execute(['nab:roles']);
+        $raw = $stmt->fetchColumn();
+        if ($raw !== false) {
+            $roles = json_decode((string)$raw, true);
+            if (is_array($roles)) {
+                $changed = false;
+                foreach ($roles as &$role) {
+                    if (!is_array($role)) continue;
+                    $id = (string)($role['id'] ?? '');
+                    if (!isset($legacy[$id], $defaults[$id]) || !same_permission_set($role['permissions'] ?? null, $legacy[$id])) continue;
+                    $role['permissions'] = $defaults[$id];
+                    $changed = true;
+                }
+                unset($role);
+                if ($changed) put_state($pdo, 'nab:roles', $roles, $actorId);
+            }
+        }
+        put_state($pdo, 'nab:permissions_catalog_v2', [['version' => 2]], $actorId);
+    }
+
+    $taskPermissions = ['create_task', 'edit_task', 'change_task_status', 'delete_task'];
+    $userRolePermissions = ['view_roles', 'create_user', 'edit_user', 'delete_user', 'create_role', 'edit_role', 'delete_role'];
+    $v2Defaults = $defaults;
+    foreach ($v2Defaults as &$permissions) $permissions = array_values(array_diff($permissions, array_merge($taskPermissions, $userRolePermissions)));
+    unset($permissions);
+    $v3Defaults = $defaults;
+    foreach ($v3Defaults as &$permissions) $permissions = array_values(array_diff($permissions, $userRolePermissions));
+    unset($permissions);
+
+    // v3 split task viewing from create/edit/status/delete. Preserve customized grants.
+    if (!$markerExists($pdo, 'nab:permissions_catalog_v3')) {
+        $upgradeExactDefaults($v2Defaults, $v3Defaults);
+        put_state($pdo, 'nab:permissions_catalog_v3', [['version' => 3]], $actorId);
+    }
+
+    // v4 splits user and role CRUD, and separates role viewing from account viewing.
+    if (!$markerExists($pdo, 'nab:permissions_catalog_v4')) {
+        $upgradeExactDefaults($v3Defaults, $defaults);
+        put_state($pdo, 'nab:permissions_catalog_v4', [['version' => 4]], $actorId);
+    }
+
+    // v5 repairs stale/partially migrated system-admin grants: the reserved admin account is always full access.
+    if (!$markerExists($pdo, 'nab:permissions_catalog_v5')) {
+        $adminPermissionsJson = json_encode(all_permissions(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $updateAdmins = $pdo->prepare("UPDATE nab_users SET permissions_json = ?, updated_at = UTC_TIMESTAMP() WHERE role_id = 'admin'");
+        $updateAdmins->execute([$adminPermissionsJson]);
+        $stmt = $pdo->prepare('SELECT state_json FROM nab_state WHERE state_key = ? LIMIT 1');
+        $stmt->execute(['nab:roles']);
+        $raw = $stmt->fetchColumn();
+        if ($raw !== false) {
+            $roles = json_decode((string)$raw, true);
+            if (is_array($roles)) {
+                $changed = false;
+                foreach ($roles as &$role) {
+                    if (!is_array($role) || (string)($role['id'] ?? '') !== 'admin') continue;
+                    $role['permissions'] = all_permissions();
+                    $role['builtin'] = true;
+                    $changed = true;
+                }
+                unset($role);
+                if ($changed) put_state($pdo, 'nab:roles', $roles, $actorId);
+            }
+        }
+        put_state($pdo, 'nab:permissions_catalog_v5', [['version' => 5]], $actorId);
+    }
+
+    if (!$markerExists($pdo, 'nab:permissions_catalog_v6')) {
+        $adminPermissionsJson = json_encode(all_permissions(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $updateAdmins = $pdo->prepare("UPDATE nab_users SET permissions_json = ?, updated_at = UTC_TIMESTAMP() WHERE role_id = 'admin'");
+        $updateAdmins->execute([$adminPermissionsJson]);
+        $stmt = $pdo->prepare('SELECT state_json FROM nab_state WHERE state_key = ? LIMIT 1');
+        $stmt->execute(['nab:roles']);
+        $raw = $stmt->fetchColumn();
+        if ($raw !== false) {
+            $roles = json_decode((string)$raw, true);
+            if (is_array($roles)) {
+                $changed = false;
+                foreach ($roles as &$role) {
+                    if (!is_array($role) || (string)($role['id'] ?? '') !== 'admin') continue;
+                    $role['permissions'] = all_permissions();
+                    $role['builtin'] = true;
+                    $changed = true;
+                }
+                unset($role);
+                if ($changed) put_state($pdo, 'nab:roles', $roles, $actorId);
+            }
+        }
+        put_state($pdo, 'nab:permissions_catalog_v6', [['version' => 6]], $actorId);
+    }
+
+    if (!$markerExists($pdo, 'nab:permissions_catalog_v7')) {
+        $rows = $pdo->query("SELECT id, permissions_json FROM nab_users WHERE role_id <> 'admin'")->fetchAll();
+        $updateUserPermissions = $pdo->prepare('UPDATE nab_users SET permissions_json = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
+        foreach ($rows as $row) {
+            $permissions = json_decode((string)$row['permissions_json'], true);
+            if (!is_array($permissions) || !in_array('purge_server_data', $permissions, true)) continue;
+            $permissions = array_values(array_diff(array_values(array_filter($permissions, 'is_string')), ['purge_server_data']));
+            $updateUserPermissions->execute([json_encode($permissions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['id']]);
+        }
+        $stmt = $pdo->prepare('SELECT state_json FROM nab_state WHERE state_key = ? LIMIT 1');
+        $stmt->execute(['nab:roles']);
+        $raw = $stmt->fetchColumn();
+        if ($raw !== false) {
+            $roles = json_decode((string)$raw, true);
+            if (is_array($roles)) {
+                $changed = false;
+                foreach ($roles as &$role) {
+                    if (!is_array($role) || (string)($role['id'] ?? '') === 'admin' || !is_array($role['permissions'] ?? null)) continue;
+                    if (!in_array('purge_server_data', $role['permissions'], true)) continue;
+                    $role['permissions'] = array_values(array_diff(array_values(array_filter($role['permissions'], 'is_string')), ['purge_server_data']));
+                    $changed = true;
+                }
+                unset($role);
+                if ($changed) put_state($pdo, 'nab:roles', $roles, $actorId);
+            }
+        }
+        put_state($pdo, 'nab:permissions_catalog_v7', [['version' => 7]], $actorId);
+    }
+}
+
+function default_settings(): array {
+    return ['appName' => 'سامانه مدیریت پرونده ناب', 'twoFactor' => true, 'auditLog' => true, 'autoLogout' => false, 'autoLogoutMins' => 30, 'font' => 'vazir'];
 }
 
 function default_workflow_config(): array {
@@ -139,13 +404,54 @@ function normalize_person_stage(array $person, array $workflow, bool $isNew = fa
 }
 
 function user_permissions(array $user): array {
+    if ((string)($user['role_id'] ?? '') === 'admin') return all_permissions();
     $permissions = json_decode((string)($user['permissions_json'] ?? '[]'), true);
     if (!is_array($permissions)) return [];
-    return array_values(array_intersect(all_permissions(), array_unique($permissions)));
+    $permissions = array_values(array_intersect(all_permissions(), array_unique($permissions)));
+    return array_values(array_diff($permissions, ['purge_server_data']));
 }
 
 function has_permission(array $user, string $permission): bool {
     return in_array($permission, user_permissions($user), true);
+}
+
+function has_user_operation(array $user, string $permission): bool {
+    return has_permission($user, 'manage_users') || has_permission($user, $permission);
+}
+
+function has_role_operation(array $user, string $permission): bool {
+    return has_permission($user, 'manage_roles') || has_permission($user, $permission);
+}
+
+function actor_can_grant_permission(array $actor, string $permission): bool {
+    if (has_permission($actor, $permission)) return true;
+    $delegatedBy = [
+        'view_users' => 'manage_users',
+        'create_user' => 'manage_users',
+        'edit_user' => 'manage_users',
+        'delete_user' => 'manage_users',
+        'view_roles' => 'manage_roles',
+        'create_role' => 'manage_roles',
+        'edit_role' => 'manage_roles',
+        'delete_role' => 'manage_roles',
+    ];
+    return isset($delegatedBy[$permission]) && has_permission($actor, $delegatedBy[$permission]);
+}
+
+function can_view_user_directory(array $user): bool {
+    return has_permission($user, 'view_users')
+        || has_user_operation($user, 'create_user')
+        || has_user_operation($user, 'edit_user')
+        || has_user_operation($user, 'delete_user');
+}
+
+function can_view_role_directory(array $user): bool {
+    return has_permission($user, 'view_roles')
+        || has_role_operation($user, 'create_role')
+        || has_role_operation($user, 'edit_role')
+        || has_role_operation($user, 'delete_role')
+        || has_user_operation($user, 'create_user')
+        || has_user_operation($user, 'edit_user');
 }
 
 function safe_user(array $row): array {
@@ -180,7 +486,8 @@ function current_user(PDO $pdo): ?array {
         session_destroy();
         return null;
     }
-    return $user;
+    upgrade_permission_catalog($pdo, (int)$user['id']);
+    return find_user_by_id($pdo, (int)$user['id']) ?? $user;
 }
 
 function require_user(PDO $pdo): array {
@@ -215,7 +522,7 @@ function state_version(PDO $pdo, string $key): string {
 }
 
 function state_versions(PDO $pdo, array $user): array {
-    $keys = ['nab:people', 'nab:activities', 'nab:audit', 'nab:roles', 'nab:notes', 'nab:workflow', 'nab:tasks:' . (string)$user['username']];
+    $keys = ['nab:people', 'nab:activities', 'nab:audit', 'nab:roles', 'nab:notes', 'nab:workflow', 'nab:settings', 'nab:tasks:' . (string)$user['username'], notification_state_key((string)$user['username'])];
     $versions = [];
     foreach ($keys as $key) $versions[$key] = state_version($pdo, $key);
     return $versions;
@@ -257,12 +564,237 @@ function release_state_write_lock(PDO $pdo): void {
     $stmt->execute([state_write_lock_name($pdo)]);
 }
 
+function backup_snapshot_payload(PDO $pdo, bool $lockRows = false): array {
+    $locking = $lockRows ? ' FOR UPDATE' : '';
+    $users = $pdo->query('SELECT id, username, display_name, role_id, title, tone, password_hash, is_active, permissions_json, photo, auth_version, created_at, updated_at FROM nab_users ORDER BY id' . $locking)->fetchAll();
+    $states = $pdo->query('SELECT state_key, state_json, updated_at, updated_by FROM nab_state ORDER BY state_key' . $locking)->fetchAll();
+    return [
+        'format' => 'nab-encrypted-backup-v2',
+        'schema_version' => 1,
+        'created_at' => gmdate('c'),
+        'tables' => ['nab_users' => $users, 'nab_state' => $states],
+    ];
+}
+
+function restore_backup_rows(PDO $pdo, array $restored): void {
+    $pdo->exec('DELETE FROM nab_state');
+    $pdo->exec('DELETE FROM nab_login_attempts');
+    $pdo->exec('DELETE FROM nab_users');
+    $insertUser = $pdo->prepare('INSERT INTO nab_users (id, username, display_name, role_id, title, tone, password_hash, is_active, permissions_json, photo, auth_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())');
+    foreach ($restored['users'] as $row) {
+        $roleId = (string)$row['role_id'];
+        $permissionsJson = $roleId === 'admin'
+            ? json_encode(all_permissions(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            : (string)$row['permissions_json'];
+        $insertUser->execute([
+            (int)$row['id'], (string)$row['username'], (string)$row['display_name'], $roleId,
+            (string)$row['title'], (string)($row['tone'] ?? 'blue'), (string)$row['password_hash'],
+            !empty($row['is_active']) ? 1 : 0, $permissionsJson, $row['photo'] ?? null,
+            max(1, (int)($row['auth_version'] ?? 1)) + 1,
+            (string)($row['created_at'] ?? gmdate('Y-m-d H:i:s')),
+        ]);
+    }
+    $insertState = $pdo->prepare('INSERT INTO nab_state (state_key, state_json, updated_at, updated_by) VALUES (?, ?, ?, ?)');
+    foreach ($restored['states'] as $row) {
+        $insertState->execute([
+            (string)$row['state_key'], (string)$row['state_json'],
+            (string)($row['updated_at'] ?? gmdate('Y-m-d H:i:s')),
+            isset($row['updated_by']) ? (int)$row['updated_by'] : null,
+        ]);
+    }
+}
+
+function backup_passphrase(string $value, string $label): string {
+    if (text_length($value) < 12 || strlen($value) > 256) fail(422, $label . ' باید حداقل ۱۲ نویسه باشد.');
+    return $value;
+}
+
+function ensure_backup_crypto(): void {
+    if (!function_exists('openssl_encrypt') || !function_exists('openssl_decrypt') || !function_exists('hash_pbkdf2') || !function_exists('gzencode') || !function_exists('gzdecode')) {
+        fail(503, 'افزونه‌های OpenSSL و zlib برای بکاپ رمزگذاری‌شده روی هاست فعال نیستند.');
+    }
+}
+
+function encrypt_backup_payload(array $payload, string $passphrase): string {
+    ensure_backup_crypto();
+    try {
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    } catch (Throwable $error) {
+        fail(500, 'ساخت دادهٔ بکاپ ناموفق بود.');
+    }
+    if (strlen($json) > 250 * 1024 * 1024) fail(413, 'حجم دادهٔ بکاپ از ۲۵۰ مگابایت بیشتر است.');
+    $compressed = gzencode($json, 6, ZLIB_ENCODING_GZIP);
+    if ($compressed === false || strlen($compressed) > 250 * 1024 * 1024 - 55) fail(413, 'فشرده‌سازی یا حجم فایل بکاپ ناموفق بود.');
+    $iterations = 600000;
+    $salt = random_bytes(16);
+    $nonce = random_bytes(12);
+    $key = hash_pbkdf2('sha256', $passphrase, $salt, $iterations, 32, true);
+    $tag = '';
+    $ciphertext = openssl_encrypt($compressed, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $nonce, $tag, 'NABDB2', 16);
+    if ($ciphertext === false || strlen($tag) !== 16) fail(500, 'رمزگذاری بکاپ ناموفق بود.');
+    return "NABDB2\0" . pack('N', $iterations) . $salt . $nonce . $tag . $ciphertext;
+}
+
+function validate_backup_payload($payload, ?string $expectedFormat = null): array {
+    $payloadFormat = is_array($payload) ? (string)($payload['format'] ?? '') : '';
+    if (!is_array($payload) || !in_array($payloadFormat, ['nab-encrypted-backup-v1', 'nab-encrypted-backup-v2'], true)
+        || ($expectedFormat !== null && $payloadFormat !== $expectedFormat) || (int)($payload['schema_version'] ?? 0) !== 1) {
+        fail(422, 'قالب یا نسخهٔ بکاپ پشتیبانی نمی‌شود.');
+    }
+    $tables = $payload['tables'] ?? null;
+    if (!is_array($tables)) fail(422, 'ساختار جدول‌های بکاپ معتبر نیست.');
+    $users = $tables['nab_users'] ?? null;
+    $states = $tables['nab_state'] ?? null;
+    if (!is_array($users) || !is_array($states) || count($users) < 1 || count($users) > 10000 || count($states) > 50000) fail(422, 'ساختار یا تعداد ردیف‌های بکاپ معتبر نیست.');
+    $seenIds = [];
+    $seenUsernames = [];
+    $hasActiveAdmin = false;
+    foreach ($users as &$row) {
+        if (!is_array($row)) fail(422, 'یکی از حساب‌های بکاپ معتبر نیست.');
+        $id = filter_var($row['id'] ?? null, FILTER_VALIDATE_INT);
+        $username = strtolower(trim((string)($row['username'] ?? '')));
+        $hash = (string)($row['password_hash'] ?? '');
+        $displayName = trim((string)($row['display_name'] ?? ''));
+        $roleId = trim((string)($row['role_id'] ?? ''));
+        $permissionsJson = $row['permissions_json'] ?? null;
+        $permissions = is_string($permissionsJson) ? json_decode($permissionsJson, true) : null;
+        $hashInfo = password_get_info($hash);
+        if ($id === false || $id < 1 || isset($seenIds[$id]) || !preg_match('/^[a-z0-9_.-]{3,64}$/', $username) || isset($seenUsernames[$username])
+            || $displayName === '' || text_length($displayName) > 160 || $roleId === '' || strlen($roleId) > 64
+            || strlen($hash) > 255 || !is_array($permissions) || !is_array($hashInfo) || empty($hashInfo['algo'])) {
+            fail(422, 'یکی از حساب‌های بکاپ ناقص یا نامعتبر است.');
+        }
+        $seenIds[$id] = true;
+        $seenUsernames[$username] = true;
+        if ($roleId === 'admin') {
+            if (!empty($row['is_active'])) $hasActiveAdmin = true;
+            $permissions = all_permissions();
+        } else {
+            $permissions = array_values(array_diff(array_values(array_unique(array_intersect(all_permissions(), array_filter($permissions, 'is_string')))), ['purge_server_data']));
+        }
+        $row['permissions_json'] = json_encode($permissions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $row['id'] = (int)$id;
+        $row['username'] = $username;
+    }
+    unset($row);
+    if (!$hasActiveAdmin) fail(422, 'بکاپ دست‌کم باید یک حساب مدیر سیستمِ فعال داشته باشد.');
+
+    $seenKeys = [];
+    foreach ($states as &$row) {
+        if (!is_array($row)) fail(422, 'یکی از ردیف‌های دادهٔ بکاپ معتبر نیست.');
+        $key = (string)($row['state_key'] ?? '');
+        $json = $row['state_json'] ?? null;
+        if ($key === '' || strlen($key) > 190 || isset($seenKeys[$key]) || !is_string($json) || strlen($json) > 250 * 1024 * 1024) fail(422, 'یکی از کلیدهای دادهٔ بکاپ نامعتبر است.');
+        $state = json_decode($json, true);
+        if (!is_array($state)) fail(422, 'یکی از مقادیر ذخیره‌شده در بکاپ JSON معتبری نیست.');
+        $seenKeys[$key] = true;
+        if ($key === 'nab:roles') {
+            foreach ($state as &$role) {
+                if (!is_array($role) || !is_array($role['permissions'] ?? null)) continue;
+                if ((string)($role['id'] ?? '') === 'admin') {
+                    $role['permissions'] = all_permissions();
+                    $role['builtin'] = true;
+                } else {
+                    $role['permissions'] = array_values(array_diff(array_values(array_filter($role['permissions'], 'is_string')), ['purge_server_data']));
+                }
+            }
+            unset($role);
+            $row['state_json'] = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        }
+        $updatedBy = $row['updated_by'] ?? null;
+        $row['updated_by'] = $updatedBy !== null && filter_var($updatedBy, FILTER_VALIDATE_INT) !== false && isset($seenIds[(int)$updatedBy]) ? (int)$updatedBy : null;
+    }
+    unset($row);
+    return ['users' => $users, 'states' => $states];
+}
+
+function decrypt_backup_file(string $contents, string $passphrase, array $config): array {
+    ensure_backup_crypto();
+    if (strlen($contents) < 36 || strlen($contents) > 250 * 1024 * 1024) fail(413, 'حجم فایل بکاپ نامعتبر است یا از ۲۵۰ مگابایت بیشتر است.');
+    $header = substr($contents, 0, 7);
+    $expectedFormat = null;
+    if ($header === "NABDB2\0") {
+        $expectedFormat = 'nab-encrypted-backup-v2';
+        $passphrase = backup_passphrase($passphrase, 'رمز فایل بکاپ');
+        if (strlen($contents) < 56) fail(422, 'فایل بکاپ ناقص است.');
+        $iterationData = unpack('Niterations', substr($contents, 7, 4));
+        $iterations = (int)($iterationData['iterations'] ?? 0);
+        if ($iterations < 200000 || $iterations > 1000000) fail(422, 'پارامتر رمزگذاری بکاپ معتبر نیست.');
+        $salt = substr($contents, 11, 16);
+        $nonce = substr($contents, 27, 12);
+        $tag = substr($contents, 39, 16);
+        $ciphertext = substr($contents, 55);
+        $key = hash_pbkdf2('sha256', $passphrase, $salt, $iterations, 32, true);
+        $compressed = openssl_decrypt($ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $nonce, $tag, 'NABDB2');
+    } elseif ($header === "NABDB1\0") {
+        $expectedFormat = 'nab-encrypted-backup-v1';
+        $backupSecret = $config['backup_key'] ?? null;
+        if (!is_string($backupSecret) || strlen($backupSecret) < 32) fail(422, 'این فایل با ابزار CLI رمزگذاری شده است؛ برای بازیابی آن backup_key معتبر باید در پیکربندی خصوصی هاست باشد.');
+        $nonce = substr($contents, 7, 12);
+        $tag = substr($contents, 19, 16);
+        $ciphertext = substr($contents, 35);
+        $key = hash('sha256', $backupSecret, true);
+        $compressed = openssl_decrypt($ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $nonce, $tag, 'NABDB1');
+    } else {
+        fail(422, 'سرآیند فایل بکاپ معتبر نیست.');
+    }
+    if ($compressed === false) fail(422, 'رمز بکاپ نادرست است یا فایل تغییر کرده است.');
+    $json = gzdecode($compressed, 250 * 1024 * 1024);
+    if ($json === false) fail(422, 'بازکردن دادهٔ فشردهٔ بکاپ ناموفق بود.');
+    try {
+        $payload = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+    } catch (Throwable $error) {
+        fail(422, 'محتوای بکاپ JSON معتبر نیست.');
+    }
+    return validate_backup_payload($payload, $expectedFormat);
+}
+
+function private_backup_directory(array $config, string $configPath): string {
+    $configured = trim((string)($config['backup_directory'] ?? ''));
+    if ($configured === '') $configured = dirname($configPath) . DIRECTORY_SEPARATOR . 'nab-backups';
+    elseif ($configured[0] !== DIRECTORY_SEPARATOR) $configured = dirname($configPath) . DIRECTORY_SEPARATOR . $configured;
+    if (!is_dir($configured) && !@mkdir($configured, 0700, true) && !is_dir($configured)) fail(503, 'پوشهٔ خصوصی بکاپ ساخته نشد؛ دسترسی نوشتن و مسیر خارج از public_html را بررسی کنید.');
+    $directory = realpath($configured);
+    if ($directory === false || !is_writable($directory)) fail(503, 'پوشهٔ خصوصی بکاپ قابل نوشتن نیست.');
+    $documentRootValue = (string)($_SERVER['DOCUMENT_ROOT'] ?? '');
+    $documentRoot = $documentRootValue !== '' ? realpath($documentRootValue) : false;
+    if ($documentRoot !== false) {
+        $root = rtrim($documentRoot, DIRECTORY_SEPARATOR);
+        if ($directory === $root || str_starts_with($directory, $root . DIRECTORY_SEPARATOR)) fail(403, 'پوشهٔ بکاپ باید بیرون از document root و public_html باشد.');
+    }
+    @chmod($directory, 0700);
+    return $directory;
+}
+
+function write_safety_backup(array $payload, string $passphrase, array $config, string $configPath, string $purpose): array {
+    $directory = private_backup_directory($config, $configPath);
+    $contents = encrypt_backup_payload($payload, $passphrase);
+    $id = bin2hex(random_bytes(32));
+    $purpose = preg_match('/^[a-z0-9-]{1,24}$/', $purpose) ? $purpose : 'safety';
+    $filename = 'nab-safety-' . $purpose . '-' . gmdate('Ymd-His') . '-' . $id . '.nabbak';
+    $path = $directory . DIRECTORY_SEPARATOR . $filename;
+    $temporaryPath = $path . '.tmp-' . bin2hex(random_bytes(8));
+    $written = @file_put_contents($temporaryPath, $contents, LOCK_EX);
+    if ($written !== strlen($contents) || !@rename($temporaryPath, $path)) {
+        @unlink($temporaryPath);
+        @unlink($path);
+        fail(503, 'ذخیرهٔ بکاپ ایمنی روی هاست ناموفق بود؛ عملیات مخرب انجام نشد.');
+    }
+    @chmod($path, 0600);
+    $retentionDays = max(1, min(3650, (int)($config['backup_retention_days'] ?? 30)));
+    $cutoff = time() - $retentionDays * 86400;
+    foreach (glob($directory . DIRECTORY_SEPARATOR . 'nab-safety-*.nabbak') ?: [] as $oldFile) {
+        if ($oldFile !== $path && is_file($oldFile) && filemtime($oldFile) < $cutoff) @unlink($oldFile);
+    }
+    return ['id' => $id, 'filename' => $filename];
+}
+
 function list_users(PDO $pdo, array $viewer): array {
     $rows = $pdo->query('SELECT * FROM nab_users ORDER BY display_name, username')->fetchAll();
-    $canManageUsers = has_permission($viewer, 'manage_users');
-    return array_map(static function (array $row) use ($viewer, $canManageUsers): array {
-        if ($canManageUsers || (int)$row['id'] === (int)$viewer['id']) return safe_user($row);
-        // Non-admin screens need only assignment/mention labels, not other users' permissions or profile photos.
+    $canSeeUserPermissions = has_user_operation($viewer, 'edit_user');
+    return array_map(static function (array $row) use ($viewer, $canSeeUserPermissions): array {
+        if ($canSeeUserPermissions || (int)$row['id'] === (int)$viewer['id']) return safe_user($row);
+        // Directory/assignment views need labels only, never other users' permissions or profile photos.
         return [
             'name' => (string)$row['display_name'],
             'username' => (string)$row['username'],
@@ -270,6 +802,34 @@ function list_users(PDO $pdo, array $viewer): array {
             'active' => (bool)$row['is_active'],
         ];
     }, $rows);
+}
+
+function active_contact_users(PDO $pdo): array {
+    $rows = $pdo->query('SELECT display_name, username, title FROM nab_users WHERE is_active = 1 ORDER BY display_name, username')->fetchAll();
+    return array_map(static fn(array $row): array => [
+        'name' => (string)$row['display_name'],
+        'username' => (string)$row['username'],
+        'title' => (string)$row['title'],
+        'active' => true,
+    ], $rows);
+}
+
+
+function visible_users_payload(PDO $pdo, array $user): array {
+    if (can_view_user_directory($user)) return list_users($pdo, $user);
+    if (has_permission($user, 'assign_person') || has_permission($user, 'create_person_note')) {
+        $users = active_contact_users($pdo);
+        $hasSelf = false;
+        foreach ($users as &$contact) {
+            if (($contact['username'] ?? '') !== (string)$user['username']) continue;
+            $contact = safe_user($user);
+            $hasSelf = true;
+        }
+        unset($contact);
+        if (!$hasSelf) $users[] = safe_user($user);
+        return $users;
+    }
+    return [safe_user($user)];
 }
 
 function note_owner_username(PDO $pdo, array $note): ?string {
@@ -298,9 +858,17 @@ function notes_payload(PDO $pdo): array {
 }
 
 function state_payload(PDO $pdo, array $user): array {
+    upgrade_permission_catalog($pdo, (int)($user['id'] ?? 0));
+    if (isset($user['id'])) $user = find_user_by_id($pdo, (int)$user['id']) ?? $user;
     $canViewPeople = has_permission($user, 'view_persons');
     $canViewActivities = has_permission($user, 'view_activities');
-    $canManageUsers = has_permission($user, 'manage_users');
+    $canManageUsers = has_user_operation($user, 'create_user') || has_user_operation($user, 'edit_user') || has_user_operation($user, 'delete_user');
+    $canViewUsers = can_view_user_directory($user);
+    $canViewRoles = can_view_role_directory($user);
+    $canViewNotes = $canViewPeople && has_permission($user, 'view_person_notes');
+    $canViewAudit = has_permission($user, 'view_audit_log');
+    $canViewSettings = has_permission($user, 'view_settings') || has_permission($user, 'manage_settings');
+    $canViewTasks = has_permission($user, 'view_tasks');
     $workflow = workflow_config($pdo);
     $people = $canViewPeople ? state_value($pdo, 'nab:people', []) : [];
     if ($canViewPeople) {
@@ -309,18 +877,20 @@ function state_payload(PDO $pdo, array $user): array {
     }
     return [
         'user' => safe_user($user),
-        'users' => list_users($pdo, $user),
+        'users' => visible_users_payload($pdo, $user),
+        'user_count' => is_system_admin($user) ? (int)$pdo->query('SELECT COUNT(*) FROM nab_users')->fetchColumn() : null,
         'csrf' => (string)($_SESSION['csrf_token'] ?? ''),
         'state_versions' => state_versions($pdo, $user),
         'state' => [
             'nab:people' => $people,
             'nab:workflow' => [$workflow],
             'nab:activities' => $canViewActivities ? state_value($pdo, 'nab:activities', []) : [],
-            'nab:audit' => ($canManageUsers || has_permission($user, 'view_reports')) ? state_value($pdo, 'nab:audit', []) : [],
-            'nab:roles' => $canManageUsers ? state_value($pdo, 'nab:roles', default_roles()) : [],
-            'nab:notes' => $canViewPeople ? notes_payload($pdo) : [],
-            'tasks' => state_value($pdo, 'nab:tasks:' . (string)$user['username'], []),
-            'legacy_tasks_imported' => state_value($pdo, 'nab:legacy_tasks_imported:' . (string)$user['username'], []),
+            'nab:audit' => $canViewAudit ? state_value($pdo, 'nab:audit', []) : [],
+            'nab:roles' => $canViewRoles ? state_value($pdo, 'nab:roles', default_roles()) : [],
+            'nab:notes' => $canViewNotes ? notes_payload($pdo) : [],
+            'nab:settings' => $canViewSettings ? state_value($pdo, 'nab:settings', [default_settings()]) : [],
+            'tasks' => $canViewTasks ? state_value($pdo, 'nab:tasks:' . (string)$user['username'], []) : [],
+            'legacy_tasks_imported' => $canViewTasks ? state_value($pdo, 'nab:legacy_tasks_imported:' . (string)$user['username'], []) : [],
             'legacy_migration_completed' => $canManageUsers ? state_value($pdo, 'nab:legacy_migration_completed', []) : [],
         ],
     ];
@@ -367,6 +937,172 @@ function server_timestamp_iso(): string {
     return gmdate('Y-m-d\\TH:i:s\\Z');
 }
 
+function notification_state_key(string $username): string {
+    return 'nab:notifications:' . $username;
+}
+
+function record_assignment_notifications(PDO $pdo, array $actor, array $previousPeople, array $nextPeople): void {
+    $oldById = [];
+    foreach ($previousPeople as $person) if (is_array($person) && isset($person['id'])) $oldById[(string)$person['id']] = $person;
+    $eventsByUser = [];
+    foreach ($nextPeople as $person) {
+        if (!is_array($person) || !isset($person['id'])) continue;
+        $id = (string)$person['id'];
+        $oldAssignee = trim((string)($oldById[$id]['assignee'] ?? ''));
+        $newAssignee = trim((string)($person['assignee'] ?? ''));
+        if ($newAssignee === '' || $newAssignee === $oldAssignee) continue;
+        $target = get_user_by_username($pdo, $newAssignee);
+        if (!$target || !(bool)$target['is_active']) fail(422, 'کاربر ارجاع‌شده وجود ندارد یا غیرفعال است.');
+        $personName = trim((string)($person['firstName'] ?? '') . ' ' . (string)($person['lastName'] ?? ''));
+        $eventsByUser[$newAssignee][] = [
+            'id' => 'assignment-' . bin2hex(random_bytes(12)),
+            'kind' => 'assignment',
+            'title' => 'پروندهٔ تازه به شما ارجاع شد',
+            'body' => 'پروندهٔ «' . $personName . '» توسط ' . (string)$actor['display_name'] . ' به شما ارجاع شد.',
+            'personId' => $id,
+            'createdAt' => server_timestamp_iso(),
+            'ts' => server_timestamp_ms(),
+        ];
+    }
+    foreach ($eventsByUser as $username => $newEvents) {
+        $key = notification_state_key((string)$username);
+        $feed = state_value($pdo, $key, ['events' => [], 'read' => []]);
+        $events = is_array($feed['events'] ?? null) ? $feed['events'] : [];
+        $read = is_array($feed['read'] ?? null) ? $feed['read'] : [];
+        $events = array_slice(array_merge($events, $newEvents), -500);
+        if (count($read) > 2000) $read = array_slice($read, -2000, null, true);
+        put_state($pdo, $key, ['events' => array_values($events), 'read' => $read], (int)$actor['id']);
+    }
+}
+
+function gregorian_jdn(int $year, int $month, int $day): int {
+    $a = intdiv(14 - $month, 12);
+    $y = $year + 4800 - $a;
+    $m = $month + 12 * $a - 3;
+    return $day + intdiv(153 * $m + 2, 5) + 365 * $y + intdiv($y, 4) - intdiv($y, 100) + intdiv($y, 400) - 32045;
+}
+
+function notification_timestamp_ms($value): int {
+    if (is_numeric($value)) {
+        $number = (int)$value;
+        if ($number > 0) return $number < 100000000000 ? $number * 1000 : $number;
+    }
+    if (is_string($value) && trim($value) !== '') {
+        $timestamp = strtotime($value);
+        if ($timestamp !== false) return $timestamp * 1000;
+    }
+    return 0;
+}
+
+function notifications_for_user(PDO $pdo, array $user): array {
+    if (!has_permission($user, 'view_persons')) fail(403, 'برای دریافت اعلان‌های پرونده مجوز مشاهدهٔ پرونده‌ها لازم است.');
+    $username = (string)$user['username'];
+    $key = notification_state_key($username);
+    $feed = state_value($pdo, $key, ['events' => [], 'read' => []]);
+    $events = is_array($feed['events'] ?? null) ? $feed['events'] : [];
+    $read = is_array($feed['read'] ?? null) ? $feed['read'] : [];
+    $items = [];
+    foreach ($events as $event) {
+        if (!is_array($event) || !isset($event['id'], $event['kind'], $event['personId'])) continue;
+        $id = (string)$event['id'];
+        $event['readAt'] = isset($read[$id]) && is_string($read[$id]) ? $read[$id] : null;
+        $items[$id] = $event;
+    }
+
+    $people = state_value($pdo, 'nab:people', []);
+    $workflow = workflow_config($pdo);
+    $isAdmin = is_system_admin($user);
+    $username = (string)$user['username'];
+    $tehranNow = new DateTimeImmutable('now', new DateTimeZone('Asia/Tehran'));
+    $todayJdn = gregorian_jdn((int)$tehranNow->format('Y'), (int)$tehranNow->format('n'), (int)$tehranNow->format('j'));
+    $nowMs = server_timestamp_ms();
+
+    foreach ($people as $person) {
+        if (!is_array($person) || !isset($person['id'])) continue;
+        $assignedToMe = trim((string)($person['assignee'] ?? '')) === $username;
+        if (!$isAdmin && !$assignedToMe) continue;
+        $personId = (string)$person['id'];
+        $personName = trim((string)($person['firstName'] ?? '') . ' ' . (string)($person['lastName'] ?? ''));
+        $stageId = trim((string)($person['stageId'] ?? ''));
+        $stage = $stageId !== '' ? workflow_stage($workflow, $stageId) : null;
+        if (!$stage) {
+            $status = trim((string)($person['status'] ?? ''));
+            foreach (($workflow['stages'] ?? []) as $candidate) {
+                if (is_array($candidate) && (string)($candidate['label'] ?? '') === $status) { $stage = $candidate; break; }
+            }
+            if (!$stage) {
+                foreach (default_workflow_config()['stages'] as $legacyStage) {
+                    if ((string)$legacyStage['label'] === $status) {
+                        $stage = workflow_stage($workflow, (string)$legacyStage['id']);
+                        if ($stage) break;
+                    }
+                }
+            }
+        }
+        if (!$stage) continue;
+        $stageId = (string)$stage['id'];
+        $stageLabel = (string)($stage['label'] ?? $person['status'] ?? '');
+        $isClosedForDeadline = !empty($stage['isFinal']) || in_array($stageId, ['approved', 'rejected'], true);
+
+        $deadline = normalize_digits(trim((string)($person['deadline'] ?? '')));
+        if (!$isClosedForDeadline && $deadline !== '' && $deadline !== '—' && valid_jalali_date($deadline)
+            && preg_match('/^(\\d{3,4})\\/(\\d{1,2})\\/(\\d{1,2})$/', $deadline, $dateParts)) {
+            $deadlineJdn = jalali_jdn((int)$dateParts[1], (int)$dateParts[2], (int)$dateParts[3]);
+            $daysLeft = $deadlineJdn - $todayJdn;
+            if ($daysLeft <= 3) {
+                $id = 'deadline-' . substr(hash('sha256', $personId . '|' . $deadline), 0, 32);
+                if ($daysLeft < 0) $body = 'مهلت پیگیری این پرونده ' . abs($daysLeft) . ' روز گذشته است.';
+                elseif ($daysLeft === 0) $body = 'مهلت پیگیری این پرونده امروز است.';
+                else $body = 'مهلت پیگیری این پرونده تا ' . $daysLeft . ' روز دیگر است.';
+                $eventSeconds = ($deadlineJdn - 2440588) * 86400 + 43200;
+                $items[$id] = [
+                    'id' => $id,
+                    'kind' => 'deadline',
+                    'title' => $daysLeft < 0 ? 'مهلت پرونده گذشته' : 'موعد پیگیری نزدیک است',
+                    'body' => 'پروندهٔ «' . $personName . '» · ' . $body,
+                    'personId' => $personId,
+                    'createdAt' => gmdate('Y-m-d\\TH:i:s\\Z', $eventSeconds),
+                    'ts' => $eventSeconds * 1000,
+                    'readAt' => isset($read[$id]) && is_string($read[$id]) ? $read[$id] : null,
+                ];
+            }
+        }
+
+        $stalledAfterDays = (int)($stage['stalledAfterDays'] ?? 0);
+        if ($stalledAfterDays >= 1 && empty($stage['archived']) && empty($stage['isFinal'])) {
+            $enteredAt = $person['stageEnteredAt'] ?? $person['updatedAt'] ?? $person['ts'] ?? null;
+            $enteredMs = notification_timestamp_ms($enteredAt);
+            if ($enteredMs <= 0) $enteredMs = notification_timestamp_ms($person['ts'] ?? null);
+            $ageDays = $enteredMs > 0 ? (int)floor(($nowMs - $enteredMs) / 86400000) : 0;
+            if ($ageDays >= $stalledAfterDays) {
+                $entryKey = $enteredMs > 0 ? (string)$enteredMs : 'unknown';
+                $id = 'stalled-' . substr(hash('sha256', $personId . '|' . $stageId . '|' . $entryKey . '|' . $stalledAfterDays), 0, 32);
+                $thresholdMs = $enteredMs + $stalledAfterDays * 86400000;
+                $thresholdSeconds = (int)floor($thresholdMs / 1000);
+                $items[$id] = [
+                    'id' => $id,
+                    'kind' => 'stalled',
+                    'title' => 'پرونده در مرحله متوقف مانده',
+                    'body' => 'پروندهٔ «' . $personName . '» ' . $ageDays . ' روز در مرحلهٔ «' . $stageLabel . '» بوده است؛ مهلت تنظیم‌شده ' . $stalledAfterDays . ' روز است.',
+                    'personId' => $personId,
+                    'createdAt' => gmdate('Y-m-d\\TH:i:s\\Z', $thresholdSeconds),
+                    'ts' => $thresholdMs,
+                    'readAt' => isset($read[$id]) && is_string($read[$id]) ? $read[$id] : null,
+                ];
+            }
+        }
+    }
+
+    $items = array_values($items);
+    usort($items, static function (array $a, array $b): int {
+        $aUnread = empty($a['readAt']) ? 0 : 1;
+        $bUnread = empty($b['readAt']) ? 0 : 1;
+        if ($aUnread !== $bUnread) return $aUnread <=> $bUnread;
+        return (int)($b['ts'] ?? 0) <=> (int)($a['ts'] ?? 0);
+    });
+    return array_slice($items, 0, 500);
+}
+
 function clean_person(array $person, array $actor, array $workflow, bool $isNew = false): array {
     $person = normalize_person_stage($person, $workflow, $isNew);
     $person['id'] = trim((string)($person['id'] ?? ''));
@@ -406,7 +1142,7 @@ function authorize_stage_checklist(array $before, array $candidate, array $user,
     if (!$stage) fail(422, 'مرحلهٔ جاری پرونده در گردش‌کار پیدا نشد.');
     $oldCurrent = is_array($oldProgress[$currentId] ?? null) ? $oldProgress[$currentId] : [];
     $requestedCurrent = is_array($requested[$currentId] ?? null) ? $requested[$currentId] : $oldCurrent;
-    if (!has_permission($user, 'change_status') && $requestedCurrent !== $oldCurrent) fail(403, 'مجوز تکمیل چک‌لیست مرحله را ندارید.');
+    if (!has_permission($user, 'complete_checklist') && $requestedCurrent !== $oldCurrent) fail(403, 'مجوز تکمیل چک‌لیست مرحله را ندارید.');
 
     $allowed = [];
     foreach (($stage['checklist'] ?? []) as $rule) {
@@ -470,6 +1206,12 @@ function authorize_people_change(PDO $pdo, array $user, array $next): array {
         if (!isset($oldById[$id])) {
             if (!has_permission($user, 'create_person')) fail(403, 'مجوز ایجاد پرونده را ندارید.');
             $row = clean_person($row, $user, $workflow, true);
+            $assignee = trim((string)($row['assignee'] ?? ''));
+            if ($assignee !== '') {
+                if (!has_permission($user, 'assign_person')) fail(403, 'مجوز ارجاع پرونده را ندارید.');
+                $row['assignee'] = validate_active_assignee($pdo, $assignee);
+            } else unset($row['assignee']);
+            $row['stageEnteredAt'] = server_timestamp_iso();
             // Never accept checklist completions supplied with a new record.
             $row['stageChecklist'] = [];
         } else {
@@ -480,6 +1222,15 @@ function authorize_people_change(PDO $pdo, array $user, array $next): array {
             $beforeStageId = (string)$before['stageId'];
             $afterStageId = (string)$row['stageId'];
             $stageChanged = $beforeStageId !== $afterStageId;
+            $oldAssignee = trim((string)($before['assignee'] ?? ''));
+            $newAssignee = trim((string)($row['assignee'] ?? ''));
+            if ($oldAssignee !== $newAssignee) {
+                if ($newAssignee !== '') $row['assignee'] = validate_active_assignee($pdo, $newAssignee);
+                else unset($row['assignee']);
+            }
+            $row['stageEnteredAt'] = $stageChanged
+                ? server_timestamp_iso()
+                : (string)($before['stageEnteredAt'] ?? $before['updatedAt'] ?? server_timestamp_iso());
             if ($stageChanged) {
                 if (!has_permission($user, 'change_status')) fail(403, 'مجوز تغییر مرحله را ندارید.');
                 $fromStage = workflow_stage($workflow, $beforeStageId);
@@ -490,7 +1241,7 @@ function authorize_people_change(PDO $pdo, array $user, array $next): array {
             }
             $beforeCompare = $before;
             $afterCompare = $row;
-            foreach (['updatedAt', 'updatedBy', 'ts'] as $ignored) { unset($beforeCompare[$ignored], $afterCompare[$ignored]); }
+            foreach (['updatedAt', 'updatedBy', 'ts', 'stageEnteredAt'] as $ignored) { unset($beforeCompare[$ignored], $afterCompare[$ignored]); }
             $changed = [];
             foreach (array_unique(array_merge(array_keys($beforeCompare), array_keys($afterCompare))) as $field) {
                 if (($beforeCompare[$field] ?? null) !== ($afterCompare[$field] ?? null)) $changed[] = $field;
@@ -498,8 +1249,8 @@ function authorize_people_change(PDO $pdo, array $user, array $next): array {
             if (in_array('status', $changed, true) || in_array('stageId', $changed, true)) {
                 if (!has_permission($user, 'change_status')) fail(403, 'مجوز تغییر وضعیت را ندارید.');
             }
-            if (in_array('assignee', $changed, true) && !has_permission($user, 'change_status')) fail(403, 'مجوز ارجاع پرونده را ندارید.');
-            if (in_array('stageChecklist', $changed, true) && !has_permission($user, 'change_status')) fail(403, 'مجوز تکمیل چک‌لیست مرحله را ندارید.');
+            if (in_array('assignee', $changed, true) && !has_permission($user, 'assign_person')) fail(403, 'مجوز ارجاع پرونده را ندارید.');
+            if (in_array('stageChecklist', $changed, true) && !has_permission($user, 'complete_checklist')) fail(403, 'مجوز تکمیل چک‌لیست مرحله را ندارید.');
             $editable = array_diff($changed, ['status', 'stageId', 'assignee', 'stageChecklist']);
             if (count($editable) > 0 && !has_permission($user, 'edit_person')) fail(403, 'مجوز ویرایش اطلاعات پرونده را ندارید.');
             if (count($changed) > 0) {
@@ -527,14 +1278,15 @@ function event_permission(string $action): ?string {
         'افزودن فرد جدید' => 'create_person',
         'تغییر وضعیت' => 'change_status',
         'تغییر وضعیت پرونده' => 'change_status',
-        'تکمیل چک‌لیست' => 'change_status',
+        'تکمیل چک‌لیست' => 'complete_checklist',
         'رد پرونده' => 'change_status',
+        'ارجاع پرونده' => 'assign_person',
         'ویرایش اطلاعات فرد' => 'edit_person',
         'حذف پرونده' => 'delete_person',
         'ورود به سامانه' => 'view_persons',
-        'ثبت یادداشت' => 'view_persons',
-        'ویرایش یادداشت' => 'view_persons',
-        'حذف یادداشت' => 'view_persons',
+        'ثبت یادداشت' => 'create_person_note',
+        'ویرایش یادداشت' => 'edit_person_note',
+        'حذف یادداشت' => 'delete_person_note',
     ];
     return $permissions[$action] ?? null;
 }
@@ -561,7 +1313,8 @@ function sanitize_append_only(PDO $pdo, array $user, string $key, array $next): 
         $action = trim((string)($row['action'] ?? ''));
         $needed = event_permission($action);
         if ($needed === null) fail(422, 'نوع رویداد معتبر نیست.');
-        if (!has_permission($user, $needed)) fail(403, 'مجوز ثبت این رویداد را ندارید.');
+        $canManageAnyNote = has_permission($user, 'manage_any_person_note') && in_array($action, ['ویرایش یادداشت', 'حذف یادداشت'], true);
+        if (!has_permission($user, $needed) && !$canManageAnyNote) fail(403, 'مجوز ثبت این رویداد را ندارید.');
         $row['action'] = text_substring($action, 0, 160);
         $row['createdBy'] = (string)$user['display_name'];
         $row['createdAt'] = server_timestamp_iso();
@@ -576,7 +1329,7 @@ function sanitize_append_only(PDO $pdo, array $user, string $key, array $next): 
 }
 
 function authorize_notes(PDO $pdo, array $user, array $next): array {
-    if (!has_permission($user, 'view_persons')) fail(403, 'مجوز دسترسی به گفتگوها را ندارید.');
+    if (!has_permission($user, 'view_persons') || !has_permission($user, 'view_person_notes')) fail(403, 'مجوز دسترسی به گفتگوها را ندارید.');
     if (count($next) > 50000) fail(422, 'تعداد یادداشت‌ها بیش از حد مجاز است.');
     $old = state_value($pdo, 'nab:notes', []);
     $oldById = [];
@@ -588,12 +1341,13 @@ function authorize_notes(PDO $pdo, array $user, array $next): array {
         if ($id === '' || strlen($id) > 100 || isset($nextById[$id])) fail(422, 'شناسهٔ یادداشت تکراری یا نامعتبر است.');
         $nextById[$id] = $row;
     }
-    $isAdmin = (string)$user['role_id'] === 'admin';
+    $canManageAnyNote = has_permission($user, 'manage_any_person_note');
     $username = (string)$user['username'];
     foreach ($oldById as $id => $oldRow) {
         if (!isset($nextById[$id])) {
+            if (!has_permission($user, 'delete_person_note')) fail(403, 'مجوز حذف یادداشت را ندارید.');
             $owner = note_owner_username($pdo, $oldRow);
-            if (!$isAdmin && $owner !== $username) fail(403, 'فقط نویسنده یا مدیر می‌تواند یادداشت را حذف کند.');
+            if ($owner !== $username && !$canManageAnyNote) fail(403, 'فقط نویسنده یا کاربر دارای مجوز مدیریت یادداشت دیگران می‌تواند آن را حذف کند.');
         }
     }
     $out = [];
@@ -608,7 +1362,8 @@ function authorize_notes(PDO $pdo, array $user, array $next): array {
             }
             $changed = json_encode($beforeCompare, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !== json_encode($afterCompare, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($changed) {
-                if (!$isAdmin && $owner !== $username) fail(403, 'فقط نویسنده یا مدیر می‌تواند یادداشت را ویرایش کند.');
+                if (!has_permission($user, 'edit_person_note')) fail(403, 'مجوز ویرایش یادداشت را ندارید.');
+                if ($owner !== $username && !$canManageAnyNote) fail(403, 'فقط نویسنده یا کاربر دارای مجوز مدیریت یادداشت دیگران می‌تواند آن را ویرایش کند.');
                 $text = trim((string)($row['text'] ?? ''));
                 if ($text === '' || text_length($text) > 10000) fail(422, 'متن یادداشت خالی یا بیش از حد طولانی است.');
                 $row['author'] = (string)($before['author'] ?? '');
@@ -638,6 +1393,7 @@ function authorize_notes(PDO $pdo, array $user, array $next): array {
                 }
             }
         } else {
+            if (!has_permission($user, 'create_person_note')) fail(403, 'مجوز ثبت یادداشت را ندارید.');
             $text = trim((string)($row['text'] ?? ''));
             $personId = trim((string)($row['personId'] ?? ''));
             if ($personId === '' || strlen($personId) > 80 || $text === '' || text_length($text) > 10000) fail(422, 'متن یادداشت خالی یا بیش از حد طولانی است.');
@@ -674,8 +1430,15 @@ function get_user_by_username(PDO $pdo, string $username): ?array {
     return $row ?: null;
 }
 
-function require_manage_users(array $user): void {
-    if (!has_permission($user, 'manage_users')) fail(403, 'مجوز مدیریت کاربران را ندارید.');
+function validate_active_assignee(PDO $pdo, string $username): string {
+    $username = validate_username($username);
+    $target = get_user_by_username($pdo, $username);
+    if (!$target || !(bool)$target['is_active']) fail(422, 'کاربر ارجاع‌شده وجود ندارد یا غیرفعال است.');
+    return $username;
+}
+
+function require_user_operation(array $user, string $permission): void {
+    if (!has_user_operation($user, $permission)) fail(403, 'مجوز انجام این عملیات روی حساب‌های کاربری را ندارید.');
 }
 
 function is_system_admin(array $user): bool {
@@ -685,8 +1448,21 @@ function is_system_admin(array $user): bool {
 function validate_permissions($permissions, array $actor): array {
     if (!is_array($permissions)) fail(422, 'فهرست مجوزها معتبر نیست.');
     $permissions = array_values(array_unique(array_intersect(all_permissions(), $permissions)));
-    if (!$permissions) fail(422, 'حداقل یک مجوز باید فعال باشد.');
-    if (!is_system_admin($actor) && count(array_diff($permissions, user_permissions($actor))) > 0) fail(403, 'نمی‌توانید مجوزی فراتر از سطح دسترسی خود اعطا کنید.');
+    $dependencyError = permission_dependency_error($permissions);
+    if ($dependencyError !== null) fail(422, $dependencyError);
+    if (!is_system_admin($actor)) foreach ($permissions as $permission) if (!actor_can_grant_permission($actor, (string)$permission)) fail(403, 'نمی‌توانید مجوزی فراتر از سطح دسترسی خود اعطا کنید.');
+    return $permissions;
+}
+
+function validate_updated_permissions($permissions, array $actor, array $target): array {
+    if (!is_array($permissions)) fail(422, 'فهرست مجوزها معتبر نیست.');
+    $permissions = array_values(array_unique(array_intersect(all_permissions(), $permissions)));
+    $dependencyError = permission_dependency_error($permissions);
+    if ($dependencyError !== null) fail(422, $dependencyError);
+    if (!is_system_admin($actor)) {
+        $addedPermissions = array_diff($permissions, user_permissions($target));
+        foreach ($addedPermissions as $permission) if (!actor_can_grant_permission($actor, (string)$permission)) fail(403, 'نمی‌توانید مجوز تازه‌ای فراتر از سطح دسترسی خود اعطا کنید.');
+    }
     return $permissions;
 }
 
@@ -724,6 +1500,12 @@ function validate_workflow_definition($input): array {
         $next = $raw['nextStageIds'] ?? [];
         if (!is_array($next) || count($next) > 20) fail(422, 'مسیرهای مرحله معتبر نیستند.');
         $next = array_values(array_unique(array_map(static fn($v) => trim((string)$v), $next)));
+        $stalledAfterDays = null;
+        if (isset($raw['stalledAfterDays']) && $raw['stalledAfterDays'] !== '') {
+            $stalledDays = filter_var($raw['stalledAfterDays'], FILTER_VALIDATE_INT);
+            if ($stalledDays === false || $stalledDays < 1 || $stalledDays > 3650) fail(422, 'مهلت توقف مرحله باید بین ۱ تا ۳۶۵۰ روز باشد یا خالی بماند.');
+            $stalledAfterDays = $stalledDays;
+        }
         $checklist = $raw['checklist'] ?? [];
         if (!is_array($checklist) || count($checklist) > 50) fail(422, 'تعداد چک‌لیست یک مرحله بیش از حد مجاز است.');
         $rules = [];
@@ -743,6 +1525,7 @@ function validate_workflow_definition($input): array {
             'tone' => $tone,
             'nextStageIds' => $next,
             'checklist' => $rules,
+            'stalledAfterDays' => $stalledAfterDays,
             'archived' => !empty($raw['archived']),
             'isFinal' => !empty($raw['isFinal']),
         ];
@@ -857,7 +1640,10 @@ function require_fixed_workflow_routes(array $oldWorkflow, array $nextWorkflow):
 
 try {
     $action = (string)($_GET['action'] ?? '');
-    $body = json_body();
+    $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    $contentType = (string)($_SERVER['CONTENT_TYPE'] ?? '');
+    $isBackupUpload = $action === 'backup_restore' && $method === 'POST' && str_starts_with(strtolower($contentType), 'multipart/form-data');
+    $body = $isBackupUpload ? $_POST : json_body();
     $configPath = dirname(__DIR__) . '/nab-config.php';
     if (!is_file($configPath)) fail(503, 'فایل امن پیکربندی هاست پیدا نشد؛ راهنمای استقرار را ببینید.');
     $config = require $configPath;
@@ -878,7 +1664,6 @@ try {
     ]);
     session_start();
 
-    $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if ($method === 'OPTIONS') reply(204, ['success' => true]);
     if ($method === 'POST' && !in_array($action, ['login', 'setup'], true)) {
         if (!current_user($pdo)) fail(401, 'نشست شما معتبر نیست یا منقضی شده است؛ دوباره وارد شوید.');
@@ -967,9 +1752,131 @@ try {
         reply(200, ['success' => true]);
     }
 
+    if ($action === 'backup_safety_download' && $method === 'GET') {
+        $id = (string)($_GET['id'] ?? '');
+        if (!preg_match('/^[a-f0-9]{64}$/', $id)) fail(404, 'بکاپ ایمنی پیدا نشد.');
+        $directory = private_backup_directory($config, $configPath);
+        $matches = glob($directory . DIRECTORY_SEPARATOR . 'nab-safety-*-' . $id . '.nabbak') ?: [];
+        if (count($matches) !== 1 || !is_file($matches[0]) || !is_readable($matches[0])) fail(404, 'بکاپ ایمنی پیدا نشد یا منقضی شده است.');
+        $retentionDays = max(1, min(3650, (int)($config['backup_retention_days'] ?? 30)));
+        $modifiedAt = filemtime($matches[0]);
+        if ($modifiedAt === false || $modifiedAt < time() - $retentionDays * 86400) {
+            @unlink($matches[0]);
+            fail(404, 'مهلت نگهداری بکاپ ایمنی تمام شده است.');
+        }
+        $size = filesize($matches[0]);
+        if ($size === false || $size < 56 || $size > 250 * 1024 * 1024) fail(413, 'حجم بکاپ ایمنی معتبر نیست.');
+        $contents = file_get_contents($matches[0]);
+        if ($contents === false) fail(503, 'خواندن بکاپ ایمنی ناموفق بود.');
+        reply_file($contents, basename($matches[0]));
+    }
+
+    if ($action === 'backup_export' && $method === 'POST') {
+        $user = require_user($pdo);
+        if (!has_permission($user, 'export_backup')) fail(403, 'مجوز استخراج بکاپ را ندارید.');
+        $currentPassword = (string)($body['current_password'] ?? '');
+        if (!password_verify($currentPassword, (string)$user['password_hash'])) fail(401, 'رمز فعلی حساب نادرست است.');
+        $backupPassword = backup_passphrase((string)($body['backup_password'] ?? ''), 'رمز فایل بکاپ');
+        acquire_state_write_lock($pdo);
+        try {
+            $pdo->beginTransaction();
+            $payload = backup_snapshot_payload($pdo, true);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            release_state_write_lock($pdo);
+            throw $error;
+        }
+        release_state_write_lock($pdo);
+        $contents = encrypt_backup_payload($payload, $backupPassword);
+        reply_file($contents, 'nab-full-backup-' . gmdate('Ymd-His') . '.nabbak');
+    }
+
+    if ($action === 'backup_restore' && $method === 'POST') {
+        $user = require_user($pdo);
+        if (!has_permission($user, 'restore_backup')) fail(403, 'مجوز بازیابی بکاپ را ندارید.');
+        if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0 && empty($_POST) && empty($_FILES)) fail(413, 'درخواست از محدودیت post_max_size هاست بیشتر است؛ این مقدار را افزایش دهید و دوباره تلاش کنید.');
+        $currentPassword = (string)($body['current_password'] ?? '');
+        if (!password_verify($currentPassword, (string)$user['password_hash'])) fail(401, 'رمز فعلی حساب نادرست است.');
+        if ((string)($body['confirmation'] ?? '') !== 'بازیابی کامل سامانه') fail(422, 'برای تأیید، عبارت «بازیابی کامل سامانه» را دقیق وارد کنید.');
+        if (!isset($_FILES['backup_file']) || !is_array($_FILES['backup_file'])) {
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0 && empty($_POST)) fail(413, 'درخواست از محدودیت post_max_size هاست بیشتر است؛ این مقدار را افزایش دهید و دوباره تلاش کنید.');
+            fail(422, 'فایل بکاپ انتخاب نشده است؛ محدودیت upload_max_filesize و post_max_size هاست را نیز بررسی کنید.');
+        }
+        $upload = $_FILES['backup_file'];
+        if ((int)($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !isset($upload['tmp_name']) || !is_uploaded_file((string)$upload['tmp_name'])) fail(413, 'بارگذاری فایل بکاپ ناموفق بود یا از محدودیت PHP هاست بیشتر است.');
+        $size = filesize((string)$upload['tmp_name']);
+        if ($size === false || $size < 56 || $size > 250 * 1024 * 1024) fail(413, 'حجم فایل بکاپ نامعتبر است یا از ۲۵۰ مگابایت بیشتر است.');
+        $binary = file_get_contents((string)$upload['tmp_name']);
+        if ($binary === false) fail(422, 'خواندن فایل بکاپ ناموفق بود.');
+        $archivePassword = (string)($body['archive_password'] ?? '');
+        $safetyPassword = backup_passphrase((string)($body['safety_password'] ?? ''), 'رمز بکاپ ایمنی');
+        $restored = decrypt_backup_file($binary, $archivePassword, $config);
+        unset($binary);
+
+        acquire_state_write_lock($pdo);
+        try {
+            $pdo->beginTransaction();
+            $currentSnapshot = backup_snapshot_payload($pdo, true);
+            $safety = write_safety_backup($currentSnapshot, $safetyPassword, $config, $configPath, 'before-restore');
+            restore_backup_rows($pdo, $restored);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            release_state_write_lock($pdo);
+            throw $error;
+        }
+        release_state_write_lock($pdo);
+        reply(200, ['success' => true, 'data' => [
+            'safety_backup_id' => $safety['id'],
+            'message' => 'بازیابی کامل شد؛ نشست‌های قبلی باطل شدند. بکاپ ایمنی پیش از بازیابی را دریافت کنید.',
+        ]]);
+    }
+
+    if ($action === 'server_purge' && $method === 'POST') {
+        $user = require_user($pdo);
+        if ((string)$user['role_id'] !== 'admin' || !has_permission($user, 'purge_server_data')) fail(403, 'پاکسازی فقط برای مدیر سیستم و دارندهٔ مجوز پاکسازی مجاز است.');
+        $currentPassword = (string)($body['current_password'] ?? '');
+        if (!password_verify($currentPassword, (string)$user['password_hash'])) fail(401, 'رمز فعلی مدیر نادرست است.');
+        if ((string)($body['confirmation'] ?? '') !== 'پاکسازی داده‌ها') fail(422, 'برای تأیید، عبارت «پاکسازی داده‌ها» را دقیق وارد کنید.');
+        $safetyPassword = backup_passphrase((string)($body['safety_password'] ?? ''), 'رمز بکاپ ایمنی');
+        acquire_state_write_lock($pdo);
+        try {
+            $pdo->beginTransaction();
+            $currentSnapshot = backup_snapshot_payload($pdo, true);
+            $safety = write_safety_backup($currentSnapshot, $safetyPassword, $config, $configPath, 'before-purge');
+            $preservedKeys = [
+                'nab:roles', 'nab:workflow', 'nab:settings',
+                'nab:permissions_catalog_v2', 'nab:permissions_catalog_v3', 'nab:permissions_catalog_v4',
+                'nab:permissions_catalog_v5', 'nab:permissions_catalog_v6', 'nab:permissions_catalog_v7',
+                'nab:legacy_migration_completed',
+            ];
+            $placeholders = implode(',', array_fill(0, count($preservedKeys), '?'));
+            $deleteStates = $pdo->prepare('DELETE FROM nab_state WHERE state_key NOT IN (' . $placeholders . ')');
+            $deleteStates->execute($preservedKeys);
+            // Retain a one-way install marker so stale local-browser data cannot be re-imported after purge.
+            put_state($pdo, 'nab:legacy_migration_completed', [[
+                'by' => (string)$user['username'], 'at' => gmdate('Y-m-d H:i:s'), 'server_data_purged' => true,
+            ]], (int)$user['id']);
+            $pdo->exec('DELETE FROM nab_login_attempts');
+            $invalidateOthers = $pdo->prepare('UPDATE nab_users SET auth_version = auth_version + 1, updated_at = UTC_TIMESTAMP() WHERE id <> ?');
+            $invalidateOthers->execute([(int)$user['id']]);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            release_state_write_lock($pdo);
+            throw $error;
+        }
+        release_state_write_lock($pdo);
+        reply(200, ['success' => true, 'data' => [
+            'safety_backup_id' => $safety['id'],
+            'message' => 'داده‌های عملیاتی و لاگ‌های قبلی پاک شدند؛ حساب‌ها، نقش‌ها، گردش‌کار و تنظیمات حفظ شدند.',
+        ]]);
+    }
+
     if ($action === 'workflow_save' && $method === 'POST') {
         $user = require_user($pdo);
-        if (!is_system_admin($user)) fail(403, 'فقط مدیر سیستم می‌تواند گردش‌کار را مدیریت کند.');
+        if (!has_permission($user, 'manage_workflow')) fail(403, 'مجوز مدیریت گردش‌کار را ندارید.');
         $expectedVersion = $body['expected_version'] ?? '';
         if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ گردش‌کار در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
         $workflow = validate_workflow_definition($body['workflow'] ?? null);
@@ -1003,19 +1910,33 @@ try {
         $expectedVersion = $body['expected_version'] ?? '';
         if (!is_array($value)) fail(422, 'دادهٔ ارسالی باید آرایه باشد.');
         if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ ذخیره‌سازی در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
-        $allowed = ['nab:people', 'nab:activities', 'nab:audit', 'nab:roles', 'nab:notes'];
+        $allowed = ['nab:people', 'nab:activities', 'nab:audit', 'nab:roles', 'nab:notes', 'nab:settings'];
         if (!in_array($key, $allowed, true)) fail(400, 'کلید ذخیره‌سازی مجاز نیست.');
         acquire_state_write_lock($pdo);
         $pdo->beginTransaction();
         verify_expected_state_version($pdo, $key, $expectedVersion);
-        if ($key === 'nab:people') $value = authorize_people_change($pdo, $user, $value);
-        elseif ($key === 'nab:notes') $value = authorize_notes($pdo, $user, $value);
+        if ($key === 'nab:people') {
+            $previousPeople = state_value($pdo, 'nab:people', []);
+            $value = authorize_people_change($pdo, $user, $value);
+            record_assignment_notifications($pdo, $user, $previousPeople, $value);
+        } elseif ($key === 'nab:notes') $value = authorize_notes($pdo, $user, $value);
         elseif ($key === 'nab:activities' || $key === 'nab:audit') $value = sanitize_append_only($pdo, $user, $key, $value);
         elseif ($key === 'nab:roles') {
-            require_manage_users($user);
+            $canCreateRole = has_role_operation($user, 'create_role');
+            $canEditRole = has_role_operation($user, 'edit_role');
+            $canDeleteRole = has_role_operation($user, 'delete_role');
+            if (!$canCreateRole && !$canEditRole && !$canDeleteRole) fail(403, 'مجوز مدیریت نقش‌ها را ندارید.');
             $oldRoles = state_value($pdo, 'nab:roles', default_roles());
+            if (!is_array($oldRoles)) fail(500, 'تعریف نقش‌های ذخیره‌شده معتبر نیست.');
+            $oldById = [];
             $oldBuiltins = [];
-            foreach ($oldRoles as $role) if (!empty($role['builtin'])) $oldBuiltins[(string)$role['id']] = true;
+            $oldRolePermissions = [];
+            foreach ($oldRoles as $oldRole) if (is_array($oldRole) && isset($oldRole['id'])) {
+                $roleId = (string)$oldRole['id'];
+                $oldById[$roleId] = $oldRole;
+                if (!empty($oldRole['builtin'])) $oldBuiltins[$roleId] = true;
+                $oldRolePermissions[$roleId] = is_array($oldRole['permissions'] ?? null) ? $oldRole['permissions'] : [];
+            }
             $ids = [];
             foreach ($value as &$role) {
                 if (!is_array($role) || !isset($role['id'], $role['title'], $role['permissions'])) fail(422, 'تعریف نقش معتبر نیست.');
@@ -1024,11 +1945,60 @@ try {
                 if (!preg_match('/^[a-z0-9_-]{2,64}$/', $role['id']) || $role['title'] === '' || text_length($role['title']) > 100 || isset($ids[$role['id']])) fail(422, 'شناسه یا عنوان نقش معتبر نیست.');
                 $ids[$role['id']] = true;
                 if (!is_array($role['permissions'])) fail(422, 'مجوزهای نقش معتبر نیستند.');
-                $role['permissions'] = array_values(array_unique(array_intersect(all_permissions(), $role['permissions'])));
+                $role['permissions'] = array_values(array_unique(array_intersect(all_permissions(), array_filter($role['permissions'], 'is_string'))));
+                $dependencyError = permission_dependency_error($role['permissions']);
+                if ($dependencyError !== null) fail(422, $dependencyError);
+                if ($role['id'] === 'admin') {
+                    if (!is_system_admin($user)) fail(403, 'تعریف نقش مدیر سیستم فقط توسط مدیر سیستم قابل ویرایش است.');
+                    $role['permissions'] = all_permissions();
+                } else {
+                    $role['permissions'] = array_values(array_diff(array_values(array_filter($role['permissions'], 'is_string')), ['purge_server_data']));
+                }
+
+                $previousRole = $oldById[$role['id']] ?? null;
+                if ($previousRole === null) {
+                    if (!$canCreateRole) fail(403, 'برای ایجاد نقش جدید به مجوز مستقل ایجاد نقش نیاز دارید.');
+                } else {
+                    $previousTitle = trim((string)($previousRole['title'] ?? ''));
+                    $roleChanged = $previousTitle !== $role['title'] || !same_permission_set($role['permissions'], $previousRole['permissions'] ?? null);
+                    if ($roleChanged && !$canEditRole) fail(403, 'برای ویرایش عنوان یا مجوزهای نقش به مجوز مستقل ویرایش نقش نیاز دارید.');
+                }
+
+                $addedPermissions = array_diff($role['permissions'], $oldRolePermissions[$role['id']] ?? []);
+                if (!is_system_admin($user)) foreach ($addedPermissions as $addedPermission) if (!actor_can_grant_permission($user, (string)$addedPermission)) fail(403, 'نمی‌توانید مجوز تازه‌ای فراتر از سطح دسترسی خود به نقش اضافه کنید.');
                 if (isset($oldBuiltins[$role['id']])) $role['builtin'] = true;
+                else $role['builtin'] = false;
             }
             unset($role);
-            foreach ($oldBuiltins as $id => $_) if (!isset($ids[$id])) fail(403, 'نقش‌های پیش‌فرض قابل حذف نیستند.');
+            foreach ($oldById as $id => $_oldRole) {
+                if (isset($ids[$id])) continue;
+                if (isset($oldBuiltins[$id])) fail(403, 'نقش‌های پیش‌فرض قابل حذف نیستند.');
+                if (!$canDeleteRole) fail(403, 'برای حذف نقش به مجوز مستقل حذف نقش نیاز دارید.');
+                $assignedCount = $pdo->prepare('SELECT COUNT(*) FROM nab_users WHERE role_id = ?');
+                $assignedCount->execute([$id]);
+                if ((int)$assignedCount->fetchColumn() > 0) fail(409, 'این نقش هنوز به یک یا چند حساب اختصاص دارد؛ ابتدا نقش کاربران را تغییر دهید.');
+            }
+            $updateRoleTitle = $pdo->prepare('UPDATE nab_users SET title = ?, updated_at = UTC_TIMESTAMP() WHERE role_id = ?');
+            foreach ($value as $role) $updateRoleTitle->execute([(string)$role['title'], (string)$role['id']]);
+        } elseif ($key === 'nab:settings') {
+            if (!has_permission($user, 'manage_settings')) fail(403, 'مجوز ویرایش تنظیمات را ندارید.');
+            if (count($value) !== 1 || !is_array($value[0])) fail(422, 'ساختار تنظیمات معتبر نیست.');
+            $settings = $value[0];
+            $appName = trim((string)($settings['appName'] ?? ''));
+            $minutes = filter_var($settings['autoLogoutMins'] ?? null, FILTER_VALIDATE_INT);
+            $font = (string)($settings['font'] ?? '');
+            if ($appName === '' || text_length($appName) > 100) fail(422, 'نام سامانه باید بین ۱ تا ۱۰۰ نویسه باشد.');
+            if (!in_array($minutes, [5, 10, 15, 30, 60], true)) fail(422, 'مدت خروج خودکار معتبر نیست.');
+            if (!in_array($font, ['vazir', 'estedad', 'samim', 'shabnam', 'lalezar'], true)) fail(422, 'فونت سامانه معتبر نیست.');
+            foreach (['twoFactor', 'auditLog', 'autoLogout'] as $settingKey) if (!is_bool($settings[$settingKey] ?? null)) fail(422, 'یکی از گزینه‌های امنیتی معتبر نیست.');
+            $value = [[
+                'appName' => $appName,
+                'twoFactor' => $settings['twoFactor'],
+                'auditLog' => $settings['auditLog'],
+                'autoLogout' => $settings['autoLogout'],
+                'autoLogoutMins' => $minutes,
+                'font' => $font,
+            ]];
         }
         put_state($pdo, $key, $value, (int)$user['id']);
         $version = state_version($pdo, $key);
@@ -1037,11 +2007,215 @@ try {
         reply(200, ['success' => true, 'data' => ['version' => $version]]);
     }
 
+    if ($action === 'people_export_get' && $method === 'GET') {
+        $user = require_user($pdo);
+        if (!has_permission($user, 'view_persons') || !has_permission($user, 'export_people_excel')) fail(403, 'برای دریافت Excel، مجوز مشاهده و خروجی پرونده‌ها لازم است.');
+        $workflow = workflow_config($pdo);
+        $storedPeople = state_value($pdo, 'nab:people', []);
+        $people = [];
+        foreach ($storedPeople as $rawPerson) {
+            if (!is_array($rawPerson)) continue;
+            $person = normalize_person_stage($rawPerson, $workflow, false);
+            $people[] = [
+                'id' => (string)($person['id'] ?? ''),
+                'firstName' => (string)($person['firstName'] ?? ''),
+                'lastName' => (string)($person['lastName'] ?? ''),
+                'nationalId' => (string)($person['nationalId'] ?? ''),
+                'birthDate' => (string)($person['birthDate'] ?? ''),
+                'fatherName' => (string)($person['fatherName'] ?? ''),
+                'status' => (string)($person['status'] ?? ''),
+                'stageId' => (string)($person['stageId'] ?? ''),
+                'deadline' => (string)($person['deadline'] ?? ''),
+                'assignee' => (string)($person['assignee'] ?? ''),
+            ];
+        }
+        reply(200, ['success' => true, 'data' => ['people' => $people]]);
+    }
+
+    if ($action === 'people_import_snapshot' && $method === 'GET') {
+        $user = require_user($pdo);
+        if (!has_permission($user, 'view_persons') || !has_permission($user, 'create_person') || !has_permission($user, 'import_people_excel')) fail(403, 'برای بازبینی ورود Excel، مجوز مشاهده، ایجاد پرونده و ورود گروهی لازم است.');
+        $people = state_value($pdo, 'nab:people', []);
+        $nationalIds = [];
+        foreach ($people as $person) {
+            if (!is_array($person)) continue;
+            $nationalId = normalize_digits(trim((string)($person['nationalId'] ?? '')));
+            if ($nationalId !== '') $nationalIds[] = $nationalId;
+        }
+        $canAssign = has_permission($user, 'assign_person');
+        $activeUsernames = $canAssign
+            ? $pdo->query('SELECT username FROM nab_users WHERE is_active = 1 ORDER BY username')->fetchAll(PDO::FETCH_COLUMN)
+            : [];
+        reply(200, ['success' => true, 'data' => [
+            'nationalIds' => array_values($nationalIds),
+            'activeUsernames' => array_values(array_map('strval', $activeUsernames)),
+            'count' => count($people),
+            'canAssign' => $canAssign,
+        ]]);
+    }
+
+    if ($action === 'people_import' && $method === 'POST') {
+        $user = require_user($pdo);
+        if (!has_permission($user, 'view_persons') || !has_permission($user, 'create_person') || !has_permission($user, 'import_people_excel')) fail(403, 'برای ورود گروهی، مجوز مشاهده، ایجاد پرونده و ورود از Excel لازم است.');
+        $rows = $body['rows'] ?? null;
+        $expectedVersion = $body['expected_version'] ?? '';
+        if (!is_array($rows) || count($rows) < 1 || count($rows) > 2000) fail(422, 'فایل باید بین ۱ تا ۲۰۰۰ ردیف پرونده داشته باشد.');
+        if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ پرونده‌ها در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
+
+        $readText = static function (array $row, string $field): string {
+            $value = $row[$field] ?? '';
+            if (!is_scalar($value)) fail(422, 'یکی از خانه‌های فایل Excel مقدار متنی معتبر ندارد.');
+            return trim((string)$value);
+        };
+
+        $peopleKey = 'nab:people';
+        acquire_state_write_lock($pdo);
+        $pdo->beginTransaction();
+        verify_expected_state_version($pdo, $peopleKey, $expectedVersion);
+        $workflow = workflow_config($pdo);
+        $startStage = workflow_stage($workflow, (string)($workflow['startStageId'] ?? ''));
+        if (!$startStage || !empty($startStage['archived'])) fail(422, 'مرحلهٔ آغازین گردش‌کار در دسترس نیست.');
+        $oldPeople = state_value($pdo, $peopleKey, []);
+        if (count($oldPeople) + count($rows) > 10000) fail(422, 'حداکثر ۱۰٬۰۰۰ پرونده در سامانه قابل نگهداری است.');
+        $seenNationalIds = [];
+        $seenIds = [];
+        foreach ($oldPeople as $person) {
+            if (!is_array($person)) continue;
+            $nid = normalize_digits(trim((string)($person['nationalId'] ?? '')));
+            if ($nid !== '') $seenNationalIds[$nid] = true;
+            $existingId = (string)($person['id'] ?? '');
+            if ($existingId !== '') $seenIds[$existingId] = true;
+        }
+        $tehranNow = new DateTimeImmutable('now', new DateTimeZone('Asia/Tehran'));
+        $todayJdn = gregorian_jdn((int)$tehranNow->format('Y'), (int)$tehranNow->format('n'), (int)$tehranNow->format('j'));
+        $newPeople = [];
+        foreach ($rows as $index => $row) {
+            if (!is_array($row)) fail(422, 'ردیف ' . ((int)$index + 2) . ' فایل Excel معتبر نیست.');
+            $firstName = $readText($row, 'firstName');
+            $lastName = $readText($row, 'lastName');
+            $fatherName = $readText($row, 'fatherName');
+            $nationalId = normalize_digits($readText($row, 'nationalId'));
+            $birthDate = normalize_digits($readText($row, 'birthDate'));
+            $deadline = normalize_digits($readText($row, 'deadline'));
+            $assignee = strtolower($readText($row, 'assignee'));
+            if ($firstName === '' || $lastName === '' || $fatherName === '') fail(422, 'ردیف ' . ((int)$index + 2) . ': نام، نام خانوادگی و نام پدر الزامی‌اند.');
+            if (!valid_national_id($nationalId)) fail(422, 'ردیف ' . ((int)$index + 2) . ': کد ملی معتبر نیست.');
+            if (isset($seenNationalIds[$nationalId])) fail(409, 'ردیف ' . ((int)$index + 2) . ': کد ملی از قبل در سرور یا همین فایل ثبت شده است.');
+            if ($birthDate === '' || $birthDate === '—') $birthDate = '—';
+            elseif (!valid_jalali_date($birthDate) || jalali_jdn((int)substr($birthDate, 0, 4), (int)substr($birthDate, 5, 2), (int)substr($birthDate, 8, 2)) > $todayJdn) fail(422, 'ردیف ' . ((int)$index + 2) . ': تاریخ تولد شمسی معتبر نیست یا در آینده است.');
+            if ($deadline !== '' && $deadline !== '—' && !valid_jalali_date($deadline)) fail(422, 'ردیف ' . ((int)$index + 2) . ': مهلت پیگیری شمسی معتبر نیست.');
+            if (text_length($firstName) > 100 || text_length($lastName) > 100 || text_length($fatherName) > 100) fail(422, 'ردیف ' . ((int)$index + 2) . ': طول یکی از نام‌ها بیش از حد مجاز است.');
+            if ($assignee !== '') {
+                if (!has_permission($user, 'assign_person')) fail(403, 'برای ارجاع پرونده هنگام ورود از Excel مجوز ارجاع لازم است.');
+                $assignee = validate_active_assignee($pdo, $assignee);
+            }
+            do { $id = 'P-IMP-' . strtoupper(bin2hex(random_bytes(6))); } while (isset($seenIds[$id]));
+            $seenIds[$id] = true;
+            $seenNationalIds[$nationalId] = true;
+            $person = clean_person([
+                'id' => $id,
+                'firstName' => $firstName,
+                'lastName' => $lastName,
+                'nationalId' => $nationalId,
+                'birthDate' => $birthDate,
+                'fatherName' => $fatherName,
+                'status' => (string)$startStage['label'],
+                'stageId' => (string)$startStage['id'],
+                'stageChecklist' => [],
+                'deadline' => $deadline,
+                'assignee' => $assignee,
+            ], $user, $workflow, true);
+            $person['stageEnteredAt'] = server_timestamp_iso();
+            if ($assignee === '') unset($person['assignee']);
+            $newPeople[] = $person;
+        }
+
+        $allPeople = array_merge($oldPeople, $newPeople);
+        record_assignment_notifications($pdo, $user, [], $newPeople);
+        put_state($pdo, $peopleKey, $allPeople, (int)$user['id']);
+
+        $activities = state_value($pdo, 'nab:activities', []);
+        $importActivities = [];
+        foreach ($newPeople as $person) {
+            $importActivities[] = [
+                'id' => 'ACT-IMP-' . bin2hex(random_bytes(12)),
+                'personId' => (string)$person['id'],
+                'personName' => trim((string)$person['firstName'] . ' ' . (string)$person['lastName']),
+                'action' => 'ثبت پرونده جدید',
+                'previousStatus' => null,
+                'newStatus' => (string)$person['status'],
+                'rejectionReason' => null,
+                'details' => 'ثبت گروهی از فایل Excel',
+                'createdAt' => server_timestamp_iso(),
+                'createdBy' => (string)$user['display_name'],
+                'createdByRole' => (string)$user['role_id'],
+                'ts' => server_timestamp_ms(),
+            ];
+            if (trim((string)($person['assignee'] ?? '')) !== '') {
+                $importActivities[] = [
+                    'id' => 'ACT-IMP-' . bin2hex(random_bytes(12)),
+                    'personId' => (string)$person['id'],
+                    'personName' => trim((string)$person['firstName'] . ' ' . (string)$person['lastName']),
+                    'action' => 'ارجاع پرونده',
+                    'previousStatus' => null,
+                    'newStatus' => null,
+                    'rejectionReason' => null,
+                    'details' => 'ارجاع به ' . (string)$person['assignee'] . ' هنگام ورود از Excel',
+                    'createdAt' => server_timestamp_iso(),
+                    'createdBy' => (string)$user['display_name'],
+                    'createdByRole' => (string)$user['role_id'],
+                    'ts' => server_timestamp_ms(),
+                ];
+            }
+        }
+        $allActivities = array_merge(array_reverse($importActivities), $activities);
+        if ($importActivities) put_state($pdo, 'nab:activities', $allActivities, (int)$user['id']);
+
+        $audit = state_value($pdo, 'nab:audit', []);
+        $audit[] = [
+            'id' => 'excel-import-' . bin2hex(random_bytes(12)),
+            'action' => 'ورود گروهی پرونده‌ها',
+            'target' => count($newPeople) . ' پرونده از فایل Excel',
+            'createdAt' => server_timestamp_iso(),
+            'createdBy' => (string)$user['display_name'],
+            'ts' => server_timestamp_ms(),
+        ];
+        put_state($pdo, 'nab:audit', $audit, (int)$user['id']);
+        $versions = state_versions($pdo, $user);
+        $result = ['people' => $allPeople, 'audit' => $audit, 'importedCount' => count($newPeople), 'state_versions' => $versions];
+        if (has_permission($user, 'view_activities')) $result['activities'] = array_reverse($importActivities);
+        $pdo->commit();
+        release_state_write_lock($pdo);
+        reply(200, ['success' => true, 'data' => $result]);
+    }
+
     if ($action === 'legacy_import' && $method === 'POST') {
         $user = require_user($pdo);
         if (!is_system_admin($user)) fail(403, 'فقط مدیر سیستم می‌تواند داده‌های قدیمی این مرورگر را منتقل کند.');
         $legacy = $body['state'] ?? null;
         if (!is_array($legacy)) fail(422, 'بستهٔ مهاجرت معتبر نیست.');
+        $migrationRequirements = [
+            'nab:people' => ['view_persons', 'create_person'],
+            'nab:activities' => ['view_activities'],
+            'nab:audit' => ['view_audit_log'],
+            'nab:notes' => ['view_persons', 'view_person_notes', 'create_person_note'],
+            'tasks' => ['view_tasks', 'create_task'],
+        ];
+        foreach ($migrationRequirements as $legacyKey => $requiredPermissions) {
+            if (!is_array($legacy[$legacyKey] ?? null) || count($legacy[$legacyKey]) === 0) continue;
+            foreach ($requiredPermissions as $permission) if (!has_permission($user, $permission)) fail(403, 'برای انتقال داده‌های قدیمی مجوزهای مرتبط با همان بخش لازم است.');
+        }
+        $legacyRolesForImport = $legacy['nab:roles'] ?? [];
+        if (is_array($legacyRolesForImport)) {
+            $builtInIds = array_fill_keys(array_column(default_roles(), 'id'), true);
+            foreach ($legacyRolesForImport as $legacyRole) {
+                if (!is_array($legacyRole)) continue;
+                $legacyRoleId = strtolower(trim((string)($legacyRole['id'] ?? '')));
+                if ($legacyRoleId !== '' && !isset($builtInIds[$legacyRoleId]) && !has_role_operation($user, 'create_role')) {
+                    fail(403, 'برای انتقال نقش‌های سفارشی مجوز ایجاد نقش لازم است.');
+                }
+            }
+        }
         acquire_state_write_lock($pdo);
         $pdo->beginTransaction();
         $existingRoles = state_value($pdo, 'nab:roles', default_roles());
@@ -1107,7 +2281,7 @@ try {
             $roles[] = [
                 'id' => $id,
                 'title' => $title,
-                'permissions' => array_values(array_unique(array_intersect(all_permissions(), $legacyRole['permissions']))),
+                'permissions' => array_values(array_diff(array_unique(array_intersect(all_permissions(), array_filter($legacyRole['permissions'], 'is_string'))), ['purge_server_data'])),
                 'builtin' => false,
             ];
         }
@@ -1125,6 +2299,7 @@ try {
 
     if ($action === 'legacy_tasks_import' && $method === 'POST') {
         $user = require_user($pdo);
+        if (!has_permission($user, 'view_tasks') || !has_permission($user, 'create_task')) fail(403, 'برای انتقال کارهای قدیمی، مجوز مشاهده و ایجاد کار لازم است.');
         $tasks = $body['tasks'] ?? null;
         if (!is_array($tasks) || count($tasks) > 5000) fail(422, 'فهرست کارهای قدیمی معتبر نیست.');
         foreach ($tasks as $task) {
@@ -1148,17 +2323,21 @@ try {
 
     if ($action === 'user_create' && $method === 'POST') {
         $actor = require_user($pdo);
-        require_manage_users($actor);
+        require_user_operation($actor, 'create_user');
         $username = validate_username((string)($body['username'] ?? ''));
         $name = trim((string)($body['name'] ?? ''));
         $role = trim((string)($body['role'] ?? 'assistant'));
-        $title = trim((string)($body['title'] ?? $role));
+        $roleDef = role_definition($pdo, $role);
+        if ($roleDef === null) fail(422, 'نقش انتخاب‌شده معتبر نیست.');
+        $title = (string)$roleDef['title'];
         $tone = trim((string)($body['tone'] ?? 'blue'));
         $password = (string)($body['password'] ?? '');
         if ($name === '' || text_length($name) > 160) fail(422, 'نام کاربر الزامی است.');
         check_password_length($password);
         $permissions = validate_permissions($body['permissions'] ?? [], $actor);
         if ($role === 'admin' && !is_system_admin($actor)) fail(403, 'فقط مدیر سیستم می‌تواند مدیر دیگری ایجاد کند.');
+        if ($role === 'admin') $permissions = all_permissions();
+        else $permissions = array_values(array_diff($permissions, ['purge_server_data']));
         $photo = isset($body['photo']) ? (string)$body['photo'] : null;
         if ($photo !== null && strlen($photo) > 2 * 1024 * 1024) fail(413, 'حجم تصویر پروفایل بیش از حد مجاز است.');
         try {
@@ -1173,19 +2352,23 @@ try {
 
     if ($action === 'user_update' && $method === 'POST') {
         $actor = require_user($pdo);
-        require_manage_users($actor);
+        require_user_operation($actor, 'edit_user');
         $username = validate_username((string)($body['username'] ?? ''));
         $target = get_user_by_username($pdo, $username);
         if (!$target) fail(404, 'کاربر پیدا نشد.');
         $name = trim((string)($body['name'] ?? ''));
         $role = trim((string)($body['role'] ?? $target['role_id']));
-        $title = trim((string)($body['title'] ?? $target['title']));
+        $roleDef = role_definition($pdo, $role);
+        if ($roleDef === null) fail(422, 'نقش انتخاب‌شده معتبر نیست.');
+        $title = (string)$roleDef['title'];
         $tone = trim((string)($body['tone'] ?? $target['tone']));
         $active = !empty($body['active']);
         $password = (string)($body['password'] ?? '');
-        $permissions = validate_permissions($body['permissions'] ?? user_permissions($target), $actor);
+        $permissions = validate_updated_permissions($body['permissions'] ?? user_permissions($target), $actor, $target);
         if ($name === '' || text_length($name) > 160) fail(422, 'نام کاربر الزامی است.');
-        if (($role === 'admin' || (string)$target['role_id'] === 'admin') && !is_system_admin($actor)) fail(403, 'تغییر حساب مدیر فقط برای علی محمدی مجاز است.');
+        if (($role === 'admin' || (string)$target['role_id'] === 'admin') && !is_system_admin($actor)) fail(403, 'تغییر حساب مدیر فقط برای مدیر سیستم مجاز است.');
+        if ($role === 'admin') $permissions = all_permissions();
+        else $permissions = array_values(array_diff($permissions, ['purge_server_data']));
         if ((string)$target['role_id'] === 'admin' && ($role !== 'admin' || !$active)) ensure_another_admin($pdo, (int)$target['id']);
         if ($password !== '') check_password_length($password);
         $photo = isset($body['photo']) ? (string)$body['photo'] : ($target['photo'] ?? null);
@@ -1199,7 +2382,7 @@ try {
 
     if ($action === 'user_delete' && $method === 'POST') {
         $actor = require_user($pdo);
-        require_manage_users($actor);
+        require_user_operation($actor, 'delete_user');
         $username = validate_username((string)($body['username'] ?? ''));
         $target = get_user_by_username($pdo, $username);
         if (!$target) fail(404, 'کاربر پیدا نشد.');
@@ -1237,28 +2420,275 @@ try {
 
     if ($action === 'tasks_get' && $method === 'GET') {
         $user = require_user($pdo);
+        if (!has_permission($user, 'view_tasks')) fail(403, 'مجوز دسترسی به بخش کارهای من را ندارید.');
         $key = 'nab:tasks:' . (string)$user['username'];
         reply(200, ['success' => true, 'data' => state_value($pdo, $key, [])]);
     }
 
     if ($action === 'tasks_save' && $method === 'POST') {
         $user = require_user($pdo);
+        if (!has_permission($user, 'view_tasks')) fail(403, 'مجوز دسترسی به بخش کارهای من را ندارید.');
         $tasks = $body['tasks'] ?? null;
         $expectedVersion = $body['expected_version'] ?? '';
         if (!is_array($tasks) || count($tasks) > 5000) fail(422, 'فهرست کارها معتبر نیست.');
         if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ ذخیره‌سازی در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
-        foreach ($tasks as $task) {
-            if (!is_array($task) || !isset($task['id'], $task['title']) || text_length((string)$task['title']) > 500) fail(422, 'یکی از کارها معتبر نیست.');
-        }
         $taskKey = 'nab:tasks:' . (string)$user['username'];
         acquire_state_write_lock($pdo);
         $pdo->beginTransaction();
         verify_expected_state_version($pdo, $taskKey, $expectedVersion);
-        put_state($pdo, $taskKey, $tasks, (int)$user['id']);
+        $oldTasks = state_value($pdo, $taskKey, []);
+        $oldById = [];
+        foreach ($oldTasks as $oldTask) {
+            if (!is_array($oldTask) || !isset($oldTask['id'])) continue;
+            $oldById[(string)$oldTask['id']] = $oldTask;
+        }
+
+        $seenIds = [];
+        foreach ($tasks as $task) {
+            if (!is_array($task) || !isset($task['id'])) fail(422, 'یکی از کارها معتبر نیست.');
+            $id = trim((string)$task['id']);
+            if ($id === '' || strlen($id) > 100 || isset($seenIds[$id])) fail(422, 'شناسهٔ کار خالی، طولانی یا تکراری است.');
+            $seenIds[$id] = true;
+        }
+        foreach ($oldById as $id => $_) {
+            if (!isset($seenIds[$id]) && !has_permission($user, 'delete_task')) fail(403, 'برای حذف کار، مجوز مستقل حذف لازم است.');
+        }
+
+        $readText = static function (array $task, string $field, string $fallback = '', int $max = 10000): string {
+            $value = $task[$field] ?? $fallback;
+            if (!is_scalar($value)) fail(422, 'یکی از فیلدهای کار معتبر نیست.');
+            $value = trim((string)$value);
+            if (text_length($value) > $max) fail(422, 'یکی از فیلدهای کار بیش از حد طولانی است.');
+            return $value;
+        };
+        $validStatuses = ['todo', 'in_progress', 'completed', 'cancelled'];
+        $validPriorities = ['low', 'medium', 'high', 'critical'];
+        $validTypes = ['personal', 'organizational'];
+        $statusLabels = ['todo' => 'جدید', 'in_progress' => 'در حال انجام', 'completed' => 'تکمیل‌شده', 'cancelled' => 'لغوشده'];
+        $cleanTasks = [];
+
+        foreach ($tasks as $rawTask) {
+            $id = trim((string)$rawTask['id']);
+            $isNew = !isset($oldById[$id]);
+            $before = $isNew ? [] : $oldById[$id];
+            if ($isNew && !has_permission($user, 'create_task')) fail(403, 'برای ایجاد کار، مجوز مستقل ایجاد لازم است.');
+
+            $title = $readText($rawTask, 'title', (string)($before['title'] ?? ''), 500);
+            if ($title === '') fail(422, 'عنوان کار الزامی است.');
+            $description = $readText($rawTask, 'description', (string)($before['description'] ?? ''), 10000);
+            $note = $readText($rawTask, 'note', (string)($before['note'] ?? ''), 10000);
+            $category = $readText($rawTask, 'category', (string)($before['category'] ?? ''), 160);
+            $type = trim((string)($rawTask['type'] ?? ($before['type'] ?? 'personal')));
+            $status = trim((string)($rawTask['status'] ?? ($before['status'] ?? 'todo')));
+            $priority = trim((string)($rawTask['priority'] ?? ($before['priority'] ?? 'medium')));
+            if (!in_array($type, $validTypes, true) || !in_array($status, $validStatuses, true) || !in_array($priority, $validPriorities, true)) fail(422, 'نوع، وضعیت یا اولویت یکی از کارها معتبر نیست.');
+            $startDate = normalize_digits($readText($rawTask, 'startDate', (string)($before['startDate'] ?? ''), 20));
+            $dueDate = normalize_digits($readText($rawTask, 'dueDate', (string)($before['dueDate'] ?? ''), 20));
+            $oldStart = normalize_digits(trim((string)($before['startDate'] ?? '')));
+            $oldDue = normalize_digits(trim((string)($before['dueDate'] ?? '')));
+            if ($startDate !== '' && !valid_jalali_date($startDate) && ($isNew || $startDate !== $oldStart)) fail(422, 'تاریخ شروع کار معتبر نیست.');
+            if ($dueDate !== '' && !valid_jalali_date($dueDate) && ($isNew || $dueDate !== $oldDue)) fail(422, 'مهلت کار معتبر نیست.');
+
+            $tagsInput = $rawTask['tags'] ?? ($before['tags'] ?? []);
+            if (!is_array($tagsInput) || count($tagsInput) > 50) fail(422, 'فهرست برچسب‌های کار معتبر نیست.');
+            $tags = [];
+            foreach ($tagsInput as $tag) {
+                if (!is_scalar($tag)) fail(422, 'یکی از برچسب‌های کار معتبر نیست.');
+                $tag = trim((string)$tag);
+                if ($tag !== '' && text_length($tag) > 60) fail(422, 'یکی از برچسب‌های کار بیش از حد طولانی است.');
+                if ($tag !== '' && !in_array($tag, $tags, true)) $tags[] = $tag;
+            }
+
+            $timeSpent = $rawTask['timeSpentMinutes'] ?? ($before['timeSpentMinutes'] ?? null);
+            if ($timeSpent !== null) {
+                $timeSpent = filter_var($timeSpent, FILTER_VALIDATE_INT);
+                if ($timeSpent === false || $timeSpent < 0 || $timeSpent > 100000000) fail(422, 'زمان ثبت‌شده برای کار معتبر نیست.');
+            }
+            $subtasksInput = $rawTask['subtasks'] ?? ($before['subtasks'] ?? null);
+            $subtasks = null;
+            if ($subtasksInput !== null) {
+                if (!is_array($subtasksInput) || count($subtasksInput) > 100) fail(422, 'فهرست زیرکارها معتبر نیست.');
+                $subtasks = [];
+                $subtaskIds = [];
+                foreach ($subtasksInput as $subtask) {
+                    if (!is_array($subtask)) fail(422, 'یکی از زیرکارها معتبر نیست.');
+                    $subtaskId = trim((string)($subtask['id'] ?? ''));
+                    $subtaskTitle = trim((string)($subtask['title'] ?? ''));
+                    if ($subtaskId === '' || strlen($subtaskId) > 100 || isset($subtaskIds[$subtaskId]) || $subtaskTitle === '' || text_length($subtaskTitle) > 300) fail(422, 'شناسه یا عنوان زیرکار معتبر نیست.');
+                    $subtaskIds[$subtaskId] = true;
+                    $subtasks[] = ['id' => $subtaskId, 'title' => $subtaskTitle, 'done' => !empty($subtask['done'])];
+                }
+            }
+
+            $oldStatus = trim((string)($before['status'] ?? 'todo'));
+            if (!in_array($oldStatus, $validStatuses, true)) $oldStatus = 'todo';
+            $statusChanged = !$isNew && $status !== $oldStatus;
+            $oldTagsComparable = [];
+            if (is_array($before['tags'] ?? null)) foreach ($before['tags'] as $oldTag) {
+                if (!is_string($oldTag)) continue;
+                $oldTag = trim($oldTag);
+                if ($oldTag !== '' && !in_array($oldTag, $oldTagsComparable, true)) $oldTagsComparable[] = $oldTag;
+            }
+            $oldSubtasksComparable = null;
+            if (is_array($before['subtasks'] ?? null)) {
+                $oldSubtasksComparable = [];
+                foreach ($before['subtasks'] as $oldSubtask) {
+                    if (!is_array($oldSubtask)) continue;
+                    $oldSubtasksComparable[] = [
+                        'id' => trim((string)($oldSubtask['id'] ?? '')),
+                        'title' => trim((string)($oldSubtask['title'] ?? '')),
+                        'done' => !empty($oldSubtask['done']),
+                    ];
+                }
+            }
+            $oldTimeSpent = $before['timeSpentMinutes'] ?? null;
+            if ($oldTimeSpent !== null) {
+                $oldTimeSpent = filter_var($oldTimeSpent, FILTER_VALIDATE_INT);
+                if ($oldTimeSpent === false || $oldTimeSpent < 0) $oldTimeSpent = null;
+            }
+            $oldComparable = [
+                'title' => trim((string)($before['title'] ?? 'بدون عنوان')),
+                'description' => trim((string)($before['description'] ?? '')),
+                'type' => in_array((string)($before['type'] ?? ''), $validTypes, true) ? (string)$before['type'] : 'personal',
+                'priority' => in_array((string)($before['priority'] ?? ''), $validPriorities, true) ? (string)$before['priority'] : 'medium',
+                'startDate' => normalize_digits(trim((string)($before['startDate'] ?? ''))),
+                'dueDate' => normalize_digits(trim((string)($before['dueDate'] ?? ''))),
+                'category' => trim((string)($before['category'] ?? '')),
+                'tags' => $oldTagsComparable,
+                'note' => trim((string)($before['note'] ?? '')),
+                'timeSpentMinutes' => $oldTimeSpent === null ? null : (int)$oldTimeSpent,
+                'subtasks' => $oldSubtasksComparable,
+            ];
+            $newComparable = [
+                'title' => $title,
+                'description' => $description,
+                'type' => $type,
+                'priority' => $priority,
+                'startDate' => $startDate,
+                'dueDate' => $dueDate,
+                'category' => $category,
+                'tags' => $tags,
+                'note' => $note,
+                'timeSpentMinutes' => $timeSpent === null ? null : (int)$timeSpent,
+                'subtasks' => $subtasks,
+            ];
+            $otherFieldsChanged = !$isNew && json_encode($oldComparable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !== json_encode($newComparable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($otherFieldsChanged && !has_permission($user, 'edit_task')) fail(403, 'برای ویرایش جزئیات کار، مجوز مستقل ویرایش لازم است.');
+            if ($statusChanged && !has_permission($user, 'change_task_status')) fail(403, 'برای تغییر وضعیت کار، مجوز مستقل تغییر وضعیت لازم است.');
+
+            $oldHistory = is_array($before['history'] ?? null) ? $before['history'] : [];
+            $historyInput = $rawTask['history'] ?? $oldHistory;
+            if (!is_array($historyInput) || count($historyInput) > 2000) fail(422, 'تاریخچهٔ کار معتبر نیست.');
+            if (!$isNew && count($historyInput) < count($oldHistory)) fail(403, 'تاریخچهٔ کار قابل حذف یا بازنویسی نیست.');
+            if (!$isNew) {
+                foreach ($oldHistory as $index => $oldLog) {
+                    if (!array_key_exists($index, $historyInput) || json_encode($oldLog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !== json_encode($historyInput[$index], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) fail(403, 'تاریخچهٔ کار فقط به‌صورت افزایشی قابل ثبت است.');
+                }
+            }
+            $newLogs = array_slice($historyInput, count($oldHistory));
+            if (!$isNew && $newLogs && !has_permission($user, 'edit_task') && !$statusChanged) fail(403, 'برای ثبت تغییر در تاریخچهٔ کار، مجوز ویرایش یا تغییر وضعیت لازم است.');
+            if ($statusChanged && !$newLogs) fail(422, 'برای تغییر وضعیت کار باید یک رکورد تاریخچه نیز ثبت شود.');
+            if ($statusChanged && !has_permission($user, 'edit_task') && count($newLogs) !== 1) fail(422, 'تغییر وضعیت باید یک رکورد تاریخچهٔ واحد داشته باشد.');
+            if ($otherFieldsChanged && !$newLogs) fail(422, 'برای ویرایش کار باید یک رکورد تاریخچه نیز ثبت شود.');
+
+            $history = $oldHistory;
+            $historyIds = [];
+            foreach ($oldHistory as $oldLog) if (is_array($oldLog) && isset($oldLog['id'])) $historyIds[(string)$oldLog['id']] = true;
+            foreach ($newLogs as $log) {
+                if (!is_array($log)) fail(422, 'یکی از رخدادهای تاریخچهٔ کار معتبر نیست.');
+                $logId = trim((string)($log['id'] ?? ''));
+                $logAction = trim((string)($log['action'] ?? ''));
+                if ($logId === '' || strlen($logId) > 100 || isset($historyIds[$logId]) || $logAction === '' || text_length($logAction) > 240) fail(422, 'شناسه یا شرح رخداد تاریخچه معتبر نیست.');
+                if (!$isNew && $statusChanged && !has_permission($user, 'edit_task')) $logAction = 'وضعیت کار به «' . $statusLabels[$status] . '» تغییر کرد';
+                $historyIds[$logId] = true;
+                $history[] = ['id' => $logId, 'action' => $logAction, 'createdAt' => server_timestamp_iso(), 'createdBy' => (string)$user['display_name']];
+            }
+            if ($isNew && !$history) $history[] = ['id' => 'TL-' . bin2hex(random_bytes(8)), 'action' => 'کار ایجاد شد', 'createdAt' => server_timestamp_iso(), 'createdBy' => (string)$user['display_name']];
+
+            $clean = [
+                'id' => $id,
+                'title' => $title,
+                'description' => $description,
+                'type' => $type,
+                'status' => $status,
+                'priority' => $priority,
+                'startDate' => $startDate,
+                'dueDate' => $dueDate,
+                'category' => $category,
+                'tags' => $tags,
+                'note' => $note,
+                'history' => $history,
+            ];
+            if ($timeSpent !== null) $clean['timeSpentMinutes'] = (int)$timeSpent;
+            if ($subtasks !== null) $clean['subtasks'] = $subtasks;
+            if ($isNew) {
+                $clean['createdBy'] = (string)$user['username'];
+                $clean['createdByName'] = (string)$user['display_name'];
+                $clean['createdAt'] = server_timestamp_iso();
+                $clean['ts'] = server_timestamp_ms();
+            } else {
+                foreach (['createdBy', 'createdByName', 'createdAt', 'ts'] as $serverField) {
+                    if (array_key_exists($serverField, $before)) $clean[$serverField] = $before[$serverField];
+                }
+            }
+            if ($status === 'completed') {
+                if ($isNew || $statusChanged) $clean['completedAt'] = server_timestamp_iso();
+                elseif (isset($before['completedAt'])) $clean['completedAt'] = $before['completedAt'];
+            }
+            if (!$isNew && !$otherFieldsChanged && !has_permission($user, 'edit_task')) {
+                $protectedFields = ['title', 'description', 'type', 'priority', 'startDate', 'dueDate', 'category', 'tags', 'note', 'timeSpentMinutes', 'subtasks'];
+                foreach ($protectedFields as $field) {
+                    if (array_key_exists($field, $before)) $clean[$field] = $before[$field];
+                    else unset($clean[$field]);
+                }
+                $knownFields = array_merge(['id', 'status', 'history', 'completedAt', 'createdBy', 'createdByName', 'createdAt', 'ts'], $protectedFields);
+                foreach ($before as $field => $value) if (!in_array((string)$field, $knownFields, true)) $clean[$field] = $value;
+            }
+            $cleanTasks[] = $clean;
+        }
+
+        put_state($pdo, $taskKey, $cleanTasks, (int)$user['id']);
         $version = state_version($pdo, $taskKey);
         $pdo->commit();
         release_state_write_lock($pdo);
         reply(200, ['success' => true, 'data' => ['version' => $version]]);
+    }
+
+    if ($action === 'notifications_get' && $method === 'GET') {
+        $user = require_user($pdo);
+        if (!has_permission($user, 'view_persons')) fail(403, 'برای مشاهدهٔ اعلان‌های پرونده، مجوز مشاهدهٔ پرونده‌ها لازم است.');
+        $items = notifications_for_user($pdo, $user);
+        reply(200, ['success' => true, 'data' => ['items' => $items, 'state_versions' => state_versions($pdo, $user)]]);
+    }
+
+    if ($action === 'notifications_read' && $method === 'POST') {
+        $user = require_user($pdo);
+        if (!has_permission($user, 'view_persons')) fail(403, 'برای مدیریت اعلان‌ها مجوز مشاهدهٔ پرونده‌ها لازم است.');
+        $expectedVersion = $body['expected_version'] ?? '';
+        if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ اعلان‌ها در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
+        $all = !empty($body['all']);
+        $requestedIds = $body['ids'] ?? [];
+        if (!is_array($requestedIds) || count($requestedIds) > 500) fail(422, 'فهرست اعلان‌های انتخاب‌شده معتبر نیست.');
+        $key = notification_state_key((string)$user['username']);
+        acquire_state_write_lock($pdo);
+        $pdo->beginTransaction();
+        verify_expected_state_version($pdo, $key, $expectedVersion);
+        $currentItems = notifications_for_user($pdo, $user);
+        $allowedIds = array_fill_keys(array_map(static fn($item) => (string)$item['id'], $currentItems), true);
+        $ids = $all ? array_keys($allowedIds) : array_values(array_unique(array_filter($requestedIds, static fn($id) => is_string($id) && isset($allowedIds[$id]))));
+        if ($ids) {
+            $feed = state_value($pdo, $key, ['events' => [], 'read' => []]);
+            $events = is_array($feed['events'] ?? null) ? $feed['events'] : [];
+            $read = is_array($feed['read'] ?? null) ? $feed['read'] : [];
+            $readAt = server_timestamp_iso();
+            foreach ($ids as $id) $read[(string)$id] = $readAt;
+            if (count($read) > 2000) $read = array_slice($read, -2000, null, true);
+            put_state($pdo, $key, ['events' => $events, 'read' => $read], (int)$user['id']);
+        }
+        $versions = state_versions($pdo, $user);
+        $pdo->commit();
+        release_state_write_lock($pdo);
+        reply(200, ['success' => true, 'data' => ['items' => notifications_for_user($pdo, $user), 'state_versions' => $versions]]);
     }
 
     fail(404, 'مسیر API پیدا نشد.');

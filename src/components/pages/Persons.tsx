@@ -1,10 +1,10 @@
 import { Button } from '../common/Button'
 import { useState } from 'react'
 import { Avatar, Heading } from '../../shared-ui'
-import { personTags, STALE_LIMIT, deadlineLeft, PAGE_SIZE, staleDays, downloadCsv } from '../../app-lib'
+import { personTags, deadlineLeft, staleDays, downloadCsv } from '../../app-lib'
 import type { WorkflowConfig, WorkflowStage } from '../../workflow'
 import { activeStages, checklistMissing, stageById, stageIdForPerson } from '../../workflow'
-import { formatServerTimestamp, jalaliJdn, jalaliMonthNames, normalizeText, timestampToMs } from '../../shared'
+import { formatServerTimestamp, jalaliJdn, jalaliMonthNames, load, normalizeText, save, timestampToMs } from '../../shared'
 import type { Person, PersonFilter } from '../../types'
 import { Badge } from '../common/Badge'
 import { cn, emptyBox, panelBox, rowCheck, searchBox, searchInput, selectCls } from '../ui'
@@ -15,6 +15,9 @@ const tagToneClasses: Record<string, string> = {
   purple: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
   blue: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300',
 }
+
+const personPageSizes = [20, 50, 100, 200] as const
+type PersonPageSize = typeof personPageSizes[number]
 
 export function Persons({
   people,
@@ -31,7 +34,12 @@ export function Persons({
   canCreate,
   canChange,
   canDelete,
+  canImportExcel,
+  canExportExcel,
+  canExportCsv,
   onCreate,
+  onImportExcel,
+  onExportExcel,
   onSelect,
   onBulkStatus,
   onBulkDelete,
@@ -50,13 +58,23 @@ export function Persons({
   canCreate: boolean
   canChange: boolean
   canDelete: boolean
+  canImportExcel: boolean
+  canExportExcel: boolean
+  canExportCsv: boolean
   onCreate: () => void
+  onImportExcel: () => void
+  onExportExcel: () => void
   onSelect: (p: Person) => void
   onBulkStatus: (ids: string[], targetStageId: string) => void
   onBulkDelete: (ids: string[]) => boolean
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const canSelect = canChange || canDelete || canExportCsv
   const [pageNo, setPageNo] = useState(0)
+  const [pageSize, setPageSize] = useState<PersonPageSize>(() => {
+    const saved = load<unknown>('nab:persons-page-size', 20)
+    return typeof saved === 'number' && personPageSizes.includes(saved as PersonPageSize) ? saved as PersonPageSize : 20
+  })
   const [filtersOpen, setFiltersOpen] = useState(false)
   const workflowStages = activeStages(workflowConfig)
   const selectedPeople = people.filter(person => selectedIds.has(person.id))
@@ -114,9 +132,9 @@ export function Persons({
 
   const hasActiveFilters = Boolean(query.trim()) || filter !== 'همه وضعیت‌ها' || tagFilter !== 'همه برچسب‌ها' || sortBy !== 'default'
   const activeFilterCount = Number(filter !== 'همه وضعیت‌ها') + Number(tagFilter !== 'همه برچسب‌ها') + Number(sortBy !== 'default')
-  const pageCount = Math.max(1, Math.ceil(sortedPeople.length / PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(sortedPeople.length / pageSize))
   const safePage = Math.min(pageNo, pageCount - 1)
-  const pageItems = sortedPeople.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE)
+  const pageItems = sortedPeople.slice(safePage * pageSize, safePage * pageSize + pageSize)
 
   const toggleId = (id: string) =>
     setSelectedIds(cur => {
@@ -136,6 +154,7 @@ export function Persons({
     })
 
   const exportSelected = () => {
+    if (!canExportCsv) return
     const rows = people.filter(p => selectedIds.has(p.id))
     downloadCsv(
       'selected-people.csv',
@@ -149,7 +168,13 @@ export function Persons({
       <Heading
         title="افراد"
         subtitle="اطلاعات افراد و وضعیت پرونده‌های آن‌ها را مدیریت کنید."
-        action={canCreate ? <Button variant="primary" onClick={onCreate}> افزودن فرد</Button> : undefined}
+        action={canCreate || canImportExcel || canExportExcel ? (
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+            {canExportExcel && <Button type="button" variant="outline" size="sm" onClick={onExportExcel}>دریافت Excel سرور</Button>}
+            {canImportExcel && <Button type="button" variant="outline" size="sm" onClick={onImportExcel}>ورود از Excel</Button>}
+            {canCreate && <Button type="button" variant="primary" size="sm" onClick={onCreate}>افزودن فرد</Button>}
+          </div>
+        ) : undefined}
       />
       <section className={cn(panelBox, 'overflow-hidden')}>
         <div className="flex flex-col gap-3 border-b border-slate-100 p-3 sm:p-4 lg:flex-row lg:items-start lg:p-5 dark:border-slate-800">
@@ -203,9 +228,30 @@ export function Persons({
           </div>
         </div>
         <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 dark:border-slate-800">
-          <span className="text-xs text-slate-500 dark:text-slate-400" aria-live="polite" aria-atomic="true">
-            نمایش {sortedPeople.length.toLocaleString('fa-IR')} از {people.length.toLocaleString('fa-IR')} پرونده
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs text-slate-500 dark:text-slate-400" aria-live="polite" aria-atomic="true">
+              نمایش {sortedPeople.length.toLocaleString('fa-IR')} از {people.length.toLocaleString('fa-IR')} پرونده
+            </span>
+            <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              تعداد در هر صفحه
+              <select
+                className={cn(selectCls, 'mt-0 w-24')}
+                value={pageSize}
+                aria-label="تعداد پرونده در هر صفحه"
+                onChange={event => {
+                  const nextSize = Number(event.target.value)
+                  if (!personPageSizes.includes(nextSize as PersonPageSize)) return
+                  const validatedSize = nextSize as PersonPageSize
+                  setPageSize(validatedSize)
+                  save('nab:persons-page-size', validatedSize)
+                  setPageNo(0)
+                  setSelectedIds(new Set())
+                }}
+              >
+                {personPageSizes.map(size => <option key={size} value={size}>{size.toLocaleString('fa-IR')}</option>)}
+              </select>
+            </label>
+          </div>
           {hasActiveFilters && (
             <Button type="button" variant="ghost" size="xs" onClick={() => {
               setQuery('')
@@ -236,7 +282,7 @@ export function Persons({
             )}
             {canChange && !bulkOptions.length && <small className="text-xs leading-5 text-slate-500 dark:text-slate-400">برای انتقال گروهی، پرونده‌ها باید در یک مرحلهٔ مشترک و دارای مسیر بعدی باشند.</small>}
             {bulkChecklistIncomplete > 0 && <small className="text-xs leading-5 text-amber-700 dark:text-amber-300">چک‌لیست {bulkChecklistIncomplete.toLocaleString('fa-IR')} پرونده هنوز کامل نیست.</small>}
-            <Button type="button" variant="outline" size="xs" onClick={exportSelected}> خروجی اکسل</Button>
+            {canExportCsv && <Button type="button" variant="outline" size="xs" onClick={exportSelected}>خروجی CSV</Button>}
             {canDelete && (
               <Button
                 type="button"
@@ -253,23 +299,27 @@ export function Persons({
           </div>
         )}
         <div className="hidden grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-500 lg:grid dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400">
-          <span><input type="checkbox" className={rowCheck} checked={allSelected} onChange={toggleAll} aria-label="انتخاب همه" /> فرد</span>
+          <span>{canSelect && <input type="checkbox" className={rowCheck} checked={allSelected} onChange={toggleAll} aria-label="انتخاب همه" />} فرد</span>
           <span>کد ملی</span>
           <span>تاریخ تولد</span>
           <span>وضعیت پرونده</span>
           <span>آخرین فعالیت</span>
           <span>ثبت‌کننده</span>
         </div>
-        {pageItems.map(p => (
+        {pageItems.map(p => {
+          const currentStage = stageById(workflowConfig, stageIdForPerson(p, workflowConfig))
+          const daysInStage = staleDays(p, workflowConfig)
+          const hasStalledAlert = Boolean(currentStage?.stalledAfterDays && !currentStage.archived && !currentStage.isFinal && daysInStage >= currentStage.stalledAfterDays)
+          return (
           <article className="grid w-full grid-cols-2 gap-x-4 gap-y-3 border-b border-slate-100 px-3 py-3 text-right transition-colors hover:bg-slate-50 sm:px-5 sm:py-4 lg:grid-cols-[minmax(16rem,1.8fr)_1fr_1fr_1.2fr_1.2fr_1fr] lg:items-center lg:gap-4 dark:border-slate-800 dark:hover:bg-slate-800/50" key={p.id}>
             <span className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
-              <input
+              {canSelect && <input
                 type="checkbox"
                 className={rowCheck}
                 checked={selectedIds.has(p.id)}
                 onChange={() => toggleId(p.id)}
                 aria-label={`انتخاب ${p.firstName} ${p.lastName}`}
-              />
+              />}
               <Button
                 type="button"
                 variant="unstyled"
@@ -293,8 +343,8 @@ export function Persons({
               <b className="font-medium">{p.birthDate}</b>
             </span>
             <span className="col-span-2 flex min-w-0 flex-wrap items-center gap-1.5 lg:col-span-1">
-              <Badge status={stageById(workflowConfig, stageIdForPerson(p, workflowConfig))?.label ?? p.status} tone={stageById(workflowConfig, stageIdForPerson(p, workflowConfig))?.tone} />
-              {staleDays(p, workflowConfig) >= STALE_LIMIT && <i className="inline-flex rounded-md bg-rose-50 px-2 py-1 text-xs font-medium not-italic text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{staleDays(p, workflowConfig).toLocaleString('fa-IR')} روز توقف</i>}
+              <Badge status={currentStage?.label ?? p.status} tone={currentStage?.tone} />
+              {hasStalledAlert && <i className="inline-flex rounded-md bg-rose-50 px-2 py-1 text-xs font-medium not-italic text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{daysInStage.toLocaleString('fa-IR')} روز توقف</i>}
               {(() => {
                 const l = deadlineLeft(p, workflowConfig)
                 return l !== null
@@ -311,7 +361,8 @@ export function Persons({
               <span className="block truncate">{p.updatedBy}</span>
             </span>
           </article>
-        ))}
+          )
+        })}
         {!sortedPeople.length && (
           <div className={cn(emptyBox, 'm-4')}>
             {people.length === 0 ? (
@@ -334,7 +385,7 @@ export function Persons({
             )}
           </div>
         )}
-        {sortedPeople.length > PAGE_SIZE && (
+        {sortedPeople.length > pageSize && (
           <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 dark:border-slate-800 dark:text-slate-400">
             <span>{sortedPeople.length.toLocaleString('fa-IR')} پروندهٔ منطبق · صفحه {(safePage + 1).toLocaleString('fa-IR')} از {pageCount.toLocaleString('fa-IR')}</span>
             <div className="flex flex-wrap gap-1.5">

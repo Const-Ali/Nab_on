@@ -2,7 +2,7 @@ import { Button } from '../common/Button'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar } from '../../shared-ui'
 import { formatServerTimestamp } from '../../shared'
-import { personTags, STALE_LIMIT, deadlineLeft, staleDays } from '../../app-lib'
+import { personTags, deadlineLeft, staleDays } from '../../app-lib'
 import type { Person, Activity, User, Note } from '../../types'
 import type { WorkflowConfig, WorkflowStage } from '../../workflow'
 import { checklistMissing, stageById, stageIdForPerson } from '../../workflow'
@@ -15,9 +15,17 @@ export function PersonModal({
   notes,
   history,
   meUsername,
-  isAdmin,
   usersList,
   canChange,
+  canAssign,
+  canCompleteChecklist,
+  canViewPersonNotes,
+  canViewHistory,
+  canCreateNote,
+  canEditNotes,
+  canDeleteNotes,
+  canManageAnyNote,
+  canPrint,
   canDelete,
   canEdit,
   onClose,
@@ -35,9 +43,17 @@ export function PersonModal({
   notes: Note[]
   history: Activity[]
   meUsername: string
-  isAdmin: boolean
   usersList: User[]
   canChange: boolean
+  canAssign: boolean
+  canCompleteChecklist: boolean
+  canViewPersonNotes: boolean
+  canViewHistory: boolean
+  canCreateNote: boolean
+  canEditNotes: boolean
+  canDeleteNotes: boolean
+  canManageAnyNote: boolean
+  canPrint: boolean
   canDelete: boolean
   canEdit: boolean
   onClose: () => void
@@ -62,7 +78,7 @@ export function PersonModal({
   const stages = workflowConfig.stages
   const currentStatus = currentStage?.label ?? person.status
   const [noteText, setNoteText] = useState('')
-  const [tab, setTab] = useState<'chat' | 'history'>('chat')
+  const [tab, setTab] = useState<'chat' | 'history'>(canViewPersonNotes ? 'chat' : 'history')
   const [editingNote, setEditingNote] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [replyTo, setReplyTo] = useState<Note | null>(null)
@@ -84,14 +100,18 @@ export function PersonModal({
     text.split(/(\s+)/).map((w, i) => (w.startsWith('@') && w.length > 1 ? <span key={i} className="mention">{w}</span> : w))
 
   const dLeft = deadlineLeft(person, workflowConfig)
+  const daysInStage = staleDays(person, workflowConfig)
+  const hasStalledAlert = Boolean(currentStage?.stalledAfterDays && !currentStage.archived && !currentStage.isFinal && daysInStage >= currentStage.stalledAfterDays)
   const chatRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' })
   }, [notes.length])
 
+  const activeTab = canViewPersonNotes ? (canViewHistory ? tab : 'chat') : 'history'
+
   const currentIndex = stages.findIndex(stage => stage.id === currentStageId)
-  const ownsNote = (note: Note) => note.authorUsername === meUsername || (!note.authorUsername && isAdmin)
+  const ownsNote = (note: Note) => note.authorUsername === meUsername
 
   const submitNote = () => {
     const text = noteText.trim()
@@ -120,9 +140,9 @@ export function PersonModal({
             {(person.tags ?? []).map(t => <span className={`tag-chip sm ${personTags[t]}`} key={t}>{t}</span>)}
           </span>
         </div>
-        {staleDays(person, workflowConfig) >= STALE_LIMIT && (
-          <div className="modal-note stale-note">
-            ⏰ این پرونده {staleDays(person, workflowConfig).toLocaleString('fa-IR')} روز است که در مرحله «{currentStatus}» متوقف مانده است.
+        {hasStalledAlert && (
+          <div className="modal-note stale-note" role="status">
+            ⏰ این پرونده {daysInStage.toLocaleString('fa-IR')} روز است که در مرحلهٔ «{currentStatus}» مانده؛ مهلت تنظیم‌شدهٔ این مرحله {currentStage?.stalledAfterDays?.toLocaleString('fa-IR')} روز است.
           </div>
         )}
         <div className="details">
@@ -171,7 +191,7 @@ export function PersonModal({
                       type="checkbox"
                       className="mt-1 h-4 w-4 shrink-0 accent-indigo-600"
                       checked={checked}
-                      disabled={!canChange || checked}
+                      disabled={!canCompleteChecklist || checked}
                       onChange={event => onChecklistToggle(person, currentStageId, rule.id, event.target.checked)}
                     />
                     <span className="min-w-0 flex-1">
@@ -201,8 +221,8 @@ export function PersonModal({
               </label>
             )
             : <div className="modal-note">این پرونده در مرحلهٔ پایانی قرار دارد.</div>
-          : <div className="modal-note">شما دسترسی تغییر وضعیت ندارید؛ این صفحه فقط برای مشاهده است.</div>}
-        {canChange && (
+          : canChange ? null : !canAssign && !canCompleteChecklist ? <div className="modal-note">شما دسترسی تغییر مرحله یا عملیات این پرونده را ندارید؛ این صفحه فقط برای مشاهده است.</div> : null}
+        {canAssign && (
           <label className="assign-label">
             ارجاع پرونده به کاربر
             <select value={person.assignee ?? ''} onChange={e => onAssign(person, e.target.value)}>
@@ -217,15 +237,15 @@ export function PersonModal({
             <textarea required value={reason} onChange={e => setReason(e.target.value)} placeholder="علت رد پرونده را وارد کنید..." />
           </label>
         )}
-        <div className="modal-tabs" role="group" aria-label="بخش‌های پرونده">
-          <Button type="button" variant="tab" size="sm" active={tab === 'chat'} className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}>
-             گفتگو {notes.length > 0 && <small>({notes.length.toLocaleString('fa-IR')})</small>}
-          </Button>
-          <Button type="button" variant="tab" size="sm" active={tab === 'history'} className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
-             تاریخچه پرونده {history.length > 0 && <small>({history.length.toLocaleString('fa-IR')})</small>}
-          </Button>
-        </div>
-        {tab === 'chat' ? (
+        {(canViewPersonNotes || canViewHistory) && <div className="modal-tabs" role="group" aria-label="بخش‌های پرونده">
+          {canViewPersonNotes && <Button type="button" variant="tab" size="sm" active={activeTab === 'chat'} className={activeTab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}>
+            گفتگو {notes.length > 0 && <small>({notes.length.toLocaleString('fa-IR')})</small>}
+          </Button>}
+          {canViewHistory && <Button type="button" variant="tab" size="sm" active={activeTab === 'history'} className={activeTab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
+            تاریخچه پرونده {history.length > 0 && <small>({history.length.toLocaleString('fa-IR')})</small>}
+          </Button>}
+        </div>}
+        {canViewPersonNotes && activeTab === 'chat' && (
           <>
             <div className="chat" ref={chatRef}>
               {notes.map(note => (
@@ -234,13 +254,13 @@ export function PersonModal({
                     <b>{note.author}</b>
                     {note.role === 'admin' && <em className="role-chip">مدیر</em>}
                     <small>{note.title} · {formatServerTimestamp(note.createdAt, note.ts)}{note.edited ? ' · (ویرایش‌شده)' : ''}</small>
-                    <span className="msg-tools flex items-center gap-1">
+                    {canCreateNote && <span className="msg-tools flex items-center gap-1">
                       <Button type="button" variant="ghost" size="xs" title="پاسخ به یادداشت" aria-label="پاسخ به یادداشت" onClick={() => setReplyTo(note)}>پاسخ</Button>
-                    </span>
-                    {ownsNote(note) && (
+                    </span>}
+                    {(ownsNote(note) || canManageAnyNote) && (canEditNotes || canDeleteNotes) && (
                       <span className="msg-tools flex items-center gap-1">
-                        <Button type="button" variant="ghost" size="xs" title="ویرایش یادداشت" aria-label="ویرایش یادداشت" onClick={() => { setEditingNote(note.id); setEditText(note.text) }}>ویرایش</Button>
-                        <Button type="button" variant="dangerGhost" size="xs" title="حذف یادداشت" aria-label="حذف یادداشت" onClick={() => onDeleteNote(note.id)}>حذف</Button>
+                        {canEditNotes && <Button type="button" variant="ghost" size="xs" title="ویرایش یادداشت" aria-label="ویرایش یادداشت" onClick={() => { setEditingNote(note.id); setEditText(note.text) }}>ویرایش</Button>}
+                        {canDeleteNotes && <Button type="button" variant="dangerGhost" size="xs" title="حذف یادداشت" aria-label="حذف یادداشت" onClick={() => onDeleteNote(note.id)}>حذف</Button>}
                       </span>
                     )}
                   </header>
@@ -262,18 +282,18 @@ export function PersonModal({
               ))}
               {!notes.length && <div className="chat-empty">هنوز یادداشتی ثبت نشده؛ اولین نکته را بنویسید تا تیم و مدیر پاسخ بدهند.</div>}
             </div>
-            {replyTo && (
+            {canCreateNote && replyTo && (
               <div className="reply-bar">
                 <span>پاسخ به <b>{replyTo.author}</b>: {replyTo.text.length > 60 ? `${replyTo.text.slice(0, 60)}…` : replyTo.text}</span>
                 <Button type="button" variant="dangerGhost" size="xs" onClick={() => setReplyTo(null)} title="لغو پاسخ">لغو پاسخ</Button>
               </div>
             )}
-            {suggestions.length > 0 && (
+            {canCreateNote && suggestions.length > 0 && (
               <div className="mention-sug">
                 {suggestions.map(u => <Button variant="soft" size="xs" type="button" key={u.username} onClick={() => insertMention(u.name)}>@{u.name}</Button>)}
               </div>
             )}
-            <div className="composer">
+            {canCreateNote && <div className="composer">
               <textarea
                 value={noteText}
                 onChange={e => setNoteText(e.target.value)}
@@ -286,10 +306,10 @@ export function PersonModal({
                 placeholder="نظر یا نکته‌ای بنویسید... (با @ کاربران را منشن کنید)"
               />
               <Button type="button" variant="primary" size="sm" className="w-full sm:w-auto" disabled={!noteText.trim()} onClick={submitNote}>ارسال</Button>
-            </div>
+            </div>}
           </>
-        ) : (
-          <div className="timeline">
+        )}
+        {canViewHistory && (!canViewPersonNotes || activeTab === 'history') && <div className="timeline">
             {history.map(a => (
               <div className="tl-item" key={a.id}>
                 <div>
@@ -305,10 +325,9 @@ export function PersonModal({
               </div>
             ))}
             {!history.length && <div className="chat-empty">هنوز رویدادی برای این پرونده ثبت نشده.</div>}
-          </div>
-        )}
+          </div>}
         <div className="modal-actions">
-          <Button type="button" variant="outline" onClick={() => window.print()}> چاپ</Button>
+          {canPrint && <Button type="button" variant="outline" onClick={() => window.print()}>چاپ</Button>}
           <Button type="button" variant="outline" onClick={onClose}> بستن</Button>
           {canEdit && <Button type="button" variant="outline" onClick={() => onEdit(person)}> ویرایش اطلاعات</Button>}
           {canDelete && <Button type="button" variant="danger" onClick={() => onDelete(person)}> حذف پرونده</Button>}

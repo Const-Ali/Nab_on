@@ -6,7 +6,12 @@ import { PasswordField } from '../common/PasswordField'
 import type { ThemeMode } from '../../types'
 import { errorBox, inputCls, labelCls } from '../ui'
 
-export function SetupAdmin({ onSetup, onBack, theme, onToggleTheme }: { onSetup: (input: { setup_key: string; username: string; name: string; password: string }) => Promise<void>; onBack: () => void; theme: ThemeMode; onToggleTheme: () => void }) {
+export function SetupAdmin({ onSetup, onBack, theme, onToggleTheme }: {
+  onSetup: (input: { setup_key: string; username: string; name: string; password: string }) => Promise<void>
+  onBack: () => void
+  theme: ThemeMode
+  onToggleTheme: () => void
+}) {
   const [setupKey, setSetupKey] = useState('')
   const [username, setUsername] = useState('')
   const [name, setName] = useState('')

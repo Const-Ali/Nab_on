@@ -12,6 +12,9 @@ interface Props {
   onEdit: (t: WorkTask) => void
   onDelete: (t: WorkTask) => void
   onStartPomo?: (t: WorkTask) => void
+  canChangeStatus?: boolean
+  canEdit?: boolean
+  canDelete?: boolean
 }
 
 export default function TaskDetails({
@@ -22,6 +25,9 @@ export default function TaskDetails({
   onEdit,
   onDelete,
   onStartPomo,
+  canChangeStatus = true,
+  canEdit = true,
+  canDelete = true,
 }: Props) {
   const done = task.status === 'completed'
   const late = isOverdue(task)
@@ -116,9 +122,7 @@ export default function TaskDetails({
         </div>
 
         <div className="modal-actions wm-detail-actions">
-          <Button type="button" variant="danger" size="sm" onClick={() => onDelete(task)}>
-             حذف کار
-          </Button>
+          {canDelete && <Button type="button" variant="danger" size="sm" onClick={() => onDelete(task)}>حذف کار</Button>}
           {onStartPomo && (
             <Button
               type="button"
@@ -133,12 +137,8 @@ export default function TaskDetails({
             </Button>
           )}
           <span className="wm-spacer" />
-          <Button type="button" variant="outline" onClick={() => onEdit(task)}>
-             ویرایش
-          </Button>
-          <Button type="button" variant="primary" onClick={() => onToggle(task)}>
-             {done ? 'بازگشایی کار' : 'تکمیل کار'}
-          </Button>
+          {canEdit && <Button type="button" variant="outline" onClick={() => onEdit(task)}>ویرایش</Button>}
+          {canChangeStatus && <Button type="button" variant="primary" onClick={() => onToggle(task)}>{done ? 'بازگشایی کار' : 'تکمیل کار'}</Button>}
         </div>
       </div>
     </div>

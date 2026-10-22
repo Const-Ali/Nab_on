@@ -6,6 +6,8 @@ import type { Person, Activity, Note } from '../../types'
 import { Badge } from '../common/Badge'
 import { backdropCls, cn, modalBox, modalSearchLayout, modalX, searchInput } from '../ui'
 
+type SearchPage = 'dashboard' | 'persons' | 'workflow' | 'activities' | 'users' | 'reports' | 'settings' | 'tasks'
+
 interface CommandItem {
   id: string
   title: string
@@ -23,17 +25,25 @@ export function SearchModal({
   onPickPerson,
   onNavigate,
   onOpenCreatePerson,
-  onOpenCreateTask,
+  onOpenTasks,
   onExportData,
+  canNavigate,
+  canSearchPeople = true,
+  canSearchNotes = true,
+  canSearchActivities = true,
 }: {
   people: Person[]
   activities: Activity[]
   notes: Note[]
   onClose: () => void
   onPickPerson: (p: Person) => void
-  onNavigate?: (page: 'dashboard' | 'persons' | 'workflow' | 'activities' | 'users' | 'reports' | 'settings' | 'tasks') => void
+  onNavigate?: (page: SearchPage) => void
+  canNavigate?: (page: SearchPage) => boolean
+  canSearchPeople?: boolean
+  canSearchNotes?: boolean
+  canSearchActivities?: boolean
   onOpenCreatePerson?: () => void
-  onOpenCreateTask?: () => void
+  onOpenTasks?: () => void
   onExportData?: () => void
 }) {
   const [q, setQ] = useState('')
@@ -50,17 +60,6 @@ export function SearchModal({
         action: () => {
           onClose()
           onOpenCreatePerson?.()
-        },
-      },
-      {
-        id: 'cmd-create-task',
-        title: 'ایجاد کار جدید',
-        subtitle: 'ایجاد تسک کاری در بخش مدیریت کارها',
-        category: 'فرمان‌های سریع',
-        keywords: ['کار', 'جدید', 'تسک', 'ایجاد', 'task', 'create'],
-        action: () => {
-          onClose()
-          onOpenCreateTask?.()
         },
       },
       {
@@ -82,8 +81,16 @@ export function SearchModal({
         keywords: ['کارها', 'کارهای من', 'تسک', 'کانبان', 'tasks', 'todo'],
         action: () => {
           onClose()
-          onNavigate?.('tasks')
+          onOpenTasks?.()
         },
+      },
+      {
+        id: 'cmd-nav-dashboard',
+        title: 'رفتن به داشبورد',
+        subtitle: 'نمای کلی سامانه و شاخص‌ها',
+        category: 'پیمایش صفحات',
+        keywords: ['داشبورد', 'خانه', 'dashboard', 'home'],
+        action: () => { onClose(); onNavigate?.('dashboard') },
       },
       {
         id: 'cmd-nav-persons',
@@ -108,6 +115,30 @@ export function SearchModal({
         },
       },
       {
+        id: 'cmd-nav-activities',
+        title: 'رفتن به رویدادها',
+        subtitle: 'مشاهدهٔ تغییرات و فعالیت‌های پرونده‌ها',
+        category: 'پیمایش صفحات',
+        keywords: ['رویداد', 'فعالیت', 'تاریخچه', 'activities', 'activity'],
+        action: () => { onClose(); onNavigate?.('activities') },
+      },
+      {
+        id: 'cmd-nav-users',
+        title: 'رفتن به کاربران و دسترسی‌ها',
+        subtitle: 'مشاهده یا مدیریت کاربران و نقش‌ها',
+        category: 'پیمایش صفحات',
+        keywords: ['کاربران', 'دسترسی', 'نقش', 'users', 'roles'],
+        action: () => { onClose(); onNavigate?.('users') },
+      },
+      {
+        id: 'cmd-nav-settings',
+        title: 'رفتن به تنظیمات',
+        subtitle: 'مشاهدهٔ تنظیمات و نسخهٔ سامانه',
+        category: 'پیمایش صفحات',
+        keywords: ['تنظیمات', 'پیکربندی', 'settings'],
+        action: () => { onClose(); onNavigate?.('settings') },
+      },
+      {
         id: 'cmd-nav-reports',
         title: 'رفتن به گزارش‌ها و تحلیل عملکرد',
         subtitle: 'مشاهده نمودارهای تحلیلی و لاگ رویدادها',
@@ -119,8 +150,23 @@ export function SearchModal({
         },
       },
     ]
-    return list
-  }, [onClose, onOpenCreatePerson, onOpenCreateTask, onExportData, onNavigate])
+    return list.filter(command => {
+      if (command.id === 'cmd-create-person') return Boolean(onOpenCreatePerson)
+      if (command.id === 'cmd-export') return Boolean(onExportData)
+      if (command.id === 'cmd-nav-tasks') return Boolean(onOpenTasks && (!canNavigate || canNavigate('tasks')))
+      const pageByCommand: Record<string, SearchPage> = {
+        'cmd-nav-dashboard': 'dashboard',
+        'cmd-nav-persons': 'persons',
+        'cmd-nav-workflow': 'workflow',
+        'cmd-nav-activities': 'activities',
+        'cmd-nav-users': 'users',
+        'cmd-nav-settings': 'settings',
+        'cmd-nav-reports': 'reports',
+      }
+      const page = pageByCommand[command.id]
+      return Boolean(page && onNavigate && (!canNavigate || canNavigate(page)))
+    })
+  }, [onClose, onOpenCreatePerson, onOpenTasks, onExportData, onNavigate, canNavigate])
 
   const matchedCommands = useMemo(() => {
     if (!nq) return commands.slice(0, 4)
@@ -131,7 +177,7 @@ export function SearchModal({
     )
   }, [commands, nq])
 
-  const matchedPeople = nq
+  const matchedPeople = nq && canSearchPeople
     ? people
         .filter(p =>
           normalizeText(`${p.firstName} ${p.lastName} ${p.fatherName} ${p.nationalId} ${p.id}`).includes(nq),
@@ -139,11 +185,11 @@ export function SearchModal({
         .slice(0, 5)
     : []
 
-  const matchedNotes = nq
+  const matchedNotes = nq && canSearchNotes
     ? notes.filter(n => normalizeText(`${n.text} ${n.author} ${n.title}`).includes(nq)).slice(0, 3)
     : []
 
-  const matchedActs = nq
+  const matchedActs = nq && canSearchActivities
     ? activities
         .filter(a =>
           normalizeText(`${a.action} ${a.personName} ${a.createdBy} ${a.rejectionReason ?? ''}`).includes(nq),

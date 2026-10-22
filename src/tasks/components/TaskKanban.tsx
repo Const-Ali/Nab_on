@@ -9,9 +9,10 @@ interface Props {
   tasks: WorkTask[]
   onOpen: (t: WorkTask) => void
   onMove: (id: string, status: TaskStatus) => void
+  canChangeStatus?: boolean
 }
 
-export default function TaskKanban({ tasks, onOpen, onMove }: Props) {
+export default function TaskKanban({ tasks, onOpen, onMove, canChangeStatus = true }: Props) {
   const [over, setOver] = useState<TaskStatus | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   return (
@@ -23,12 +24,12 @@ export default function TaskKanban({ tasks, onOpen, onMove }: Props) {
             key={col}
             aria-label={`${taskStatusLabels[col]}، ${list.length.toLocaleString('fa-IR')} کار`}
             className={`wm-col ${over === col ? 'drop-target' : ''}`}
-            onDragOver={e => { e.preventDefault(); if (over !== col) setOver(col) }}
+            onDragOver={e => { if (!canChangeStatus) return; e.preventDefault(); if (over !== col) setOver(col) }}
             onDragLeave={e => { if (e.currentTarget === e.target) setOver(null) }}
             onDrop={e => {
               e.preventDefault()
               const id = e.dataTransfer.getData('text/plain') || dragId
-              if (id) onMove(id, col)
+              if (canChangeStatus && id) onMove(id, col)
               setOver(null)
               setDragId(null)
             }}
@@ -41,7 +42,7 @@ export default function TaskKanban({ tasks, onOpen, onMove }: Props) {
                 <article
                   key={t.id}
                   className={`wm-kcard ${t.status === 'completed' ? 'done' : ''} ${t.status === 'cancelled' ? 'cancelled' : ''}`}
-                  draggable
+                  draggable={canChangeStatus}
                   onDragStart={e => {
                     if ((e.target as HTMLElement).closest('.wm-kcard-status-wrap')) {
                       e.preventDefault()
@@ -67,6 +68,7 @@ export default function TaskKanban({ tasks, onOpen, onMove }: Props) {
                       className="wm-kcard-status"
                       value={t.status}
                       aria-label={`تغییر وضعیت ${t.title}`}
+                      disabled={!canChangeStatus}
                       onChange={event => onMove(t.id, event.target.value as TaskStatus)}
                     >
                       {taskStatusOrder.map(status => <option key={status} value={status}>{taskStatusLabels[status]}</option>)}

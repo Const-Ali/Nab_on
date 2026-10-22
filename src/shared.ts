@@ -17,7 +17,9 @@ export const formatServerTimestamp = (raw: string | undefined, timestamp?: numbe
   return `${date.toLocaleDateString('fa-IR')} · ${date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}`
 }
 
-export const normalizeDigits = (value: string) => value.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+export const normalizeDigits = (value: string) => value
+  .replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+  .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
 
 export const normalizeText = (value: string) => normalizeDigits(value.trim()).replace(/ي/g, 'ی').replace(/ك/g, 'ک')
 

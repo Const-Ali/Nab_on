@@ -15,6 +15,7 @@ export function Dashboard({
   activities,
   trend,
   canViewActivities,
+  canViewPeople,
   canCreate,
   onCreate,
   onPersons,
@@ -27,6 +28,7 @@ export function Dashboard({
   activities: Activity[]
   trend: ActivityTrend
   canViewActivities: boolean
+  canViewPeople: boolean
   canCreate: boolean
   onCreate: () => void
   onPersons: () => void
@@ -86,10 +88,10 @@ export function Dashboard({
       <Heading
         title={greeting}
         subtitle="وضعیت پرونده‌ها و فعالیت‌های سامانه را در یک نگاه ببینید."
-        action={canCreate ? <Button variant="primary" onClick={onCreate}>ثبت پروندهٔ جدید</Button> : <Button variant="outline" onClick={onPersons}>مشاهدهٔ پرونده‌ها</Button>}
+        action={canCreate ? <Button variant="primary" onClick={onCreate}>ثبت پروندهٔ جدید</Button> : canViewPeople ? <Button variant="outline" onClick={onPersons}>مشاهدهٔ پرونده‌ها</Button> : undefined}
       />
 
-      <div className="grid grid-cols-1 gap-2.5 min-[360px]:grid-cols-2 sm:gap-4 xl:grid-cols-4">
+      {canViewPeople && <div className="grid grid-cols-1 gap-2.5 min-[360px]:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         {kpis.map(item => (
           <article className="flex min-w-0 items-start gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-[border-color,box-shadow] hover:border-indigo-200 hover:shadow-md sm:gap-3 sm:p-4 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-900" key={item.label}>
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-700 sm:h-10 sm:w-10 dark:bg-indigo-950/50 dark:text-indigo-300">{item.icon}</span>
@@ -100,7 +102,7 @@ export function Dashboard({
             </div>
           </article>
         ))}
-      </div>
+      </div>}
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
         <section className={cn(panelBox, 'min-w-0 p-4 sm:p-5 xl:col-span-2')} aria-labelledby="activity-trend-title">
@@ -167,7 +169,7 @@ export function Dashboard({
           )}
         </section>
 
-        <section className={cn(panelBox, 'p-4 sm:p-5')}>
+        {canViewPeople && <section className={cn(panelBox, 'p-4 sm:p-5')}>
           <h2 className={panelH2}>وضعیت پرونده‌ها</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">بر اساس مرحلهٔ گردش‌کار</p>
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/50">
@@ -193,11 +195,11 @@ export function Dashboard({
               </div>
             ))}
           </dl>
-        </section>
+        </section>}
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <section className={cn(panelBox, 'min-w-0 p-4 sm:p-5')}>
+        {canViewPeople && <section className={cn(panelBox, 'min-w-0 p-4 sm:p-5')}>
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <h2 className={panelH2}>آخرین پرونده‌ها</h2>
@@ -224,7 +226,7 @@ export function Dashboard({
               {canCreate && <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onCreate}>ثبت نخستین پرونده</Button>}
             </div>
           )}
-        </section>
+        </section>}
 
         <section className={cn(panelBox, 'min-w-0 p-4 sm:p-5')}>
           <div className="mb-3 flex items-center justify-between gap-3">

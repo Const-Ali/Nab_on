@@ -5,13 +5,14 @@ import { applySavedFont } from '../app-lib'
 import { ApiError, bootstrap, fetchTasks, syncTasks } from '../api-client'
 import WorkManagementPage from './WorkManagementPage'
 import { normalizeTask } from './utils'
-import type { ThemeMode } from '../types'
+import type { Permission, ThemeMode } from '../types'
 import type { UserLite, WorkTask } from './types'
 
 export default function TasksApp() {
   const [theme, setTheme] = useState<ThemeMode>(loadTheme)
   const [user, setUser] = useState<UserLite | null>(null)
   const [users, setUsers] = useState<UserLite[]>([])
+  const [permissions, setPermissions] = useState<Permission[]>([])
   const [tasks, setTasks] = useState<WorkTask[] | null>(null)
   const [error, setError] = useState('')
   const [syncError, setSyncError] = useState('')
@@ -31,9 +32,14 @@ export default function TasksApp() {
     const loadUserTasks = async () => {
       try {
         const session = await bootstrap()
+        if (!session.user.permissions.includes('view_tasks')) {
+          if (active) setError('برای مشاهدهٔ کارهای من، از مدیر سامانه بخواهید مجوز مربوط را در نقش یا حساب شما فعال کند.')
+          return
+        }
         const data = await fetchTasks()
         if (!active) return
         setUser({ username: session.user.username, name: session.user.name })
+        setPermissions(session.user.permissions)
         setUsers(session.users.filter(u => u.active).map(u => ({ username: u.username, name: u.name })))
         setTasks(data.map((task, index) => normalizeTask(task, index)))
       } catch (cause) {
@@ -82,7 +88,7 @@ export default function TasksApp() {
       </header>
       {syncError && <div className="mx-auto mt-3 max-w-5xl rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">ذخیره‌سازی روی هاست ناموفق بود: {syncError}</div>}
       <main className="tasks-content">
-        <WorkManagementPage users={users} sessionUsername={user.username} sessionName={user.name} initialTasks={tasks} onTasksChange={saveTasksOnHost} />
+        <WorkManagementPage users={users} sessionUsername={user.username} sessionName={user.name} initialTasks={tasks} canCreate={permissions.includes('create_task')} canEdit={permissions.includes('edit_task')} canChangeStatus={permissions.includes('change_task_status')} canDelete={permissions.includes('delete_task')} onTasksChange={saveTasksOnHost} />
       </main>
     </div>
   )

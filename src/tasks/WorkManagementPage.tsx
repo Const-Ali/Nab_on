@@ -35,6 +35,10 @@ interface Props {
   sessionUsername: string
   sessionName: string
   initialTasks: WorkTask[]
+  canCreate: boolean
+  canEdit: boolean
+  canChangeStatus: boolean
+  canDelete: boolean
   onTasksChange: (tasks: WorkTask[]) => void | Promise<void>
 }
 
@@ -47,7 +51,7 @@ const defaultFilters: TaskFilterState = {
   view: 'list',
 }
 
-export default function WorkManagementPage({ users, sessionUsername, sessionName, initialTasks, onTasksChange }: Props) {
+export default function WorkManagementPage({ users, sessionUsername, sessionName, initialTasks, canCreate, canEdit, canChangeStatus, canDelete, onTasksChange }: Props) {
   const [tasks, setTasks] = useState<WorkTask[]>(initialTasks)
 
   useEffect(() => {
@@ -102,6 +106,7 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
   const log = (action: string) => ({ id: uid('TL'), action, createdAt: nowStamp(), createdBy: sessionName })
 
   const saveTask = (fields: TaskFields) => {
+    if ((editing && !canEdit) || (!editing && !canCreate)) return
     if (editing) {
       const logs: string[] = []
       if (fields.status !== editing.status) logs.push(`وضعیت به «${taskStatusLabels[fields.status]}» تغییر کرد`)
@@ -148,6 +153,7 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
   }
 
   const toggleDone = (t: WorkTask) => {
+    if (!canChangeStatus) return
     const done = t.status === 'completed'
     if (!done) {
       playChime('complete')
@@ -169,6 +175,7 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
   }
 
   const moveTask = (id: string, status: TaskStatus) => {
+    if (!canChangeStatus) return
     if (status === 'completed') {
       playChime('complete')
     } else {
@@ -188,13 +195,14 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
   }
 
   const deleteTask = (t: WorkTask) => {
+    if (!canDelete) return
     if (!window.confirm(`کار «${t.title}» حذف شود؟ این عمل قابل بازگشت نیست.`)) return
     setTasks(cur => cur.filter(x => x.id !== t.id))
     setDetailId(null)
   }
 
   const logTimeForTask = (minutes: number) => {
-    if (activePomoTask) {
+    if (canEdit && activePomoTask) {
       setTasks(cur =>
         cur.map(t =>
           t.id === activePomoTask.id
@@ -217,9 +225,9 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
       <Heading
         title="مدیریت کارهای من"
         subtitle="کارهای شخصی و سازمانی شما — همراه با تایم‌لاین، ماتریس اولویت و تایمر تمرکز پومودورو."
-        action={
+        action={canCreate || canEdit ? (
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button
+            {canEdit && <Button
               type="button"
               variant="outline"
               size="sm"
@@ -234,8 +242,8 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
               className="whitespace-nowrap"
             >
                تایمر پومودورو
-            </Button>
-            <Button
+            </Button>}
+            {canCreate && <Button
               type="button"
               variant="primary"
               onClick={() => {
@@ -245,9 +253,9 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
               className="whitespace-nowrap"
             >
                ایجاد کار جدید
-            </Button>
+            </Button>}
           </div>
-        }
+        ) : undefined}
       />
 
       <WorkDashboard tasks={typed} quick={quick} onQuick={setQuick} />
@@ -275,13 +283,15 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
             filtered={isFiltering}
             onOpen={t => setDetailId(t.id)}
             onToggle={toggleDone}
+            canChangeStatus={canChangeStatus}
+            canCreate={canCreate}
             onCreate={() => {
               setEditing(null)
               setFormOpen(true)
             }}
           />
         ) : filters.view === 'kanban' ? (
-          <TaskKanban tasks={filtered} onOpen={t => setDetailId(t.id)} onMove={moveTask} />
+          <TaskKanban tasks={filtered} onOpen={t => setDetailId(t.id)} onMove={moveTask} canChangeStatus={canChangeStatus} />
         ) : (
           <TaskGantt tasks={filtered} onOpen={t => setDetailId(t.id)} />
         )}
@@ -307,6 +317,7 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
             setEditing(null)
           }}
           onSave={saveTask}
+          canChangeStatus={canChangeStatus}
         />
       )}
 
@@ -322,10 +333,13 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
             setFormOpen(true)
           }}
           onDelete={deleteTask}
-          onStartPomo={t => {
+          canChangeStatus={canChangeStatus}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onStartPomo={canEdit ? t => {
             setActivePomoTask(t)
             setShowPomo(true)
-          }}
+          } : undefined}
         />
       )}
     </>

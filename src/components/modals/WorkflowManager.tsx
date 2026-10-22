@@ -68,6 +68,7 @@ export function WorkflowManager({ config, onClose, onSave }: {
         tone: newTone,
         nextStageIds: [],
         checklist: [],
+        stalledAfterDays: null,
       }))
       setNewStageLabel('')
       setError('')
@@ -134,7 +135,7 @@ export function WorkflowManager({ config, onClose, onSave }: {
                 <div className="flex flex-col gap-3 md:flex-row md:items-start">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{(index + 1).toLocaleString('fa-IR')}</span>
                   <div className="min-w-0 flex-1 space-y-3">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_12rem]">
                       <label className="text-xs font-medium text-slate-500 dark:text-slate-400">عنوان مرحله
                         <input className={inputCls} value={stage.label} maxLength={100} disabled={saving} onChange={event => updateStage(stage.id, { label: event.target.value })} />
                       </label>
@@ -142,6 +143,10 @@ export function WorkflowManager({ config, onClose, onSave }: {
                         <select className={cn(selectCls, 'mt-1')} value={stage.tone} disabled={saving} onChange={event => updateStage(stage.id, { tone: event.target.value })}>
                           {allowedWorkflowTones.map(tone => <option value={tone} key={tone}>{toneLabels[tone]}</option>)}
                         </select>
+                      </label>
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400">هشدار توقف پس از (روز)
+                        <input className={inputCls} type="number" min={1} max={3650} step={1} inputMode="numeric" placeholder="خاموش" value={stage.stalledAfterDays ?? ''} disabled={saving || Boolean(stage.archived)} onChange={event => updateStage(stage.id, { stalledAfterDays: event.target.value === '' ? null : Number(event.target.value) })} />
+                        <small className="mt-1 block text-[10px] leading-4 text-slate-400">خالی بماند: هشدار این مرحله خاموش است.</small>
                       </label>
                     </div>
                     <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/60">

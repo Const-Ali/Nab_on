@@ -14,9 +14,10 @@ interface Props {
   categories: string[]
   onClose: () => void
   onSave: (fields: TaskFields) => void
+  canChangeStatus: boolean
 }
 
-export default function TaskForm({ initial, typeDefault, categories, onClose, onSave }: Props) {
+export default function TaskForm({ initial, typeDefault, categories, onClose, onSave, canChangeStatus }: Props) {
   const [title, setTitle] = useState(initial?.title ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [type, setType] = useState<TaskType>(initial?.type ?? typeDefault)
@@ -106,7 +107,7 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
           </label>
           <label>
             وضعیت
-            <select className={selectCls} value={status} onChange={e => setStatus(e.target.value as TaskStatus)}>
+            <select className={selectCls} value={status} disabled={Boolean(initial) && !canChangeStatus} onChange={e => setStatus(e.target.value as TaskStatus)}>
               {taskStatusOrder.map(s => <option key={s} value={s}>{taskStatusLabels[s]}</option>)}
             </select>
           </label>

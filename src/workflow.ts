@@ -8,6 +8,8 @@ export type WorkflowStage = {
   tone: string
   nextStageIds: string[]
   checklist: ChecklistRule[]
+  /** Admin-configured maximum time in this stage before a stalled-case alert is generated. */
+  stalledAfterDays?: number | null
   isFinal?: boolean
   archived?: boolean
   metric?: 'active' | 'review' | 'rejected' | 'completed'
@@ -50,6 +52,7 @@ export function normalizeWorkflowConfig(input: unknown): WorkflowConfig {
       tone: allowedWorkflowTones.includes(stage.tone as typeof allowedWorkflowTones[number]) ? stage.tone : 'slate',
       nextStageIds: Array.isArray(stage.nextStageIds) ? stage.nextStageIds.filter((id): id is string => typeof id === 'string') : [],
       checklist: Array.isArray(stage.checklist) ? stage.checklist.filter((rule): rule is ChecklistRule => Boolean(rule && typeof rule.id === 'string' && typeof rule.label === 'string')) : [],
+      stalledAfterDays: Number.isInteger(stage.stalledAfterDays) && Number(stage.stalledAfterDays) >= 1 && Number(stage.stalledAfterDays) <= 3650 ? Number(stage.stalledAfterDays) : null,
       isFinal: Boolean(stage.isFinal),
       archived: Boolean(stage.archived),
       metric: stage.metric,

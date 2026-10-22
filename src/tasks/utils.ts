@@ -102,6 +102,11 @@ export const normalizeTask = (raw: unknown, index: number): WorkTask => {
     createdAt: typeof t.createdAt === 'string' ? t.createdAt : '',
     ts: typeof t.ts === 'number' ? t.ts : 0,
     completedAt: typeof t.completedAt === 'string' ? t.completedAt : undefined,
+    timeSpentMinutes: typeof t.timeSpentMinutes === 'number' && Number.isFinite(t.timeSpentMinutes) ? Math.max(0, t.timeSpentMinutes) : undefined,
+    subtasks: Array.isArray(t.subtasks) ? t.subtasks.filter(item => typeof item === 'object' && item !== null).map(item => {
+      const subtask = item as { id?: unknown; title?: unknown; done?: unknown }
+      return { id: typeof subtask.id === 'string' ? subtask.id : '', title: typeof subtask.title === 'string' ? subtask.title : '', done: Boolean(subtask.done) }
+    }) : undefined,
     history: Array.isArray(t.history) ? t.history : [],
   }
 }

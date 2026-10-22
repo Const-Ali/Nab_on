@@ -17,14 +17,14 @@ const priorityTone: Record<string, string> = {
   red: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
 }
 
-export default function TaskCard({ task, onOpen, onToggle }: { task: WorkTask; onOpen: (t: WorkTask) => void; onToggle: (t: WorkTask) => void }) {
+export default function TaskCard({ task, onOpen, onToggle, canToggle = true }: { task: WorkTask; onOpen: (t: WorkTask) => void; onToggle: (t: WorkTask) => void; canToggle?: boolean }) {
   const done = task.status === 'completed'
   const late = isOverdue(task)
   const toggleLabel = done ? 'بازگشایی کار' : 'تکمیل کار'
 
   return (
     <article className={cn('group flex items-stretch gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 sm:gap-3 sm:px-4 sm:py-3 dark:border-slate-800', transition, done && 'opacity-75')}>
-      <Button
+      {canToggle && <Button
         type="button"
         aria-label={toggleLabel + ': ' + task.title}
         aria-pressed={done}
@@ -39,7 +39,7 @@ export default function TaskCard({ task, onOpen, onToggle }: { task: WorkTask; o
         )}
       >
         {done ? '✓' : 'تکمیل'}
-      </Button>
+      </Button>}
 
       <Button
         type="button"

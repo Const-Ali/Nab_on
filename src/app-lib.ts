@@ -36,7 +36,6 @@ export const tones: Record<Status, string> = {
 }
 
 export const personTags: Record<string, string> = { 'فوری': 'red', 'مهم': 'amber', 'VIP': 'purple', 'پیگیری': 'blue' }
-export const STALE_LIMIT = 7
 
 export const deadlineLeft = (p: Person, config: WorkflowConfig = defaultWorkflowConfig): number | null => {
   const stage = stageById(config, stageIdForPerson(p, config))
@@ -49,11 +48,13 @@ export const deadlineLeft = (p: Person, config: WorkflowConfig = defaultWorkflow
   return jalaliJdn(Number(m[1]), Number(m[2]), Number(m[3])) - jalaliJdn(tj.y, tj.m, tj.d)
 }
 
-export const PAGE_SIZE = 20
 export const staleDays = (p: Person, config: WorkflowConfig = defaultWorkflowConfig) => {
-  const timestamp = timestampToMs(p.ts)
   const stage = stageById(config, stageIdForPerson(p, config))
-  return (!timestamp || stage?.isFinal || stage?.id === 'approved') ? 0 : Math.floor((Date.now() - timestamp) / 86400000)
+  const enteredAt = p.stageEnteredAt ? Date.parse(p.stageEnteredAt) : Number.NaN
+  const timestamp = Number.isFinite(enteredAt) && enteredAt > 0
+    ? enteredAt
+    : timestampToMs(p.ts) ?? (p.updatedAt ? Date.parse(p.updatedAt) : 0)
+  return (!Number.isFinite(timestamp) || timestamp <= 0 || stage?.isFinal) ? 0 : Math.max(0, Math.floor((Date.now() - timestamp) / 86400000))
 }
 
 export const seedNames = [
@@ -138,27 +139,133 @@ export const initialNotes: Note[] = [
 ]
 
 export const rolePermissions: Record<Role, Permission[]> = {
-  admin: ['view_persons', 'create_person', 'edit_person', 'change_status', 'view_activities', 'manage_users', 'view_reports', 'delete_person'],
-  assistant: ['view_persons', 'create_person', 'edit_person'],
-  reviewer: ['view_persons', 'change_status', 'view_activities'],
+  admin: [
+    'view_dashboard', 'view_persons', 'create_person', 'edit_person', 'delete_person',
+    'change_status', 'assign_person', 'complete_checklist', 'view_person_notes',
+    'create_person_note', 'edit_person_note', 'delete_person_note', 'manage_any_person_note',
+    'print_person', 'export_people_csv', 'export_people_excel', 'import_people_excel',
+    'view_workflow', 'manage_workflow', 'view_activities', 'export_activities',
+    'view_reports', 'print_reports', 'view_audit_log', 'view_users', 'create_user', 'edit_user', 'delete_user', 'manage_users',
+    'view_roles', 'create_role', 'edit_role', 'delete_role', 'manage_roles', 'export_backup', 'restore_backup', 'purge_server_data', 'view_settings', 'manage_settings', 'view_tasks', 'create_task', 'edit_task', 'change_task_status', 'delete_task',
+  ],
+  assistant: [
+    'view_dashboard', 'view_persons', 'create_person', 'edit_person',
+    'view_person_notes', 'create_person_note', 'edit_person_note', 'delete_person_note',
+    'print_person', 'view_workflow', 'view_settings', 'manage_settings', 'view_tasks', 'create_task', 'edit_task', 'change_task_status', 'delete_task',
+  ],
+  reviewer: [
+    'view_dashboard', 'view_persons', 'change_status', 'assign_person', 'complete_checklist',
+    'view_activities', 'view_person_notes', 'create_person_note', 'edit_person_note',
+    'delete_person_note', 'print_person', 'view_workflow', 'view_settings',
+    'manage_settings', 'view_tasks', 'create_task', 'edit_task', 'change_task_status', 'delete_task',
+  ],
 }
 
 export const permissionLabels: Record<Permission, string> = {
-  view_persons: 'مشاهده افراد',
-  create_person: 'ایجاد فرد',
-  edit_person: 'ویرایش اطلاعات فرد',
-  change_status: 'تغییر وضعیت',
-  view_activities: 'مشاهده فعالیت‌ها',
-  manage_users: 'مدیریت کاربران',
-  view_reports: 'مشاهده گزارش‌ها',
-  delete_person: 'حذف پرونده',
+  view_dashboard: 'مشاهدهٔ داشبورد',
+  view_persons: 'مشاهدهٔ پرونده‌ها',
+  create_person: 'ایجاد پرونده',
+  edit_person: 'ویرایش اطلاعات پرونده',
+  delete_person: 'حذف پرونده (تکی و گروهی)',
+  change_status: 'تغییر مرحلهٔ پرونده',
+  assign_person: 'ارجاع پرونده به کاربر',
+  complete_checklist: 'تکمیل چک‌لیست مرحله',
+  view_person_notes: 'مشاهدهٔ گفتگو و یادداشت پرونده',
+  create_person_note: 'ثبت یادداشت پرونده',
+  edit_person_note: 'ویرایش یادداشت‌های خود',
+  delete_person_note: 'حذف یادداشت‌های خود',
+  manage_any_person_note: 'مدیریت یادداشت دیگران (نیازمند مجوز ویرایش/حذف)',
+  print_person: 'چاپ پرونده',
+  export_people_csv: 'خروجی CSV پرونده‌ها',
+  export_people_excel: 'دریافت Excel پرونده‌ها از سرور',
+  import_people_excel: 'ورود گروهی پرونده‌ها از Excel',
+  view_workflow: 'مشاهدهٔ برد گردش‌کار',
+  manage_workflow: 'مدیریت تعریف گردش‌کار',
+  view_activities: 'مشاهدهٔ رویدادها و تاریخچه',
+  export_activities: 'خروجی رویدادها',
+  view_reports: 'مشاهدهٔ گزارش‌ها و تحلیل',
+  print_reports: 'چاپ گزارش‌ها',
+  view_audit_log: 'مشاهدهٔ رخدادهای امنیتی (Audit)',
+  view_users: 'مشاهدهٔ فهرست حساب‌های کاربری',
+  create_user: 'ایجاد حساب کاربری',
+  edit_user: 'ویرایش حساب و مجوزهای کاربر',
+  delete_user: 'حذف حساب کاربری',
+  manage_users: 'مدیریت کامل حساب‌های کاربری (همهٔ عملیات)',
+  view_roles: 'مشاهدهٔ نقش‌ها',
+  create_role: 'ایجاد نقش سازمانی',
+  edit_role: 'ویرایش مجوزها و عنوان نقش',
+  delete_role: 'حذف نقش سازمانی',
+  manage_roles: 'مدیریت کامل نقش‌ها (همهٔ عملیات)',
+  export_backup: 'استخراج بکاپ رمزگذاری‌شده از کل سامانه',
+  restore_backup: 'بازیابی بکاپ کامل و جایگزینی داده‌های سامانه',
+  purge_server_data: 'پاکسازی کامل داده‌های عملیاتی سرور (فقط مدیر سیستم)',
+  view_settings: 'مشاهدهٔ تنظیمات سامانه',
+  manage_settings: 'ویرایش و ذخیرهٔ تنظیمات سامانه',
+  view_tasks: 'مشاهدهٔ کارهای من',
+  create_task: 'ایجاد کار',
+  edit_task: 'ویرایش جزئیات کار',
+  change_task_status: 'تغییر وضعیت و تکمیل/بازگشایی کار',
+  delete_task: 'حذف کار',
 }
+
+export const permissionGroups: { title: string; permissions: Permission[] }[] = [
+  { title: 'صفحات و مشاهده', permissions: ['view_dashboard', 'view_persons', 'view_workflow', 'view_activities', 'view_reports', 'view_audit_log', 'view_users', 'view_settings', 'view_tasks'] },
+  { title: 'پرونده‌ها و گردش‌کار', permissions: ['create_person', 'edit_person', 'delete_person', 'change_status', 'assign_person', 'complete_checklist', 'manage_workflow'] },
+  { title: 'گفتگو و یادداشت پرونده', permissions: ['view_person_notes', 'create_person_note', 'edit_person_note', 'delete_person_note', 'manage_any_person_note'] },
+  { title: 'چاپ و خروجی / ورود', permissions: ['print_person', 'export_people_csv', 'export_people_excel', 'import_people_excel', 'export_activities', 'print_reports'] },
+  { title: 'مدیریت حساب‌های کاربری', permissions: ['create_user', 'edit_user', 'delete_user', 'manage_users'] },
+  { title: 'مدیریت نقش‌ها', permissions: ['view_roles', 'create_role', 'edit_role', 'delete_role', 'manage_roles'] },
+  { title: 'پشتیبان‌گیری و پاکسازی سامانه', permissions: ['export_backup', 'restore_backup', 'purge_server_data'] },
+  { title: 'تنظیمات سامانه', permissions: ['manage_settings'] },
+  { title: 'کارهای من', permissions: ['create_task', 'edit_task', 'change_task_status', 'delete_task'] },
+]
 
 export const defaultRoles: RoleDef[] = [
   { id: 'admin', title: 'مدیر سیستم', permissions: [...rolePermissions.admin], builtin: true },
   { id: 'assistant', title: 'کارشناس پرونده', permissions: [...rolePermissions.assistant], builtin: true },
   { id: 'reviewer', title: 'کارشناس مرکز', permissions: [...rolePermissions.reviewer], builtin: true },
 ]
+
+export const allPermissions = Object.keys(permissionLabels) as Permission[]
+
+export function canGrantPermission(allowedPermissions: Permission[], permission: Permission): boolean {
+  if (allowedPermissions.includes(permission)) return true
+  const delegatedBy: Partial<Record<Permission, Permission>> = {
+    view_users: 'manage_users',
+    create_user: 'manage_users',
+    edit_user: 'manage_users',
+    delete_user: 'manage_users',
+    view_roles: 'manage_roles',
+    create_role: 'manage_roles',
+    edit_role: 'manage_roles',
+    delete_role: 'manage_roles',
+  }
+  const parent = delegatedBy[permission]
+  return parent ? allowedPermissions.includes(parent) : false
+}
+
+export function permissionDependencyError(permissions: readonly Permission[]): string | null {
+  const selected = new Set(permissions)
+  const personOperations: Permission[] = [
+    'create_person', 'edit_person', 'delete_person', 'change_status', 'assign_person',
+    'complete_checklist', 'view_person_notes', 'create_person_note', 'edit_person_note',
+    'delete_person_note', 'manage_any_person_note', 'print_person', 'export_people_csv',
+    'export_people_excel', 'import_people_excel',
+  ]
+  if (personOperations.some(permission => selected.has(permission)) && !selected.has('view_persons')) return 'عملیات پرونده به مجوز «مشاهدهٔ پرونده‌ها» نیز نیاز دارد.'
+  if (selected.has('import_people_excel') && !selected.has('create_person')) return 'ورود Excel به مجوز «ایجاد پرونده» نیز نیاز دارد.'
+  if (selected.has('create_person_note') && !selected.has('view_person_notes')) return 'ثبت یادداشت به مجوز «مشاهدهٔ گفتگو و یادداشت» نیز نیاز دارد.'
+  if (selected.has('edit_person_note') && !selected.has('view_person_notes')) return 'ویرایش یادداشت به مجوز «مشاهدهٔ گفتگو و یادداشت» نیز نیاز دارد.'
+  if (selected.has('delete_person_note') && !selected.has('view_person_notes')) return 'حذف یادداشت به مجوز «مشاهدهٔ گفتگو و یادداشت» نیز نیاز دارد.'
+  if (selected.has('manage_any_person_note') && (!selected.has('view_person_notes') || (!selected.has('edit_person_note') && !selected.has('delete_person_note')))) return 'مدیریت یادداشت دیگران به مشاهدهٔ یادداشت و دست‌کم یکی از مجوزهای ویرایش/حذف نیاز دارد.'
+  if (selected.has('export_activities') && !selected.has('view_activities')) return 'خروجی رویدادها به مجوز «مشاهدهٔ رویدادها» نیز نیاز دارد.'
+  if (selected.has('print_reports') && !selected.has('view_reports')) return 'چاپ گزارش به مجوز «مشاهدهٔ گزارش‌ها» نیز نیاز دارد.'
+  if (['create_task', 'edit_task', 'change_task_status', 'delete_task'].some(permission => selected.has(permission as Permission)) && !selected.has('view_tasks')) return 'عملیات کارها به مجوز «مشاهدهٔ کارهای من» نیز نیاز دارد.'
+  if (['create_user', 'edit_user', 'delete_user'].some(permission => selected.has(permission as Permission)) && !selected.has('view_users')) return 'مدیریت حساب‌ها به مجوز «مشاهدهٔ فهرست حساب‌های کاربری» نیز نیاز دارد.'
+  if (['create_role', 'edit_role', 'delete_role'].some(permission => selected.has(permission as Permission)) && !selected.has('view_roles')) return 'مدیریت نقش‌ها به مجوز «مشاهدهٔ نقش‌ها» نیز نیاز دارد.'
+  return null
+}
+export const defaultSettings: AppSettings = { appName: 'سامانه مدیریت پرونده ناب', twoFactor: true, auditLog: true, autoLogout: false, autoLogoutMins: 30, font: 'vazir' }
 
 export const userByRole: Record<Role, { name: string; title: string }> = {
   admin: { name: 'احمد محمدی', title: 'مدیر سیستم' },
@@ -173,9 +280,6 @@ export const getUserTitle = (role: Role, roles: RoleDef[] = defaultRoles): strin
 export const getUserName = (role: Role): string => {
   return userByRole[role]?.name ?? 'کاربر'
 }
-
-export const allPermissions = Object.keys(permissionLabels) as Permission[]
-export const defaultSettings: AppSettings = { appName: 'سامانه مدیریت پرونده ناب', twoFactor: true, auditLog: true, autoLogout: false, autoLogoutMins: 30, font: 'vazir' }
 
 export const fontStacks: Record<FontKey, string> = {
   vazir: "'Vazirmatn'",
@@ -193,9 +297,13 @@ export const fontOptions: { key: FontKey; label: string; hint: string }[] = [
   { key: 'lalezar', label: 'لاله‌زار', hint: 'تیتری و جذاب' },
 ]
 
+export const applyFont = (font: FontKey) => {
+  document.documentElement.style.setProperty('--font-main', fontStacks[font] ?? fontStacks.vazir)
+}
+
 export const applySavedFont = () => {
   const { font } = { ...defaultSettings, ...load('nab:settings', defaultSettings) }
-  document.documentElement.style.setProperty('--font-main', fontStacks[font] ?? fontStacks.vazir)
+  applyFont(font)
 }
 
 export const normalizeUser = (raw: unknown): User => {
