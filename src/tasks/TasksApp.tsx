@@ -2,7 +2,8 @@ import { ThemeToggle } from '../components/common/ThemeToggle'
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { loadTheme, save } from '../shared'
 import { applySavedFont } from '../app-lib'
-import { ApiError, bootstrap, fetchTasks, syncTasks } from '../api-client'
+import { ApiError, bootstrap, fetchTasks, hasRecentUserActivity, logout, syncTasks, touchSession } from '../api-client'
+import type { AppBootstrap } from '../api-client'
 import WorkManagementPage from './WorkManagementPage'
 import { normalizeTask } from './utils'
 import type { Permission, ThemeMode } from '../types'
@@ -13,6 +14,7 @@ export default function TasksApp() {
   const [user, setUser] = useState<UserLite | null>(null)
   const [users, setUsers] = useState<UserLite[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
+  const [sessionPolicy, setSessionPolicy] = useState<AppBootstrap['session_policy']>()
   const [tasks, setTasks] = useState<WorkTask[] | null>(null)
   const [error, setError] = useState('')
   const [syncError, setSyncError] = useState('')
@@ -32,15 +34,17 @@ export default function TasksApp() {
     const loadUserTasks = async () => {
       try {
         const session = await bootstrap()
+        if (!active) return
+        setSessionPolicy(session.session_policy)
+        setUser({ username: session.user.username, name: session.user.name })
+        setPermissions(session.user.permissions)
+        setUsers(session.users.filter(u => u.active).map(u => ({ username: u.username, name: u.name })))
         if (!session.user.permissions.includes('view_tasks')) {
-          if (active) setError('برای مشاهدهٔ کارهای من، از مدیر سامانه بخواهید مجوز مربوط را در نقش یا حساب شما فعال کند.')
+          setError('برای مشاهدهٔ کارهای من، از مدیر سامانه بخواهید مجوز مربوط را در نقش یا حساب شما فعال کند.')
           return
         }
         const data = await fetchTasks()
         if (!active) return
-        setUser({ username: session.user.username, name: session.user.name })
-        setPermissions(session.user.permissions)
-        setUsers(session.users.filter(u => u.active).map(u => ({ username: u.username, name: u.name })))
         setTasks(data.map((task, index) => normalizeTask(task, index)))
       } catch (cause) {
         if (!active) return
@@ -57,6 +61,66 @@ export default function TasksApp() {
       window.removeEventListener('nab:auth-expired', onAuthExpired)
     }
   }, [])
+
+  useEffect(() => {
+    if (!user?.username || !sessionPolicy?.auto_logout) return
+    const allowedMinutes = [5, 10, 15, 30, 60]
+    const minutes = allowedMinutes.includes(sessionPolicy.auto_logout_mins) ? sessionPolicy.auto_logout_mins : 30
+    const timeoutMs = minutes * 60_000
+    const serverRemainingSeconds = sessionPolicy.auto_logout_remaining_seconds
+    const remainingMs = typeof serverRemainingSeconds === 'number' && Number.isFinite(serverRemainingSeconds)
+      ? Math.min(timeoutMs, Math.max(0, serverRemainingSeconds * 1000))
+      : timeoutMs
+    let idleDeadline = Date.now() + remainingMs
+    let expired = false
+    let timer = 0
+    const expire = () => {
+      if (expired) return
+      expired = true
+      // Let the server clear the session before reloading the main app; recent
+      // heartbeats can make the server-side idle boundary slightly later than ours.
+      const logoutRequest = logout().catch(() => undefined)
+      const fallback = new Promise<void>(resolve => { window.setTimeout(resolve, 1500) })
+      void Promise.race([logoutRequest, fallback]).finally(() => {
+        window.dispatchEvent(new CustomEvent('nab:auth-expired'))
+      })
+    }
+    const schedule = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        if (Date.now() >= idleDeadline) expire()
+        else schedule()
+      }, Math.max(0, idleDeadline - Date.now()))
+    }
+    const markActivity = () => {
+      if (expired) return
+      idleDeadline = Date.now() + timeoutMs
+      schedule()
+    }
+    const checkAfterVisibility = () => {
+      if (document.visibilityState === 'visible' && Date.now() >= idleDeadline) expire()
+    }
+    const activityEvents = ['pointerdown', 'keydown', 'touchstart', 'scroll'] as const
+    for (const event of activityEvents) window.addEventListener(event, markActivity, { passive: true })
+    document.addEventListener('visibilitychange', checkAfterVisibility)
+    schedule()
+    return () => {
+      expired = true
+      window.clearTimeout(timer)
+      for (const event of activityEvents) window.removeEventListener(event, markActivity)
+      document.removeEventListener('visibilitychange', checkAfterVisibility)
+    }
+  }, [user?.username, sessionPolicy?.auto_logout, sessionPolicy?.auto_logout_mins, sessionPolicy?.auto_logout_remaining_seconds])
+
+  useEffect(() => {
+    if (!user?.username) return
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && hasRecentUserActivity(75_000)) {
+        void touchSession().catch(() => undefined)
+      }
+    }, 30_000)
+    return () => window.clearInterval(interval)
+  }, [user?.username])
 
   const saveTasksOnHost = useCallback(async (nextTasks: WorkTask[]) => {
     try {

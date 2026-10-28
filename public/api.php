@@ -1037,6 +1037,21 @@ function state_payload(PDO $pdo, array $user): array {
     $canViewAudit = has_permission($user, 'view_audit_log');
     $canViewSettings = has_permission($user, 'view_settings') || has_permission($user, 'manage_settings');
     $canViewTasks = has_permission($user, 'view_tasks');
+    $settingsData = state_value($pdo, 'nab:settings', [default_settings()]);
+    $settingsRow = isset($settingsData[0]) && is_array($settingsData[0]) ? $settingsData[0] : default_settings();
+    $idleMinutes = filter_var($settingsRow['autoLogoutMins'] ?? 30, FILTER_VALIDATE_INT);
+    if (!in_array($idleMinutes, [5, 10, 15, 30, 60], true)) $idleMinutes = 30;
+    $autoLogout = !empty($settingsRow['autoLogout']);
+    $remainingSeconds = null;
+    if ($autoLogout) {
+        $lastActivity = (int)($_SESSION['last_activity'] ?? time());
+        $remainingSeconds = max(0, $lastActivity + ($idleMinutes * 60) - time());
+    }
+    $sessionPolicy = [
+        'auto_logout' => $autoLogout,
+        'auto_logout_mins' => $idleMinutes,
+        'auto_logout_remaining_seconds' => $remainingSeconds,
+    ];
     $workflow = workflow_config($pdo);
     $people = $canViewPeople ? state_value($pdo, 'nab:people', []) : [];
     if ($canViewPeople) {
@@ -1049,6 +1064,7 @@ function state_payload(PDO $pdo, array $user): array {
         'user_count' => is_system_admin($user) ? (int)$pdo->query('SELECT COUNT(*) FROM nab_users')->fetchColumn() : null,
         'csrf' => (string)($_SESSION['csrf_token'] ?? ''),
         'security' => ['totp_enrolled' => totp_is_enrolled($pdo, (int)$user['id'])],
+        'session_policy' => $sessionPolicy,
         'state_versions' => state_versions($pdo, $user),
         'state' => [
             'nab:people' => $people,
@@ -1057,7 +1073,7 @@ function state_payload(PDO $pdo, array $user): array {
             'nab:audit' => $canViewAudit ? state_value($pdo, 'nab:audit', []) : [],
             'nab:roles' => $canViewRoles ? state_value($pdo, 'nab:roles', default_roles()) : [],
             'nab:notes' => $canViewNotes ? notes_payload($pdo) : [],
-            'nab:settings' => $canViewSettings ? state_value($pdo, 'nab:settings', [default_settings()]) : [],
+            'nab:settings' => $canViewSettings ? $settingsData : [],
             'tasks' => $canViewTasks ? state_value($pdo, 'nab:tasks:' . (string)$user['username'], []) : [],
             'legacy_tasks_imported' => $canViewTasks ? state_value($pdo, 'nab:legacy_tasks_imported:' . (string)$user['username'], []) : [],
             'legacy_migration_completed' => $canManageUsers ? state_value($pdo, 'nab:legacy_migration_completed', []) : [],
@@ -1358,6 +1374,19 @@ function same_checklist_progress(array $left, array $right): bool {
     return json_encode($normalizedLeft, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) === json_encode($normalizedRight, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
+function same_stage_checklist_progress(mixed $left, mixed $right): bool {
+    $left = is_array($left) ? $left : [];
+    $right = is_array($right) ? $right : [];
+    $stageIds = array_values(array_unique(array_map('strval', array_merge(array_keys($left), array_keys($right)))));
+    sort($stageIds, SORT_STRING);
+    foreach ($stageIds as $stageId) {
+        $leftStage = is_array($left[$stageId] ?? null) ? $left[$stageId] : [];
+        $rightStage = is_array($right[$stageId] ?? null) ? $right[$stageId] : [];
+        if (!same_checklist_progress($leftStage, $rightStage)) return false;
+    }
+    return true;
+}
+
 function authorize_stage_checklist(array $before, array $candidate, array $user, array $workflow): array {
     $oldProgress = is_array($before['stageChecklist'] ?? null) ? $before['stageChecklist'] : [];
     $requested = is_array($candidate['stageChecklist'] ?? null) ? $candidate['stageChecklist'] : [];
@@ -1471,6 +1500,7 @@ function authorize_people_change(PDO $pdo, array $user, array $next): array {
             foreach (['updatedAt', 'updatedBy', 'ts', 'stageEnteredAt'] as $ignored) { unset($beforeCompare[$ignored], $afterCompare[$ignored]); }
             $changed = [];
             foreach (array_unique(array_merge(array_keys($beforeCompare), array_keys($afterCompare))) as $field) {
+                if ($field === 'stageChecklist' && same_stage_checklist_progress($beforeCompare[$field] ?? [], $afterCompare[$field] ?? [])) continue;
                 if (($beforeCompare[$field] ?? null) !== ($afterCompare[$field] ?? null)) $changed[] = $field;
             }
             if (in_array('status', $changed, true) || in_array('stageId', $changed, true)) {
@@ -3138,7 +3168,18 @@ try {
             if (!$isNew && count($historyInput) < count($oldHistory)) fail(403, 'تاریخچهٔ کار قابل حذف یا بازنویسی نیست.');
             if (!$isNew) {
                 foreach ($oldHistory as $index => $oldLog) {
-                    if (!array_key_exists($index, $historyInput) || json_encode($oldLog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !== json_encode($historyInput[$index], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) fail(403, 'تاریخچهٔ کار فقط به‌صورت افزایشی قابل ثبت است.');
+                    if (!array_key_exists($index, $historyInput)) fail(403, 'تاریخچهٔ کار فقط به‌صورت افزایشی قابل ثبت است.');
+                    $submittedLog = $historyInput[$index];
+                    $oldComparableLog = $oldLog;
+                    $submittedComparableLog = $submittedLog;
+                    // A queued same-tab save can carry the original client timestamps for
+                    // an entry already canonicalized by an earlier response. Keep the
+                    // server's old entry and compare all client-controlled fields strictly.
+                    if (is_array($oldComparableLog) && is_array($submittedComparableLog)) {
+                        unset($oldComparableLog['createdAt'], $oldComparableLog['createdBy']);
+                        unset($submittedComparableLog['createdAt'], $submittedComparableLog['createdBy']);
+                    }
+                    if (json_encode($oldComparableLog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !== json_encode($submittedComparableLog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) fail(403, 'تاریخچهٔ کار فقط به‌صورت افزایشی قابل ثبت است.');
                 }
             }
             $newLogs = array_slice($historyInput, count($oldHistory));

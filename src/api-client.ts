@@ -40,6 +40,11 @@ export interface AppBootstrap {
   state: Record<string, unknown[]>
   state_versions: Record<string, string>
   security?: { totp_enrolled: boolean }
+  session_policy?: {
+    auto_logout: boolean
+    auto_logout_mins: number
+    auto_logout_remaining_seconds: number | null
+  }
 }
 
 export interface LoginMfaChallenge {
@@ -128,9 +133,17 @@ function queueStateJob<T>(keys: string[], job: () => Promise<T>): Promise<T> {
   return current
 }
 
-function queueStateWrite<T extends { version: string }>(key: string, action: string, body: Record<string, unknown>): Promise<T> {
+function queueStateWrite<T extends { version: string }>(
+  key: string,
+  action: string,
+  body: Record<string, unknown>,
+  options: { rebaseQueuedWrite?: boolean } = {},
+): Promise<T> {
+  // Snapshot the token at enqueue time for ordinary writes. Re-reading a newer token
+  // after waiting would let an old captured payload overwrite a preceding save.
+  const enqueuedVersion = stateVersions[key]
   return queueStateJob([key], async () => {
-    const expectedVersion = stateVersions[key]
+    const expectedVersion = options.rebaseQueuedWrite ? stateVersions[key] : enqueuedVersion
     if (!expectedVersion) {
       throw new ApiError('نسخهٔ همگام‌سازی در دسترس نیست؛ صفحه را تازه‌سازی و دوباره وارد شوید.', 428, 'missing_state_version')
     }
@@ -144,8 +157,11 @@ function queueStateWrite<T extends { version: string }>(key: string, action: str
 }
 
 function queueStateTransaction<T>(keys: string[], expectedKey: string, action: string, body: Record<string, unknown>): Promise<T> {
+  // The payload was built from the UI state at enqueue time; keep its matching version.
+  // If an earlier queued transaction commits first, the server must reject this stale payload.
+  const enqueuedVersion = stateVersions[expectedKey]
   return queueStateJob(keys, async () => {
-    const expectedVersion = stateVersions[expectedKey]
+    const expectedVersion = enqueuedVersion
     if (!expectedVersion) {
       throw new ApiError('نسخهٔ همگام‌سازی در دسترس نیست؛ صفحه را تازه‌سازی و دوباره وارد شوید.', 428, 'missing_state_version')
     }
@@ -403,5 +419,8 @@ export function fetchTasks(): Promise<unknown[]> {
 }
 
 export function syncTasks(tasks: unknown[], username: string): Promise<{ version: string; tasks: unknown[] }> {
-  return queueStateWrite(`nab:tasks:${username}`, 'tasks_save', { tasks })
+  // Task snapshots are cumulative edits in this tab. The server canonicalizes existing
+  // history entries and the queued snapshot includes prior local edits, so it may rebase
+  // onto the latest version after the preceding task save completes.
+  return queueStateWrite(`nab:tasks:${username}`, 'tasks_save', { tasks }, { rebaseQueuedWrite: true })
 }
