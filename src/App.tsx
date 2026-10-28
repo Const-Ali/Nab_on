@@ -36,6 +36,9 @@ import {
   saveUser as createUserOnServer,
   setupAdmin as setupAdminOnServer,
   saveWorkflow as saveWorkflowOnServer,
+  saveDocument as saveDocumentOnServer,
+  deleteDocument as deleteDocumentOnServer,
+  saveDocumentWorkflow as saveDocumentWorkflowOnServer,
   savePeopleBundle,
   saveNotesBundle,
   syncSave,
@@ -70,10 +73,13 @@ import type {
   ThemeMode,
   AppSettings,
 } from './types'
+import type { DocumentDraft, DocumentRecord, DocumentWorkflow } from './documents'
+import { defaultDocumentWorkflow, normalizeDocumentRecord, normalizeDocumentWorkflow } from './documents'
 import { Login } from './components/pages/Login'
 import { SetupAdmin } from './components/pages/SetupAdmin'
 import { Dashboard } from './components/pages/Dashboard'
 import { Persons } from './components/pages/Persons'
+import { Documents } from './components/pages/Documents'
 import { WorkflowBoard } from './components/pages/WorkflowBoard'
 import { Activities } from './components/pages/Activities'
 import { Users } from './components/pages/Users'
@@ -81,6 +87,7 @@ import { Reports } from './components/pages/Reports'
 import { Settings } from './components/pages/Settings'
 import { PersonModal } from './components/modals/PersonModal'
 import { WorkflowManager } from './components/modals/WorkflowManager'
+import { DocumentWorkflowManager } from './components/modals/DocumentWorkflowManager'
 import { CreateModal } from './components/modals/CreateModal'
 import { RoleModal } from './components/modals/RoleModal'
 import { AddUserModal } from './components/modals/AddUserModal'
@@ -170,6 +177,7 @@ function PageIcon({ name }: { name: Page | 'more' }) {
     <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {name === 'dashboard' && <><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></>}
       {name === 'persons' && <><circle cx="10" cy="8" r="3.4" /><path d="M3.7 20v-1.5a3.4 3.4 0 0 1 3.4-3.4h5.8a3.4 3.4 0 0 1 3.4 3.4V20" /><path d="M16.2 4.8a3.4 3.4 0 0 1 0 6.4M18.1 15.2a3.3 3.3 0 0 1 2.2 3.1V20" /></>}
+      {name === 'documents' && <><path d="M7 3.5h7l4 4V20a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1-1.5Z" /><path d="M14 3.8V8h4M9 12h6M9 16h6" /></>}
       {name === 'workflow' && <><circle cx="6" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><circle cx="18" cy="6" r="2" /><path d="M8 6h4a6 6 0 0 1 6 6v4M6 8v8a2 2 0 0 0 2 2h8" /></>}
       {name === 'activities' && <><path d="M4 12h3l2.2-5 4.4 10 2.2-5H20" /><path d="M4 4v16M20 4v16" opacity=".35" /></>}
       {name === 'users' && <><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.4" /><path d="M3.5 20v-1.3a3.7 3.7 0 0 1 3.7-3.7h3.6a3.7 3.7 0 0 1 3.7 3.7V20M15 15.2a3.3 3.3 0 0 1 5.5 2.5V20" /></>}
@@ -195,8 +203,11 @@ export default function App() {
   const [totpEnrolled, setTotpEnrolled] = useState(false)
   const [people, setPeople] = useState<Person[]>([])
   const [workflowConfig, setWorkflowConfig] = useState<WorkflowConfig>(defaultWorkflowConfig)
+  const [documents, setDocuments] = useState<DocumentRecord[]>([])
+  const [documentWorkflow, setDocumentWorkflow] = useState<DocumentWorkflow>(defaultDocumentWorkflow)
   const [workflowVersion, setWorkflowVersion] = useState('')
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false)
+  const [documentWorkflowManagerOpen, setDocumentWorkflowManagerOpen] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationError, setNotificationError] = useState('')
@@ -240,6 +251,11 @@ export default function App() {
     setPeople(Array.isArray(data.state['nab:people']) ? data.state['nab:people'] as Person[] : [])
     setWorkflowConfig(normalizeWorkflowConfig(data.state['nab:workflow']?.[0]))
     setWorkflowVersion(data.state_versions['nab:workflow'] ?? '')
+    const nextDocumentWorkflow = normalizeDocumentWorkflow(data.state['nab:documents_workflow']?.[0])
+    setDocumentWorkflow(nextDocumentWorkflow)
+    setDocuments(Array.isArray(data.state['nab:documents'])
+      ? data.state['nab:documents'].map(document => normalizeDocumentRecord(document, nextDocumentWorkflow)).filter((document): document is DocumentRecord => document !== null)
+      : [])
     setActivities(Array.isArray(data.state['nab:activities']) ? data.state['nab:activities'] as Activity[] : [])
     setAudit(Array.isArray(data.state['nab:audit']) ? data.state['nab:audit'] as Audit[] : [])
     setRoles(Array.isArray(data.state['nab:roles']) && data.state['nab:roles'].length ? data.state['nab:roles'] as RoleDef[] : defaultRoles)
@@ -253,7 +269,7 @@ export default function App() {
     const currentTasks = data.state.tasks
     const taskMarker = data.state.legacy_tasks_imported
     const sharedMigrationMarker = data.state.legacy_migration_completed
-    const serverHasRecords = ['nab:people', 'nab:activities', 'nab:audit', 'nab:notes'].some(key => Array.isArray(data.state[key]) && data.state[key].length > 0)
+    const serverHasRecords = ['nab:people', 'nab:activities', 'nab:audit', 'nab:notes', 'nab:documents'].some(key => Array.isArray(data.state[key]) && data.state[key].length > 0)
       || (Array.isArray(serverRoles) && serverRoles.length > defaultRoles.length)
       || (Array.isArray(currentTasks) && currentTasks.length > 0)
       || (Array.isArray(taskMarker) && taskMarker.length > 0)
@@ -314,6 +330,8 @@ export default function App() {
       setPeople([])
       setWorkflowConfig(defaultWorkflowConfig)
       setWorkflowVersion('')
+      setDocuments([])
+      setDocumentWorkflow(defaultDocumentWorkflow)
       setActivities([])
       setAudit([])
       setRoles([])
@@ -321,6 +339,8 @@ export default function App() {
       setNotifications([])
       setNotificationsOpen(false)
       setExcelImportOpen(false)
+      setWorkflowManagerOpen(false)
+      setDocumentWorkflowManagerOpen(false)
       setServerMessage('نشست شما پایان یافته است؛ دوباره وارد شوید.')
     }
     window.addEventListener('nab:auth-expired', onAuthExpired)
@@ -385,6 +405,10 @@ export default function App() {
     [users, sessionUsername],
   )
   const activityTrend = useMemo(() => buildMonthlyActivityTrend(activities), [activities])
+  const documentStageUsage = useMemo<Record<string, number>>(
+    () => Object.fromEntries(documentWorkflow.stages.map(stage => [stage.id, documents.filter(item => item.stageId === stage.id).length])),
+    [documentWorkflow.stages, documents],
+  )
 
   const has = (p: Permission) => Boolean(currentUser?.permissions.includes(p))
   const canViewPeople = has('view_persons')
@@ -402,7 +426,7 @@ export default function App() {
   const canRestoreBackup = has('restore_backup')
   const canPurgeServerData = currentUser?.role === 'admin' && has('purge_server_data')
   const canViewUserDirectory = canViewUsers || canViewRoles || canExportBackup || canRestoreBackup || canPurgeServerData
-  const canViewSettings = has('view_settings') || has('manage_settings') || has('manage_workflow')
+  const canViewSettings = has('view_settings') || has('manage_settings') || has('manage_workflow') || has('manage_document_workflow')
   const canOpenPage = (target: Page): boolean => {
     switch (target) {
       case 'dashboard': return has('view_dashboard')
@@ -413,6 +437,7 @@ export default function App() {
       case 'reports': return has('view_reports')
       case 'settings': return canViewSettings
       case 'tasks': return has('view_tasks')
+      case 'documents': return has('view_documents')
     }
   }
   const toggleTheme = () => setTheme(current => current === 'dark' ? 'light' : 'dark')
@@ -602,6 +627,38 @@ export default function App() {
   }
 
 
+  const handleSaveDocument = async (document: DocumentDraft): Promise<DocumentRecord> => {
+    if (!has('view_documents')) throw new Error('مجوز مشاهدهٔ پیگیری مدارک را ندارید.')
+    const result = await saveDocumentOnServer(document)
+    const nextDocuments = result.documents
+      .map(item => normalizeDocumentRecord(item, documentWorkflow))
+      .filter((item): item is DocumentRecord => item !== null)
+    setDocuments(nextDocuments)
+    const savedDocument = normalizeDocumentRecord(result.document, documentWorkflow)
+    if (!savedDocument) throw new Error('پاسخ ذخیرهٔ مدرک معتبر نیست؛ صفحه را تازه‌سازی کنید.')
+    return savedDocument
+  }
+
+  const handleDeleteDocument = async (id: string) => {
+    if (!has('delete_document')) throw new Error('مجوز حذف مدرک را ندارید.')
+    const result = await deleteDocumentOnServer(id)
+    setDocuments(result.documents
+      .map(item => normalizeDocumentRecord(item, documentWorkflow))
+      .filter((item): item is DocumentRecord => item !== null))
+  }
+
+  const handleSaveDocumentWorkflow = async (nextWorkflow: DocumentWorkflow) => {
+    if (!has('manage_document_workflow')) throw new Error('مجوز مدیریت مرحله‌های مدارک را ندارید.')
+    const result = await saveDocumentWorkflowOnServer(nextWorkflow)
+    const normalized = normalizeDocumentWorkflow(result.workflow)
+    setDocumentWorkflow(normalized)
+    setDocuments(current => current
+      .map(document => normalizeDocumentRecord(document, normalized))
+      .filter((document): document is DocumentRecord => document !== null))
+    setDocumentWorkflowManagerOpen(false)
+    showToast('مرحله‌ها و شرح گردش‌کار مدارک ذخیره شدند.')
+  }
+
   const handleSaveSettings = async (nextSettings: AppSettings) => {
     if (!has('manage_settings')) throw new Error('مجوز ویرایش تنظیمات را ندارید.')
     await syncSave('nab:settings', [nextSettings])
@@ -620,8 +677,11 @@ export default function App() {
     setPeople([])
     setWorkflowConfig(defaultWorkflowConfig)
     setWorkflowVersion('')
+    setDocuments([])
+    setDocumentWorkflow(defaultDocumentWorkflow)
     setAppSettings(defaultSettings)
     setWorkflowManagerOpen(false)
+    setDocumentWorkflowManagerOpen(false)
     setActivities([])
     setAudit([])
     setRoles([])
@@ -1062,7 +1122,8 @@ export default function App() {
   const navItems: [Page, string][] = [
     ['dashboard', 'داشبورد'],
     ['persons', 'افراد و پرونده‌ها'],
-    ['workflow', 'گردش‌کار'],
+    ['documents', 'پیگیری مدارک'],
+    ['workflow', 'گردش‌کار پرونده‌ها'],
     ['activities', 'رویدادها'],
     ['users', 'کاربران و دسترسی'],
     ['reports', 'گزارش‌ها و تحلیل'],
@@ -1073,7 +1134,7 @@ export default function App() {
   const mobileNavItems = visibleNavItems.filter(([key]) => primaryNavKeys.has(key))
   const mobileMoreItems = visibleNavItems.filter(([key]) => !primaryNavKeys.has(key))
   const mobileMorePageActive = (page === 'tasks' && has('view_tasks')) || mobileMoreItems.some(([key]) => key === page)
-  const compactNavLabels: Record<Page, string> = { dashboard: 'داشبورد', persons: 'افراد', workflow: 'گردش‌کار', activities: 'رویدادها', users: 'کاربران', reports: 'گزارش‌ها', settings: 'تنظیمات', tasks: 'کارها' }
+  const compactNavLabels: Record<Page, string> = { dashboard: 'داشبورد', persons: 'افراد', documents: 'مدارک', workflow: 'گردش‌کار', activities: 'رویدادها', users: 'کاربران', reports: 'گزارش‌ها', settings: 'تنظیمات', tasks: 'کارها' }
 
   const todayJ = jalaliParts(new Date())
   const headerDate = `${todayJ.d} ${jalaliMonthNames[todayJ.m - 1]} ${todayJ.y}`
@@ -1420,6 +1481,21 @@ export default function App() {
             />
           )}
 
+          {page === 'documents' && has('view_documents') && (
+            <Documents
+              documents={documents}
+              workflow={documentWorkflow}
+              canCreate={has('create_document')}
+              canEdit={has('edit_document')}
+              canChangeStage={has('change_document_stage')}
+              canDelete={has('delete_document')}
+              canExport={has('export_documents')}
+              onSaveDocument={handleSaveDocument}
+              onDeleteDocument={handleDeleteDocument}
+              onToast={showToast}
+            />
+          )}
+
           {page === 'workflow' && has('view_workflow') && (
             <WorkflowBoard
               people={people}
@@ -1506,6 +1582,7 @@ export default function App() {
             settings={appSettings}
             canManage={has('manage_settings')}
             canManageWorkflow={has('manage_workflow')}
+            canManageDocumentWorkflow={has('manage_document_workflow')}
             isSystemAdmin={currentUser.role === 'admin'}
             totpEnrolled={totpEnrolled}
             onStartTotpEnrollment={startTotpEnrollment}
@@ -1515,6 +1592,7 @@ export default function App() {
               showToast('برنامهٔ احراز هویت برای حساب مدیر ثبت شد.')
             }}
             onManageWorkflow={() => setWorkflowManagerOpen(true)}
+            onManageDocumentWorkflow={() => setDocumentWorkflowManagerOpen(true)}
             onSave={handleSaveSettings}
           />}
           {(!canOpenPage(page) || page === 'tasks') && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"><b className="block">این بخش برای حساب شما در دسترس نیست.</b><span>از مدیر سامانه بخواهید مجوز صفحه یا عملیات موردنیاز را در نقش یا تنظیم اختصاصی کاربر فعال کند.</span></section>}
@@ -1527,6 +1605,14 @@ export default function App() {
           config={workflowConfig}
           onClose={() => setWorkflowManagerOpen(false)}
           onSave={handleSaveWorkflow}
+        />
+      )}
+      {documentWorkflowManagerOpen && has('manage_document_workflow') && (
+        <DocumentWorkflowManager
+          workflow={documentWorkflow}
+          stageUsage={documentStageUsage}
+          onClose={() => setDocumentWorkflowManagerOpen(false)}
+          onSave={handleSaveDocumentWorkflow}
         />
       )}
       {excelImportOpen && canViewPeople && has('create_person') && has('import_people_excel') && (

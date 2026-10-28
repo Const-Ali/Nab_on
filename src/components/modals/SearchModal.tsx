@@ -6,7 +6,7 @@ import type { Person, Activity, Note } from '../../types'
 import { Badge } from '../common/Badge'
 import { backdropCls, cn, modalBox, modalSearchLayout, modalX, searchInput } from '../ui'
 
-type SearchPage = 'dashboard' | 'persons' | 'workflow' | 'activities' | 'users' | 'reports' | 'settings' | 'tasks'
+type SearchPage = 'dashboard' | 'persons' | 'documents' | 'workflow' | 'activities' | 'users' | 'reports' | 'settings' | 'tasks'
 
 interface CommandItem {
   id: string
@@ -104,6 +104,14 @@ export function SearchModal({
         },
       },
       {
+        id: 'cmd-nav-documents',
+        title: 'رفتن به پیگیری مدارک',
+        subtitle: 'ثبت نوع مدرک، موضوع، مرکز، پاسخ و مدت رسیدگی',
+        category: 'پیمایش صفحات',
+        keywords: ['مدرک', 'مدارک', 'مرکز', 'مکاتبه', 'پاسخ مرکز', 'documents'],
+        action: () => { onClose(); onNavigate?.('documents') },
+      },
+      {
         id: 'cmd-nav-workflow',
         title: 'رفتن به برد گردش‌کار',
         subtitle: 'جابجایی پرونده‌ها بین مراحل گردش‌کار',
@@ -157,6 +165,7 @@ export function SearchModal({
       const pageByCommand: Record<string, SearchPage> = {
         'cmd-nav-dashboard': 'dashboard',
         'cmd-nav-persons': 'persons',
+        'cmd-nav-documents': 'documents',
         'cmd-nav-workflow': 'workflow',
         'cmd-nav-activities': 'activities',
         'cmd-nav-users': 'users',

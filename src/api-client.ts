@@ -1,5 +1,6 @@
 import type { Activity, AppNotification, Audit, Note, PeopleImportRow, Person, ServerPersonExportRow, User } from './types'
 import type { WorkflowConfig } from './workflow'
+import type { DocumentDraft, DocumentRecord, DocumentWorkflow } from './documents'
 
 const API_BASE = '/api.php'
 let csrfToken = ''
@@ -423,4 +424,25 @@ export function syncTasks(tasks: unknown[], username: string): Promise<{ version
   // history entries and the queued snapshot includes prior local edits, so it may rebase
   // onto the latest version after the preceding task save completes.
   return queueStateWrite(`nab:tasks:${username}`, 'tasks_save', { tasks }, { rebaseQueuedWrite: true })
+}
+
+export function saveDocument(document: DocumentDraft): Promise<{ version: string; documents: DocumentRecord[]; document: DocumentRecord }> {
+  // Each request mutates one record against the latest canonical list; rebasing it after
+  // another same-tab document write does not resend a stale full-list snapshot.
+  return queueStateWrite('nab:documents', 'documents_save', { document }, { rebaseQueuedWrite: true })
+}
+
+export function deleteDocument(id: string): Promise<{ version: string; documents: DocumentRecord[] }> {
+  return queueStateWrite('nab:documents', 'documents_delete', { id }, { rebaseQueuedWrite: true })
+}
+
+export function saveDocumentWorkflow(workflow: DocumentWorkflow): Promise<{ version: string; workflow: DocumentWorkflow }> {
+  // Workflow edits and document-stage edits share a queue so a stage cannot be removed
+  // between a document save and the corresponding configuration check.
+  return queueStateTransaction(
+    ['nab:documents', 'nab:documents_workflow'],
+    'nab:documents_workflow',
+    'documents_workflow_save',
+    { workflow },
+  )
 }

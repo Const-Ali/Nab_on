@@ -147,6 +147,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     'view_workflow', 'manage_workflow', 'view_activities', 'export_activities',
     'view_reports', 'print_reports', 'view_audit_log', 'view_users', 'create_user', 'edit_user', 'delete_user', 'manage_users',
     'view_roles', 'create_role', 'edit_role', 'delete_role', 'manage_roles', 'export_backup', 'restore_backup', 'purge_server_data', 'view_settings', 'manage_settings', 'view_tasks', 'create_task', 'edit_task', 'change_task_status', 'delete_task',
+    'view_documents', 'create_document', 'edit_document', 'change_document_stage', 'delete_document', 'export_documents', 'manage_document_workflow',
   ],
   assistant: [
     'view_dashboard', 'view_persons', 'create_person', 'edit_person',
@@ -206,6 +207,13 @@ export const permissionLabels: Record<Permission, string> = {
   edit_task: 'ویرایش جزئیات کار',
   change_task_status: 'تغییر وضعیت و تکمیل/بازگشایی کار',
   delete_task: 'حذف کار',
+  view_documents: 'مشاهدهٔ پیگیری مدارک',
+  create_document: 'ثبت مدرک',
+  edit_document: 'ویرایش اطلاعات مدرک',
+  change_document_stage: 'تغییر مرحلهٔ مدرک',
+  delete_document: 'حذف مدرک',
+  export_documents: 'خروجی مدارک',
+  manage_document_workflow: 'مدیریت مرحله‌های گردش‌کار مدارک',
 }
 
 export const permissionGroups: { title: string; permissions: Permission[] }[] = [
@@ -218,6 +226,7 @@ export const permissionGroups: { title: string; permissions: Permission[] }[] = 
   { title: 'پشتیبان‌گیری و پاکسازی سامانه', permissions: ['export_backup', 'restore_backup', 'purge_server_data'] },
   { title: 'تنظیمات سامانه', permissions: ['manage_settings'] },
   { title: 'کارهای من', permissions: ['create_task', 'edit_task', 'change_task_status', 'delete_task'] },
+  { title: 'مدارک و گردش‌کار مستقل', permissions: ['view_documents', 'create_document', 'edit_document', 'change_document_stage', 'delete_document', 'export_documents', 'manage_document_workflow'] },
 ]
 
 export const defaultRoles: RoleDef[] = [
@@ -263,9 +272,10 @@ export function permissionDependencyError(permissions: readonly Permission[]): s
   if (['create_task', 'edit_task', 'change_task_status', 'delete_task'].some(permission => selected.has(permission as Permission)) && !selected.has('view_tasks')) return 'عملیات کارها به مجوز «مشاهدهٔ کارهای من» نیز نیاز دارد.'
   if (['create_user', 'edit_user', 'delete_user'].some(permission => selected.has(permission as Permission)) && !selected.has('view_users')) return 'مدیریت حساب‌ها به مجوز «مشاهدهٔ فهرست حساب‌های کاربری» نیز نیاز دارد.'
   if (['create_role', 'edit_role', 'delete_role'].some(permission => selected.has(permission as Permission)) && !selected.has('view_roles')) return 'مدیریت نقش‌ها به مجوز «مشاهدهٔ نقش‌ها» نیز نیاز دارد.'
+  if (['create_document', 'edit_document', 'change_document_stage', 'delete_document', 'export_documents', 'manage_document_workflow'].some(permission => selected.has(permission as Permission)) && !selected.has('view_documents')) return 'عملیات مدارک به مجوز «مشاهدهٔ پیگیری مدارک» نیز نیاز دارد.'
   return null
 }
-export const defaultSettings: AppSettings = { appName: 'سامانه مدیریت پرونده ناب', twoFactor: false, auditLog: true, autoLogout: false, autoLogoutMins: 30, font: 'vazir' }
+export const defaultSettings: AppSettings = { appName: 'سامانه مدیریت پرونده ناب', twoFactor: true, auditLog: true, autoLogout: true, autoLogoutMins: 30, font: 'vazir' }
 
 export const userByRole: Record<Role, { name: string; title: string }> = {
   admin: { name: 'احمد محمدی', title: 'مدیر سیستم' },

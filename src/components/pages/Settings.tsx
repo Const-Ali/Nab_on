@@ -9,15 +9,17 @@ import { cn, inputCls, labelCls, panelBox, selectCls } from '../ui'
 import { VersionInfoCard } from '../common/VersionStatus'
 import { useAppVersion } from '../../version'
 
-export function Settings({ settings, canManage, canManageWorkflow, isSystemAdmin, totpEnrolled, onStartTotpEnrollment, onConfirmTotpEnrollment, onManageWorkflow, onSave }: {
+export function Settings({ settings, canManage, canManageWorkflow, canManageDocumentWorkflow, isSystemAdmin, totpEnrolled, onStartTotpEnrollment, onConfirmTotpEnrollment, onManageWorkflow, onManageDocumentWorkflow, onSave }: {
   settings: AppSettings
   canManage: boolean
   canManageWorkflow: boolean
+  canManageDocumentWorkflow: boolean
   isSystemAdmin: boolean
   totpEnrolled: boolean
   onStartTotpEnrollment: (currentPassword: string) => Promise<TotpEnrollmentChallenge>
   onConfirmTotpEnrollment: (code: string) => Promise<void>
   onManageWorkflow: () => void
+  onManageDocumentWorkflow: () => void
   onSave: (settings: AppSettings) => Promise<void> | void
 }) {
   const versionStatus = useAppVersion()
@@ -80,7 +82,7 @@ export function Settings({ settings, canManage, canManageWorkflow, isSystemAdmin
   return (
     <>
       <Heading title="تنظیمات" subtitle="تنظیمات عمومی و امنیتی سامانه؛ دسترسی مشاهده و ویرایش جداگانه است." />
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <section className={cn(panelBox, 'space-y-4 p-4 sm:p-5')}>
           <h2>تنظیمات عمومی</h2><p>تنظیمات مشترک سامانه روی سرور ذخیره می‌شود.</p>
           <label className={labelCls}>نام سامانه<input className={inputCls} maxLength={100} value={draft.appName} disabled={!canManage} onChange={e => update({ appName: e.target.value })} /></label>
@@ -133,14 +135,21 @@ export function Settings({ settings, canManage, canManageWorkflow, isSystemAdmin
           </div>}
           {error && <p className="text-sm text-rose-700 dark:text-rose-300" role="alert">{error}</p>}
         </section>
-        {canManageWorkflow && (
-          <section className={cn(panelBox, 'space-y-3 p-4 sm:p-5')}>
-            <h2>گردش‌کار پرونده</h2>
-            <p className="text-sm leading-6 text-slate-500 dark:text-slate-400">ویرایش نام و شرط‌های مرحله، تعداد مرحله‌ها و چک‌لیست دستی. مسیرهای فعلی گردش‌کار ثابت می‌مانند.</p>
-            <Button type="button" variant="primary" onClick={onManageWorkflow}>مدیریت گردش‌کار</Button>
-          </section>
-        )}
-        <div className="xl:col-span-2">
+        {canManageWorkflow && <section className={cn(panelBox, 'flex h-full flex-col items-start gap-3 p-4 sm:p-5')}>
+          <div>
+            <h2>گردش‌کار پرونده‌ها</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">تنظیم مرحله‌ها و چک‌لیست دستی پرونده‌های افراد؛ مسیرهای فعلی حفظ می‌شوند.</p>
+          </div>
+          <Button type="button" variant="primary" className="mt-auto" onClick={onManageWorkflow}>مدیریت گردش‌کار پرونده‌ها</Button>
+        </section>}
+        {canManageDocumentWorkflow && <section className={cn(panelBox, 'flex h-full flex-col items-start gap-3 p-4 sm:p-5')}>
+          <div>
+            <h2>گردش‌کار مدارک</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">افزودن، ویرایش، مرتب‌سازی و حذف مرحله‌ها و شرح آن‌ها؛ مستقل از پرونده‌های افراد.</p>
+          </div>
+          <Button type="button" variant="primary" className="mt-auto" onClick={onManageDocumentWorkflow}>مدیریت گردش‌کار مدارک</Button>
+        </section>}
+        <div className="lg:col-span-2">
           <VersionInfoCard status={versionStatus} onRefresh={versionStatus.refresh} />
         </div>
       </div>

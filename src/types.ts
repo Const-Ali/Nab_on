@@ -10,6 +10,7 @@ export type Page =
   | 'reports'
   | 'settings'
   | 'tasks'
+  | 'documents'
 
 export type Permission =
   | 'view_dashboard'
@@ -56,6 +57,13 @@ export type Permission =
   | 'edit_task'
   | 'change_task_status'
   | 'delete_task'
+  | 'view_documents'
+  | 'create_document'
+  | 'edit_document'
+  | 'change_document_stage'
+  | 'delete_document'
+  | 'export_documents'
+  | 'manage_document_workflow'
 
 export type Role = string
 export type RoleDef = { id: string; title: string; permissions: Permission[]; builtin?: boolean }

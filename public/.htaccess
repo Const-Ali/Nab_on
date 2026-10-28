@@ -1,6 +1,26 @@
 Options -Indexes
 RewriteEngine On
 
+# Send defensive browser policies on every static/API response.
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "same-origin"
+  Header always set X-Permitted-Cross-Domain-Policies "none"
+  Header always set Cross-Origin-Opener-Policy "same-origin"
+  Header always set Cross-Origin-Resource-Policy "same-origin"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.github.com; worker-src 'self' blob:; media-src 'self' blob:; manifest-src 'self'"
+</IfModule>
+
+# HSTS is sent only for HTTPS requests; it intentionally does not include subdomains.
+<IfModule mod_setenvif.c>
+  SetEnvIfNoCase HTTPS "^on$" NAB_HTTPS
+</IfModule>
+<IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=31536000" env=NAB_HTTPS
+</IfModule>
+
 # Do not expose deployment secrets or common backup/source artifacts if they are
 # accidentally copied into the document root.
 <FilesMatch "(?i)^(\.env|nab-config(?:\..*)?\.php|.*\.(?:sql|log|bak|backup))$">
@@ -15,7 +35,5 @@ RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 RewriteRule ^ index.html [L]
 
-# HTTPS is required for secure session cookies. Prefer enabling Force HTTPS in
-# the hosting control panel after the certificate is active. If needed, uncomment:
-# RewriteCond %{HTTPS} !=on
-# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+# HTTPS must be active on the hosting control panel. Secure session cookies are
+# rejected by the API on non-loopback hosts when secure_cookie is set to false.
