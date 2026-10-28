@@ -16,6 +16,22 @@ export default defineConfig({
   optimizeDeps: {
     include: ['exceljs'],
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('exceljs')) return 'excel'
+            if (id.includes('react')) return 'react-vendor'
+            return 'vendor'
+          }
+          if (id.includes('/src/tasks/')) return 'tasks'
+          if (id.includes('/src/components/pages/Reports') || id.includes('/src/components/pages/Dashboard')) return 'reports'
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     allowedHosts: true,

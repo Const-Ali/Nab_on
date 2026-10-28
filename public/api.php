@@ -1127,6 +1127,23 @@ function remember_safety_backup_download(string $id, int $userId, string $permis
     $_SESSION['safety_backup_downloads'] = $downloads;
 }
 
+function enforce_rate_limit(string $key, int $limit, int $windowSeconds): void {
+    $now = time();
+    $file = sys_get_temp_dir() . '/nab_rl_' . md5($key);
+    $data = [];
+    if (file_exists($file)) {
+        $raw = @file_get_contents($file);
+        if ($raw !== false) {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) $data = $decoded;
+        }
+    }
+    $data = array_values(array_filter($data, fn($t) => is_int($t) && $t > $now - $windowSeconds));
+    if (count($data) >= $limit) fail(429, 'تعداد درخواست‌ها بیش از حد مجاز است؛ لطفاً کمی بعد دوباره امتحان کنید.');
+    $data[] = $now;
+    @file_put_contents($file, json_encode($data), LOCK_EX);
+}
+
 function list_users(PDO $pdo, array $viewer): array {
     $rows = $pdo->query('SELECT * FROM nab_users ORDER BY display_name, username')->fetchAll();
     $canSeeUserPermissions = has_user_operation($viewer, 'edit_user');
@@ -1314,6 +1331,11 @@ function valid_jalali_date(string $value, bool $allowEmpty = false): bool {
     $first = jalali_jdn($year, $month, 1);
     $next = $month === 12 ? jalali_jdn($year + 1, 1, 1) : jalali_jdn($year, $month + 1, 1);
     return $day <= ($next - $first);
+}
+
+function jalali_string_to_jdn(string $value): int {
+    $parts = explode('/', normalize_digits(trim($value)));
+    return jalali_jdn((int)($parts[0] ?? 0), (int)($parts[1] ?? 0), (int)($parts[2] ?? 0));
 }
 
 function valid_national_id(string $value): bool {
@@ -2178,6 +2200,8 @@ try {
     }
 
     if ($action === 'login' && $method === 'POST') {
+        $loginIp = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+        enforce_rate_limit('login:' . $loginIp, 10, 60); // 10 تلاش در دقیقه برای هر IP
         unset($_SESSION['mfa_pending']);
         $username = strtolower(trim((string)($body['username'] ?? '')));
         $password = (string)($body['password'] ?? '');
@@ -2203,7 +2227,7 @@ try {
 
         $settings = state_value($pdo, 'nab:settings', []);
         $settingsRow = isset($settings[0]) && is_array($settings[0]) ? $settings[0] : [];
-        $requiresTotp = !empty($settingsRow['twoFactor']) && (string)$user['role_id'] === 'admin';
+        $requiresTotp = !empty($settingsRow['twoFactor']); // اعمال برای همهٔ نقش‌ها — قبلاً فقط ادمین
         if ($requiresTotp) {
             $mode = 'setup';
             $salt = random_bytes(16);
@@ -3443,11 +3467,15 @@ try {
     }
 
     if ($action === 'tasks_save' && $method === 'POST') {
+        $rlUser = (string)($_SESSION['user_id'] ?? $_SERVER['REMOTE_ADDR'] ?? 'anon');
+        enforce_rate_limit('tasks_save:' . $rlUser, 30, 60); // 30 ذخیره در دقیقه
         $user = require_user($pdo);
         if (!has_permission($user, 'view_tasks')) fail(403, 'مجوز دسترسی به بخش کارهای من را ندارید.');
         $tasks = $body['tasks'] ?? null;
         $expectedVersion = $body['expected_version'] ?? '';
         if (!is_array($tasks) || count($tasks) > 5000) fail(422, 'فهرست کارها معتبر نیست.');
+        $rawTasksJson = json_encode($tasks, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (is_string($rawTasksJson) && strlen($rawTasksJson) > 5 * 1024 * 1024) fail(413, 'حجم کارها بیش از حد مجاز است (۵ مگابایت).');
         if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ ذخیره‌سازی در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
         $taskKey = 'nab:tasks:' . (string)$user['username'];
         acquire_state_write_lock($pdo);
@@ -3505,6 +3533,7 @@ try {
             $oldDue = normalize_digits(trim((string)($before['dueDate'] ?? '')));
             if ($startDate !== '' && !valid_jalali_date($startDate) && ($isNew || $startDate !== $oldStart)) fail(422, 'تاریخ شروع کار معتبر نیست.');
             if ($dueDate !== '' && !valid_jalali_date($dueDate) && ($isNew || $dueDate !== $oldDue)) fail(422, 'مهلت کار معتبر نیست.');
+            if ($startDate !== '' && $dueDate !== '' && valid_jalali_date($startDate) && valid_jalali_date($dueDate) && jalali_string_to_jdn($startDate) > jalali_string_to_jdn($dueDate)) fail(422, 'تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.');
 
             $tagsInput = $rawTask['tags'] ?? ($before['tags'] ?? []);
             if (!is_array($tagsInput) || count($tagsInput) > 50) fail(422, 'فهرست برچسب‌های کار معتبر نیست.');

@@ -4,6 +4,8 @@ import './index.css'
 import App from './App.tsx'
 import TasksApp from './tasks/TasksApp.tsx'
 
+import { ErrorBoundary } from './components/common/ErrorBoundary'
+
 export function RootRouter() {
   const [path, setPath] = useState(() => window.location.pathname)
 
@@ -13,12 +15,14 @@ export function RootRouter() {
     return () => window.removeEventListener('popstate', updatePath)
   }, [])
 
-  return path === '/tasks' ? <TasksApp /> : <App />
+  return <ErrorBoundary>{path === '/tasks' ? <TasksApp /> : <App />}</ErrorBoundary>
 }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <RootRouter />
+    <ErrorBoundary>
+      <RootRouter />
+    </ErrorBoundary>
   </StrictMode>,
 )
 

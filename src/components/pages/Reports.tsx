@@ -61,7 +61,7 @@ export function Reports({
     return activities.filter(item => (item.ts ?? 0) >= end - days * 86400000 && (item.ts ?? 0) < end)
   }, [activities, days])
   const users = computeUserStats(current)
-  const bottlenecks = computeBottlenecks(current, workflowConfig)
+  const bottlenecks = computeBottlenecks(people, workflowConfig)
   const workflowStages = activeStages(workflowConfig)
   const statuses = workflowStages.map(stage => ({ stage, count: people.filter(person => stageIdForPerson(person, workflowConfig) === stage.id).length }))
   const maxStatus = Math.max(...statuses.map(item => item.count), 1)
@@ -70,6 +70,7 @@ export function Reports({
   const change = previous.length ? Math.round(((current.length - previous.length) / previous.length) * 100) : current.length ? 100 : 0
   const countByMetric = (metric: string) => people.filter(person => workflowConfig.stages.find(stage => stage.id === stageIdForPerson(person, workflowConfig))?.metric === metric).length
   const rejectedCount = countByMetric('rejected')
+  const activeCount = countByMetric('active')
   const approved = people.filter(person => {
     const stageId = stageIdForPerson(person, workflowConfig)
     const stage = workflowConfig.stages.find(item => item.id === stageId)
@@ -168,7 +169,7 @@ export function Reports({
         <div className="mt-5 space-y-3">
           {canViewPeople && <>
             <div className="flex justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-950/50"><span className="text-sm text-slate-600 dark:text-slate-300">نرخ تأیید پرونده‌ها</span><b className="text-lg text-emerald-700 dark:text-emerald-300">{toPersianDigits(approvedRate)}٪</b></div>
-            <div className="flex justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-950/50"><span className="text-sm text-slate-600 dark:text-slate-300">پرونده‌های فعال</span><b className="text-lg text-indigo-700 dark:text-indigo-300">{people.length.toLocaleString('fa-IR')}</b></div>
+            <div className="flex justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-950/50"><span className="text-sm text-slate-600 dark:text-slate-300">پرونده‌های فعال</span><b className="text-lg text-indigo-700 dark:text-indigo-300">{activeCount.toLocaleString('fa-IR')}</b></div>
           </>}
           {canViewActivities && <div className="flex justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-950/50"><span className="text-sm text-slate-600 dark:text-slate-300">رویدادهای بازه انتخاب‌شده</span><b className="text-lg text-violet-700 dark:text-violet-300">{current.length.toLocaleString('fa-IR')}</b></div>}
         </div>

@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { BirthDateField } from '../../shared-ui'
 import { normalizeDigits } from '../../shared'
-import { validJalaliDate } from '../utils'
+import { dateJdn, validJalaliDate } from '../utils'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { taskPriorityLabels, taskPriorityOrder, taskStatusLabels, taskStatusOrder, taskTypeLabels } from '../types'
 import type { TaskFields, TaskPriority, TaskStatus, TaskType, WorkTask } from '../types'
 import { backdropCls, cn, errorBox, formGrid, inputCls, modalActions, modalBox, modalFormLayout, modalH2, modalP, modalSmall, selectCls, textareaCls } from '../../components/ui'
@@ -30,6 +31,7 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
   const [note, setNote] = useState(initial?.note ?? '')
   const [error, setError] = useState('')
   const titleInputRef = useRef<HTMLInputElement>(null)
+  const trapRef = useFocusTrap<HTMLFormElement>(true)
 
   useEffect(() => {
     if (window.matchMedia('(min-width: 641px) and (pointer: fine)').matches) {
@@ -53,6 +55,14 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
       setError('مهلت انجام معتبر نیست. مثال: ۱۴۰۵/۰۶/۲۵')
       return
     }
+    if (start && due) {
+      const sJdn = dateJdn(start)
+      const dJdn = dateJdn(due)
+      if (sJdn !== null && dJdn !== null && dJdn < sJdn) {
+        setError('تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.')
+        return
+      }
+    }
     const tags = tagsText.split(/[،,]/).map(x => x.trim()).filter(Boolean).slice(0, 8)
     onSave({
       title: title.trim(),
@@ -70,10 +80,10 @@ export default function TaskForm({ initial, typeDefault, categories, onClose, on
 
   return (
     <div className={backdropCls} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <form className={cn(modalBox, modalFormLayout, 'max-w-3xl')} onSubmit={submit}>
+      <form ref={trapRef} role="dialog" aria-modal="true" aria-labelledby="task-form-title" className={cn(modalBox, modalFormLayout, 'max-w-3xl')} onSubmit={submit}>
         <Button type="button" variant="ghost" size="xs" className="x" onClick={onClose} title="بستن" aria-label="بستن">بستن</Button>
         <small className={modalSmall}>{initial ? 'ویرایش کار' : 'کار جدید'}</small>
-        <h2 className={modalH2}>{initial ? `ویرایش «${initial.title}»` : 'ایجاد کار جدید'}</h2>
+        <h2 id="task-form-title" className={modalH2}>{initial ? `ویرایش «${initial.title}»` : 'ایجاد کار جدید'}</h2>
         <p className={modalP}>کارهای شخصی فقط برای شما قابل مشاهده است؛ کارهای سازمانی بین ایجادکننده و مسئول مشترک می‌شود.</p>
 
         <div className={formGrid}>

@@ -13,7 +13,7 @@ export function PrintReport({ people, activities, printedBy, workflowConfig }: {
     return am && am.y === todayJ.y && am.m === todayJ.m
   })
   const userStats = computeUserStats(monthActs)
-  const bottlenecks = computeBottlenecks(monthActs, workflowConfig)
+  const bottlenecks = computeBottlenecks(people, workflowConfig)
   const workflowStages = activeStages(workflowConfig)
   const countByStageId = (id: string) => people.filter(person => stageIdForPerson(person, workflowConfig) === id).length
   const countByMetric = (metric: string) => people.filter(person => workflowConfig.stages.find(stage => stage.id === stageIdForPerson(person, workflowConfig))?.metric === metric).length
@@ -118,7 +118,7 @@ export function PrintReport({ people, activities, printedBy, workflowConfig }: {
                 <tr key={b.status}>
                   <td>{b.status}</td>
                   <td colSpan={3}>
-                    میانگین مدت توقف: <b>{b.label}</b> (تعداد پرونده‌های بررسی‌شده: {b.count.toLocaleString('fa-IR')})
+                    میانگین انتظار: <b>{b.label}</b> (تعداد پرونده‌های در انتظار: {b.count.toLocaleString('fa-IR')})
                   </td>
                 </tr>
               ))}

@@ -18,6 +18,8 @@ export default function TasksApp() {
   const [tasks, setTasks] = useState<WorkTask[] | null>(null)
   const [error, setError] = useState('')
   const [syncError, setSyncError] = useState('')
+  const [pendingTasks, setPendingTasks] = useState<WorkTask[] | null>(null)
+  const [isRetrying, setIsRetrying] = useState(false)
 
   useEffect(() => { applySavedFont() }, [])
   useLayoutEffect(() => {
@@ -126,12 +128,29 @@ export default function TasksApp() {
     try {
       const result = await syncTasks(nextTasks, user?.username ?? '')
       setSyncError('')
+      setPendingTasks(null)
       return result.tasks.map((task, index) => normalizeTask(task, index))
     } catch (cause) {
+      setPendingTasks(nextTasks)
       setSyncError(cause instanceof Error ? cause.message : 'ذخیرهٔ کارها روی هاست ناموفق بود.')
       throw cause
     }
   }, [user])
+
+  const retrySave = useCallback(async () => {
+    if (!pendingTasks || isRetrying) return
+    setIsRetrying(true)
+    try {
+      const result = await syncTasks(pendingTasks, user?.username ?? '')
+      setSyncError('')
+      setPendingTasks(null)
+      setTasks(result.tasks.map((task, index) => normalizeTask(task, index)))
+    } catch (cause) {
+      setSyncError(cause instanceof Error ? cause.message : 'ذخیرهٔ کارها روی هاست ناموفق بود.')
+    } finally {
+      setIsRetrying(false)
+    }
+  }, [pendingTasks, isRetrying, user])
 
   if (error) {
     return <main className="auth-safe-shell grid min-h-svh place-items-center bg-slate-50 p-6 text-center dark:bg-slate-950" dir="rtl"><div className="max-w-lg rounded-2xl border border-rose-200 bg-white p-6 text-sm leading-7 text-rose-700 dark:border-rose-900/60 dark:bg-slate-900 dark:text-rose-300"><p>{error}</p><a className="mt-4 inline-block font-semibold text-indigo-600" href="/">بازگشت به ورود</a></div></main>
@@ -152,7 +171,7 @@ export default function TasksApp() {
           }}
         />
       </header>
-      {syncError && <div className="mx-auto mt-3 max-w-5xl rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">ذخیره‌سازی روی هاست ناموفق بود: {syncError}</div>}
+      {syncError && <div className="mx-auto mt-3 flex max-w-5xl flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300"><span>ذخیره‌سازی روی هاست ناموفق بود: {syncError} — تغییرات شما حفظ شده است و با «تلاش مجدد» می‌توانید دوباره امتحان کنید.</span><button type="button" onClick={retrySave} disabled={isRetrying} className="shrink-0 rounded-lg bg-rose-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">{isRetrying ? 'در حال تلاش…' : 'تلاش مجدد'}</button></div>}
       <main className="tasks-content">
         <WorkManagementPage users={users} sessionUsername={user.username} sessionName={user.name} initialTasks={tasks} canCreate={permissions.includes('create_task')} canEdit={permissions.includes('edit_task')} canChangeStatus={permissions.includes('change_task_status')} canDelete={permissions.includes('delete_task')} onTasksChange={saveTasksOnHost} />
       </main>

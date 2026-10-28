@@ -105,7 +105,7 @@ export function Login({
           </p>
           <div className="mt-8 flex flex-col gap-3 text-sm text-slate-200">
             <span>ساخته شده توسط علی محمدی</span>
-            <span>ذخیرهٔ اطلاعات در پایگاه دادهٔ هاست</span>
+            <span>مهر 1405</span>
           </div>
         </div>
       </section>

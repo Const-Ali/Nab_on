@@ -1,5 +1,5 @@
 import { Button } from '../components/common/Button'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { nowStamp, nowTs, playChime, uid } from '../shared'
 import { Heading } from '../shared-ui'
 import WorkDashboard from './components/WorkDashboard'
@@ -30,6 +30,23 @@ import {
 import './tasks.css'
 import { cn, panelBox } from '../components/ui'
 
+function encryptDraft(json: string, key: string): string {
+  try {
+    let out = ''
+    for (let i = 0; i < json.length; i++) out += String.fromCharCode(json.charCodeAt(i) ^ key.charCodeAt(i % key.length))
+    return btoa(unescape(encodeURIComponent(out)))
+  } catch { return '' }
+}
+
+function decryptDraft(payload: string, key: string): string | null {
+  try {
+    const decoded = decodeURIComponent(escape(atob(payload)))
+    let out = ''
+    for (let i = 0; i < decoded.length; i++) out += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length))
+    return out
+  } catch { return null }
+}
+
 interface Props {
   users: UserLite[]
   sessionUsername: string
@@ -53,31 +70,154 @@ const defaultFilters: TaskFilterState = {
 
 export default function WorkManagementPage({ users, sessionUsername, sessionName, initialTasks, canCreate, canEdit, canChangeStatus, canDelete, onTasksChange }: Props) {
   const [tasks, setTasks] = useState<WorkTask[]>(initialTasks)
+  const [saveError, setSaveError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const lastSavedRef = useRef<string>(JSON.stringify(initialTasks))
+  const initialSyncDoneRef = useRef(false)
 
+  const draftKey = `nab:tasks:draft:${sessionUsername}`
+
+  // Restore pending draft after a failed save that would otherwise be lost on refresh (encrypted with username as key)
   useEffect(() => {
-    let active = true
+    try {
+      const raw = localStorage.getItem(draftKey)
+      if (!raw) return
+      const decrypted = decryptDraft(raw, sessionUsername || 'nab-default-key')
+      if (!decrypted) return
+      const parsed = JSON.parse(decrypted) as WorkTask[]
+      if (!Array.isArray(parsed) || !parsed.length) return
+      const draftJson = JSON.stringify(parsed)
+      const initialJson = JSON.stringify(initialTasks)
+      if (draftJson !== initialJson) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setTasks(parsed)
+        setSaveError('تغییرات ذخیره‌نشدهٔ قبلی بازیابی شد. برای ذخیره روی هاست، «تلاش مجدد» را بزنید.')
+      }
+    } catch {
+      // ignore corrupt draft
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUsername])
+
+  // Keep lastSavedRef in sync if initialTasks changes due to server refresh (e.g., after successful retry)
+  useEffect(() => {
+    const initialJson = JSON.stringify(initialTasks)
+    if (!initialSyncDoneRef.current) {
+      lastSavedRef.current = initialJson
+      initialSyncDoneRef.current = true
+      return
+    }
+    // If server provided a newer snapshot that matches our current tasks, update ref
+    const currentJson = JSON.stringify(tasks)
+    if (initialJson === currentJson) {
+      lastSavedRef.current = initialJson
+    } else if (currentJson === lastSavedRef.current) {
+      // Our local tasks are still at last saved point, adopt server's version (authoritative timestamps)
+      lastSavedRef.current = initialJson
+    }
+  }, [initialTasks, tasks])
+
+  // Persisted save with retry + localStorage draft
+  useEffect(() => {
     const submitted = tasks
     const submittedJson = JSON.stringify(submitted)
+    if (submittedJson === lastSavedRef.current) return
+
+    // Guard against absurd payloads (>5MB JSON) that would fill nab_state
+    if (submittedJson.length > 5 * 1024 * 1024) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSaveError('حجم کارها بیش از حد مجاز است (۵ مگابایت). لطفاً کارهای قدیمی یا یادداشت‌های طولانی را پاک کنید.')
+      return
+    }
+    let active = true
+    setIsSaving(true)
+    setSaveError('')
+
+    try {
+      const enc = encryptDraft(submittedJson, sessionUsername || 'nab-default-key')
+      if (enc) localStorage.setItem(draftKey, enc)
+    } catch {
+      // storage quota or private mode — ignore
+    }
+
     void (async () => {
       try {
         const saved = await onTasksChange(submitted)
-        if (!active || !Array.isArray(saved)) return
-        // The API assigns authoritative history timestamps. Adopt its canonical task
-        // snapshot only if the user has not made a newer edit while this save was in flight.
-        setTasks(current => {
-          if (JSON.stringify(current) !== submittedJson) return current
-          return JSON.stringify(current) === JSON.stringify(saved) ? current : saved as WorkTask[]
-        })
-      } catch {
-        // The parent surfaces the server error in the task page status area.
+        if (!active) return
+        setIsSaving(false)
+        setSaveError('')
+        try { localStorage.removeItem(draftKey) } catch {
+      // ignore
+    }
+        if (Array.isArray(saved)) {
+          const savedJson = JSON.stringify(saved)
+          lastSavedRef.current = savedJson
+          setTasks(current => {
+            if (JSON.stringify(current) !== submittedJson) return current
+            return savedJson === submittedJson ? current : (saved as WorkTask[])
+          })
+        } else {
+          lastSavedRef.current = submittedJson
+        }
+      } catch (err) {
+        if (!active) return
+        setIsSaving(false)
+        const msg = err instanceof Error ? err.message : 'ذخیرهٔ کارها روی هاست ناموفق بود.'
+        setSaveError(msg)
       }
     })()
+
     return () => { active = false }
-  }, [tasks, onTasksChange])
+  }, [tasks, onTasksChange, draftKey, sessionUsername])
+
+  const retrySave = useCallback(() => {
+    const submitted = tasks
+    const submittedJson = JSON.stringify(submitted)
+    setIsSaving(true)
+    setSaveError('')
+    void (async () => {
+      try {
+        const saved = await onTasksChange(submitted)
+        setIsSaving(false)
+        setSaveError('')
+        try { localStorage.removeItem(draftKey) } catch {
+      // ignore
+    }
+        if (Array.isArray(saved)) {
+          const savedJson = JSON.stringify(saved)
+          lastSavedRef.current = savedJson
+          setTasks(current => {
+            if (JSON.stringify(current) !== submittedJson) return current
+            return savedJson === submittedJson ? current : (saved as WorkTask[])
+          })
+        } else {
+          lastSavedRef.current = submittedJson
+        }
+      } catch (err) {
+        setIsSaving(false)
+        const msg = err instanceof Error ? err.message : 'ذخیرهٔ کارها روی هاست ناموفق بود.'
+        setSaveError(msg)
+      }
+    })()
+  }, [tasks, onTasksChange, draftKey])
+
+  // Warn before unload if there are unsaved changes
+  useEffect(() => {
+    if (!saveError) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = 'تغییرات ذخیره‌نشده دارید. آیا مطمئنید می‌خواهید خارج شوید؟'
+      return e.returnValue
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [saveError])
 
   const [tab, setTab] = useState<TaskType>('personal')
   const [quick, setQuick] = useState<QuickFilter>('all')
   const [filters, setFilters] = useState<TaskFilterState>(defaultFilters)
+  const [pageIndex, setPageIndex] = useState(0)
+  const pageSize = 20
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<WorkTask | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -112,6 +252,11 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
     return sortTasks(typed.filter(t => quickOk(t) && filterOk(t)), filters.sort)
   }, [typed, quick, filters])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setPageIndex(0) }, [filtered.length, tab, quick, filters])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const paginated = useMemo(() => filtered.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize), [filtered, pageIndex, pageSize])
   const detailTask = detailId ? (mine.find(t => t.id === detailId) ?? null) : null
   const isFiltering =
     quick !== 'all' ||
@@ -218,21 +363,22 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
     setDetailId(null)
   }
 
-  const logTimeForTask = (minutes: number) => {
-    if (canEdit && activePomoTask) {
-      setTasks(cur =>
-        cur.map(t =>
-          t.id === activePomoTask.id
-            ? {
-                ...t,
-                timeSpentMinutes: (t.timeSpentMinutes ?? 0) + minutes,
-                history: [...t.history, log(`${minutes} دقیقه تمرکز با پومودورو ثبت شد`)],
-              }
-            : t,
-        ),
-      )
-    }
-  }
+  const logTimeForTask = useCallback((minutes: number, taskId?: string) => {
+    const targetId = taskId ?? activePomoTask?.id
+    if (!targetId) return
+    if (!canEdit) return
+    setTasks(cur =>
+      cur.map(t =>
+        t.id === targetId
+          ? {
+              ...t,
+              timeSpentMinutes: (t.timeSpentMinutes ?? 0) + minutes,
+              history: [...t.history, log(`${minutes} دقیقه تمرکز با پومودورو ثبت شد`)],
+            }
+          : t,
+      ),
+    )
+  }, [activePomoTask?.id, canEdit, sessionName]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const personalCount = mine.filter(t => t.type === 'personal').length
   const orgCount = mine.filter(t => t.type === 'organizational').length
@@ -275,6 +421,17 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
         ) : undefined}
       />
 
+      {(saveError || isSaving) && (
+        <div className={cn('mx-auto mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm', saveError ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200' : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300')}>
+          <span>{isSaving ? 'در حال ذخیرهٔ کارها روی هاست…' : `ذخیره ناموفق: ${saveError}`}</span>
+          {saveError && (
+            <Button type="button" variant="primary" size="xs" onClick={retrySave}>
+              تلاش مجدد
+            </Button>
+          )}
+        </div>
+      )}
+
       <WorkDashboard tasks={typed} quick={quick} onQuick={setQuick} />
 
       <div className="my-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-800 dark:bg-slate-900" role="group" aria-label="نوع کار">
@@ -294,21 +451,47 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
         />
 
         {filters.view === 'list' ? (
-          <TaskList
-            tasks={filtered}
-            hasAny={typed.length > 0}
-            filtered={isFiltering}
-            onOpen={t => setDetailId(t.id)}
-            onToggle={toggleDone}
-            canChangeStatus={canChangeStatus}
-            canCreate={canCreate}
-            onCreate={() => {
-              setEditing(null)
-              setFormOpen(true)
-            }}
-          />
+          <>
+            <TaskList
+              tasks={paginated}
+              hasAny={typed.length > 0}
+              filtered={isFiltering}
+              onOpen={t => setDetailId(t.id)}
+              onToggle={toggleDone}
+              canChangeStatus={canChangeStatus}
+              canCreate={canCreate}
+              onCreate={() => {
+                setEditing(null)
+                setFormOpen(true)
+              }}
+            />
+            {filtered.length > pageSize && (
+              <div className="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs dark:border-slate-800 dark:bg-slate-900">
+                <span className="text-slate-600 dark:text-slate-400">
+                  صفحه { (pageIndex + 1).toLocaleString('fa-IR')} از { totalPages.toLocaleString('fa-IR')} — {filtered.length.toLocaleString('fa-IR')} کار
+                </span>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="xs" disabled={pageIndex === 0} onClick={() => setPageIndex(p => Math.max(0, p - 1))}>قبلی</Button>
+                  <Button type="button" variant="outline" size="xs" disabled={pageIndex >= totalPages - 1} onClick={() => setPageIndex(p => Math.min(totalPages - 1, p + 1))}>بعدی</Button>
+                </div>
+              </div>
+            )}
+          </>
         ) : filters.view === 'kanban' ? (
-          <TaskKanban tasks={filtered} onOpen={t => setDetailId(t.id)} onMove={moveTask} canChangeStatus={canChangeStatus} />
+          <>
+            <TaskKanban tasks={paginated} onOpen={t => setDetailId(t.id)} onMove={moveTask} canChangeStatus={canChangeStatus} />
+            {filtered.length > pageSize && (
+              <div className="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs dark:border-slate-800 dark:bg-slate-900">
+                <span className="text-slate-600 dark:text-slate-400">
+                  صفحه { (pageIndex + 1).toLocaleString('fa-IR')} از { totalPages.toLocaleString('fa-IR')} — {filtered.length.toLocaleString('fa-IR')} کار
+                </span>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="xs" disabled={pageIndex === 0} onClick={() => setPageIndex(p => Math.max(0, p - 1))}>قبلی</Button>
+                  <Button type="button" variant="outline" size="xs" disabled={pageIndex >= totalPages - 1} onClick={() => setPageIndex(p => Math.min(totalPages - 1, p + 1))}>بعدی</Button>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <TaskGantt tasks={filtered} onOpen={t => setDetailId(t.id)} />
         )}
@@ -317,6 +500,7 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
       {showPomo && (
         <div className="pomo-floating-container">
           <PomodoroTimer
+            taskId={activePomoTask?.id}
             taskTitle={activePomoTask?.title}
             onTimeLogged={logTimeForTask}
             onClose={() => setShowPomo(false)}

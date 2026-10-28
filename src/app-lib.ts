@@ -365,36 +365,44 @@ export const computeUserStats = (acts: Activity[]): [string, UserStat][] => {
   return [...map.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 5)
 }
 
-export const computeBottlenecks = (acts: Activity[], config: WorkflowConfig = defaultWorkflowConfig): { status: Status; label: string; count: number }[] => {
-  const byPerson = new Map<string, Activity[]>()
-  for (const a of acts) {
-    if (a.ts && a.newStatus) {
-      const arr = byPerson.get(a.personId) ?? []
-      arr.push(a)
-      byPerson.set(a.personId, arr)
+export const computeBottlenecks = (people: Person[], config: WorkflowConfig = defaultWorkflowConfig): { status: Status; label: string; count: number }[] => {
+  const now = Date.now()
+  const byLabel = new Map<string, { count: number; totalMs: number }>()
+  for (const person of people) {
+    const stageId = stageIdForPerson(person, config)
+    const stage = config.stages.find(item => item.id === stageId)
+    if (!stage || stage.archived || stage.isFinal) continue
+    const key = stage.label
+    const entry = byLabel.get(key) ?? { count: 0, totalMs: 0 }
+    entry.count += 1
+    let enteredMs: number | null = null
+    if (person.stageEnteredAt) {
+      const t = Date.parse(person.stageEnteredAt)
+      if (!Number.isNaN(t)) enteredMs = t
+    } else if (person.updatedAt) {
+      const t = Date.parse(person.updatedAt)
+      if (!Number.isNaN(t)) enteredMs = t
+    } else if (typeof person.ts === 'number') {
+      enteredMs = person.ts < 1e12 ? person.ts * 1000 : person.ts
     }
-  }
-  const acc = new Map<string, { sum: number; count: number }>()
-  for (const arr of byPerson.values()) {
-    arr.sort((x, y) => (x.ts ?? 0) - (y.ts ?? 0))
-    for (let i = 0; i < arr.length - 1; i++) {
-      const cur = arr[i]
-      const next = arr[i + 1]
-      if (!cur.newStatus) continue
-      const e = acc.get(cur.newStatus) ?? { sum: 0, count: 0 }
-      e.sum += (next.ts ?? 0) - (cur.ts ?? 0)
-      e.count += 1
-      acc.set(cur.newStatus, e)
+    if (enteredMs !== null && enteredMs > 0 && enteredMs <= now) {
+      entry.totalMs += now - enteredMs
     }
+    byLabel.set(key, entry)
   }
-  return activeStages(config).map(stage => {
-    const s = stage.label
-    const e = acc.get(s)
-    if (!e || !e.count) return { status: s, label: '—', count: 0 }
-    const days = e.sum / e.count / 86400000
-    const label = days >= 1 ? `${Math.round(days).toLocaleString('fa-IR')} روز` : `${Math.max(1, Math.round(days * 24)).toLocaleString('fa-IR')} ساعت`
-    return { status: s, label, count: e.count }
-  })
+  return activeStages(config)
+    .filter(stage => !stage.isFinal)
+    .map(stage => {
+      const e = byLabel.get(stage.label)
+      if (!e || !e.count) return { status: stage.label, label: '—', count: 0 }
+      const avgDays = e.totalMs / e.count / 86400000
+      const label = e.totalMs > 0
+        ? avgDays >= 1
+          ? `${Math.round(avgDays).toLocaleString('fa-IR')} روز`
+          : `${Math.max(1, Math.round(avgDays * 24)).toLocaleString('fa-IR')} ساعت`
+        : '—'
+      return { status: stage.label, label, count: e.count }
+    })
 }
 
 export const rangeDefs: [string, number, string][] = [
