@@ -8,7 +8,7 @@ import type { Person } from '../../types'
 import { PhotoField } from '../common/PhotoField'
 import { backdropCls, cn, modalBox, modalFormLayout } from '../ui'
 
-export function EditModal({ person, existing, onClose, onSave }: { person: Person; existing: Person[]; onClose: () => void; onSave: (p: Person, changed: string[]) => void }) {
+export function EditModal({ person, existing, onClose, onSave }: { person: Person; existing: Person[]; onClose: () => void; onSave: (p: Person, changed: string[]) => void | Promise<void> }) {
   const [firstName, setFirstName] = useState(person.firstName)
   const [lastName, setLastName] = useState(person.lastName)
   const [nationalId, setNationalId] = useState(person.nationalId)
@@ -18,8 +18,9 @@ export function EditModal({ person, existing, onClose, onSave }: { person: Perso
   const [tags, setTags] = useState<string[]>(person.tags ?? [])
   const [deadline, setDeadline] = useState(person.deadline ?? '')
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     const id = normalizeDigits(nationalId.trim())
     if (!firstName.trim() || !lastName.trim() || !fatherName.trim()) {
@@ -78,7 +79,15 @@ export function EditModal({ person, existing, onClose, onSave }: { person: Perso
       onClose()
       return
     }
-    onSave(next, changed)
+    setSaving(true)
+    setError('')
+    try {
+      await onSave(next, changed)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'ذخیرهٔ پرونده روی سرور ناموفق بود.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -113,7 +122,7 @@ export function EditModal({ person, existing, onClose, onSave }: { person: Perso
         {error && <div className="error">{error}</div>}
         <div className="modal-actions">
           <Button type="button" variant="outline" onClick={onClose}> انصراف</Button>
-          <Button type="submit" variant="primary"> ذخیره ویرایش</Button>
+          <Button type="submit" variant="primary" disabled={saving} loading={saving} loadingText="در حال ذخیره روی سرور..."> ذخیره ویرایش</Button>
         </div>
       </form>
     </div>

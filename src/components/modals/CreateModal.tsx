@@ -10,7 +10,7 @@ import { stageById } from '../../workflow'
 import { PhotoField } from '../common/PhotoField'
 import { backdropCls, cn, errorBox, formGrid, inputCls, labelCls, modalActions, modalBox, modalFormLayout, modalH2, modalP, modalSmall, modalX } from '../ui'
 
-export function CreateModal({ existing, creatorName, workflowConfig, onClose, onCreate }: { existing: Person[]; creatorName: string; workflowConfig: WorkflowConfig; onClose: () => void; onCreate: (p: Person) => void }) {
+export function CreateModal({ existing, creatorName, workflowConfig, onClose, onCreate }: { existing: Person[]; creatorName: string; workflowConfig: WorkflowConfig; onClose: () => void; onCreate: (p: Person) => void | Promise<void> }) {
   const startStage = stageById(workflowConfig, workflowConfig.startStageId)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -20,8 +20,9 @@ export function CreateModal({ existing, creatorName, workflowConfig, onClose, on
   const [photo, setPhoto] = useState('')
   const [deadline, setDeadline] = useState('')
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     const id = normalizeDigits(nationalId.trim())
     if (!firstName.trim() || !lastName.trim() || !fatherName.trim()) {
@@ -47,7 +48,7 @@ export function CreateModal({ existing, creatorName, workflowConfig, onClose, on
       return
     }
     const maxId = existing.reduce((m, p) => Math.max(m, Number(p.id.replace(/\D/g, '')) || 0), 14000)
-    onCreate({
+    const person: Person = {
       id: `P-${maxId + 1}`,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -61,7 +62,16 @@ export function CreateModal({ existing, creatorName, workflowConfig, onClose, on
       stageChecklist: {},
       updatedAt: nowStamp(),
       updatedBy: creatorName,
-    })
+    }
+    setSaving(true)
+    setError('')
+    try {
+      await onCreate(person)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'پرونده روی سرور ذخیره نشد.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -83,7 +93,7 @@ export function CreateModal({ existing, creatorName, workflowConfig, onClose, on
         {error && <div className={errorBox}>{error}</div>}
         <div className={modalActions}>
           <Button type="button" variant="outline" onClick={onClose}> انصراف</Button>
-          <Button type="submit" variant="primary"> ثبت فرد</Button>
+          <Button type="submit" variant="primary" disabled={saving} loading={saving} loadingText="در حال ذخیره روی سرور..."> ثبت فرد</Button>
         </div>
       </form>
     </div>

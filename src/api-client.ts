@@ -1,10 +1,25 @@
-import type { Activity, AppNotification, Audit, PeopleImportRow, Person, ServerPersonExportRow, User } from './types'
+import type { Activity, AppNotification, Audit, Note, PeopleImportRow, Person, ServerPersonExportRow, User } from './types'
 import type { WorkflowConfig } from './workflow'
 
 const API_BASE = '/api.php'
 let csrfToken = ''
 let stateVersions: Record<string, string> = {}
-const stateWriteQueues = new Map<string, Promise<void>>()
+const stateWriteQueues = new Map<string, Promise<unknown>>()
+let lastUserActivityAt = 0
+if (typeof window !== 'undefined') {
+  const markActivity = () => { lastUserActivityAt = Date.now() }
+  for (const event of ['pointerdown', 'keydown', 'touchstart', 'scroll']) {
+    window.addEventListener(event, markActivity, { passive: true })
+  }
+}
+
+export function hasRecentUserActivity(maxAgeMs = 90_000): boolean {
+  return lastUserActivityAt > 0 && Date.now() - lastUserActivityAt <= maxAgeMs
+}
+
+function addUserActivityHeader(headers: Record<string, string>): Record<string, string> {
+  return hasRecentUserActivity() ? { ...headers, 'X-Nab-User-Activity': '1' } : headers
+}
 
 export class ApiError extends Error {
   status: number
@@ -24,6 +39,23 @@ export interface AppBootstrap {
   csrf: string
   state: Record<string, unknown[]>
   state_versions: Record<string, string>
+  security?: { totp_enrolled: boolean }
+}
+
+export interface LoginMfaChallenge {
+  mfa_required: true
+  mode: 'setup' | 'verify'
+  username: string
+  secret?: string
+  otpauth_uri?: string
+}
+
+export type LoginResult = AppBootstrap | LoginMfaChallenge
+
+export interface TotpEnrollmentChallenge {
+  secret: string
+  otpauth_uri: string
+  expires_in: number
 }
 
 async function request<T>(
@@ -37,6 +69,7 @@ async function request<T>(
     headers['Content-Type'] = 'application/json'
     if (csrfToken && !['login', 'setup'].includes(action)) headers['X-CSRF-Token'] = csrfToken
   }
+  const requestHeaders = addUserActivityHeader(headers)
   let response: Response
   try {
     const url = action.startsWith(`${API_BASE}?`) ? action : `${API_BASE}?action=${encodeURIComponent(action)}`
@@ -44,7 +77,7 @@ async function request<T>(
       method,
       credentials: 'same-origin',
       cache: 'no-store',
-      headers,
+      headers: requestHeaders,
       body: method === 'POST' ? JSON.stringify(body ?? {}) : undefined,
     })
   } catch {
@@ -72,32 +105,52 @@ async function request<T>(
   if (typeof payload.csrf === 'string') csrfToken = payload.csrf
   else if (typeof nestedCsrf === 'string') csrfToken = nestedCsrf
   if (nestedVersions && typeof nestedVersions === 'object' && !Array.isArray(nestedVersions)) {
-    stateVersions = Object.fromEntries(
+    const incomingVersions = Object.fromEntries(
       Object.entries(nestedVersions).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
     )
+    // API responses often carry only the versions for the resource(s) they changed.
+    // Merge partial maps; replacing them drops unrelated write tokens. The server
+    // deliberately limits non-bootstrap responses to resources whose data is current.
+    stateVersions = { ...stateVersions, ...incomingVersions }
   }
   if (payload.data !== undefined) return payload.data as T
   return payload as T
 }
 
-function queueStateWrite(key: string, action: string, body: Record<string, unknown>): Promise<void> {
-  const previous = stateWriteQueues.get(key) ?? Promise.resolve()
-  const current = previous.catch(() => undefined).then(async () => {
+function queueStateJob<T>(keys: string[], job: () => Promise<T>): Promise<T> {
+  const uniqueKeys = [...new Set(keys)]
+  const previous = [...new Set(uniqueKeys.map(key => stateWriteQueues.get(key)).filter((item): item is Promise<unknown> => Boolean(item)))]
+  const current = Promise.all(previous.map(item => item.catch(() => undefined))).then(job)
+  for (const key of uniqueKeys) stateWriteQueues.set(key, current)
+  void current.finally(() => {
+    for (const key of uniqueKeys) if (stateWriteQueues.get(key) === current) stateWriteQueues.delete(key)
+  }).catch(() => undefined)
+  return current
+}
+
+function queueStateWrite<T extends { version: string }>(key: string, action: string, body: Record<string, unknown>): Promise<T> {
+  return queueStateJob([key], async () => {
     const expectedVersion = stateVersions[key]
     if (!expectedVersion) {
       throw new ApiError('نسخهٔ همگام‌سازی در دسترس نیست؛ صفحه را تازه‌سازی و دوباره وارد شوید.', 428, 'missing_state_version')
     }
-    const result = await request<{ version: string }>(action, 'POST', { ...body, expected_version: expectedVersion })
+    const result = await request<T>(action, 'POST', { ...body, expected_version: expectedVersion })
     if (!result || typeof result.version !== 'string' || !/^[a-f0-9]{64}$/.test(result.version)) {
       throw new ApiError('پاسخ نسخهٔ ذخیره‌سازی معتبر نیست؛ صفحه را تازه‌سازی کنید.')
     }
     stateVersions[key] = result.version
+    return result
   })
-  stateWriteQueues.set(key, current)
-  void current.finally(() => {
-    if (stateWriteQueues.get(key) === current) stateWriteQueues.delete(key)
-  }).catch(() => undefined)
-  return current
+}
+
+function queueStateTransaction<T>(keys: string[], expectedKey: string, action: string, body: Record<string, unknown>): Promise<T> {
+  return queueStateJob(keys, async () => {
+    const expectedVersion = stateVersions[expectedKey]
+    if (!expectedVersion) {
+      throw new ApiError('نسخهٔ همگام‌سازی در دسترس نیست؛ صفحه را تازه‌سازی و دوباره وارد شوید.', 428, 'missing_state_version')
+    }
+    return request<T>(action, 'POST', { ...body, expected_version: expectedVersion })
+  })
 }
 
 export async function getSetupStatus(): Promise<boolean> {
@@ -109,8 +162,26 @@ export function bootstrap(): Promise<AppBootstrap> {
   return request<AppBootstrap>('bootstrap', 'GET')
 }
 
-export function login(username: string, password: string, remember: boolean): Promise<AppBootstrap> {
-  return request<AppBootstrap>('login', 'POST', { username, password, remember }, false)
+export function touchSession(): Promise<void> {
+  return request<void>('session_touch', 'GET')
+}
+
+export async function login(username: string, password: string, remember: boolean): Promise<LoginResult> {
+  csrfToken = ''
+  stateVersions = {}
+  return request<LoginResult>('login', 'POST', { username, password, remember }, false)
+}
+
+export function verifyLoginMfa(code: string, remember: boolean): Promise<AppBootstrap> {
+  return request<AppBootstrap>('mfa_verify', 'POST', { code, remember }, false)
+}
+
+export function startTotpEnrollment(currentPassword: string): Promise<TotpEnrollmentChallenge> {
+  return request<TotpEnrollmentChallenge>('mfa_enroll_start', 'POST', { current_password: currentPassword })
+}
+
+export function confirmTotpEnrollment(code: string): Promise<{ enrolled: boolean }> {
+  return request<{ enrolled: boolean }>('mfa_enroll_confirm', 'POST', { code })
 }
 
 export function setupAdmin(input: { setup_key: string; username: string; name: string; password: string }): Promise<AppBootstrap> {
@@ -123,8 +194,8 @@ export async function logout(): Promise<void> {
   stateVersions = {}
 }
 
-export function syncSave(key: string, value: unknown[]): Promise<void> {
-  return queueStateWrite(key, 'state_save', { key, value })
+export async function syncSave(key: string, value: unknown[]): Promise<void> {
+  await queueStateWrite<{ version: string }>(key, 'state_save', { key, value })
 }
 
 export function fetchNotifications(): Promise<{ items: AppNotification[] }> {
@@ -159,19 +230,46 @@ export function fetchPeopleImportSnapshot(): Promise<PeopleImportSnapshot> {
 
 export interface PeopleImportResult {
   people: Person[]
-  audit: Audit[]
+  audit?: Audit[]
   activities?: Activity[]
   importedCount: number
 }
 
 export function importPeople(rows: PeopleImportRow[]): Promise<PeopleImportResult> {
-  const expectedVersion = stateVersions['nab:people']
-  if (!expectedVersion) throw new ApiError('نسخهٔ پرونده‌ها در دسترس نیست؛ صفحه را تازه‌سازی کنید.', 428, 'missing_people_version')
-  return request<PeopleImportResult>('people_import', 'POST', { rows, expected_version: expectedVersion })
+  return queueStateTransaction<PeopleImportResult>(['nab:people', 'nab:activities', 'nab:audit'], 'nab:people', 'people_import', { rows })
 }
 
-export function saveWorkflow(config: WorkflowConfig, expectedVersion: string): Promise<{ version: string }> {
-  return request<{ version: string }>('workflow_save', 'POST', { workflow: config, expected_version: expectedVersion })
+export interface PeopleSaveResult {
+  people: Person[]
+  activities?: Activity[]
+  audit?: Audit[]
+}
+
+export function savePeopleBundle(people: Person[], activities: Activity[], audit: Audit[]): Promise<PeopleSaveResult> {
+  return queueStateTransaction<PeopleSaveResult>(
+    ['nab:people', 'nab:activities', 'nab:audit'],
+    'nab:people',
+    'people_save',
+    { people, activities, audit },
+  )
+}
+
+export interface NotesSaveResult {
+  notes: Note[]
+  activities?: Activity[]
+}
+
+export function saveNotesBundle(notes: Note[], activities: Activity[]): Promise<NotesSaveResult> {
+  return queueStateTransaction<NotesSaveResult>(
+    ['nab:notes', 'nab:activities'],
+    'nab:notes',
+    'notes_save',
+    { notes, activities },
+  )
+}
+
+export function saveWorkflow(config: WorkflowConfig, expectedVersion: string): Promise<{ version: string; audit?: Audit[] }> {
+  return queueStateJob(['nab:workflow', 'nab:audit'], () => request<{ version: string }>('workflow_save', 'POST', { workflow: config, expected_version: expectedVersion }))
 }
 
 export function importLegacyState(state: Record<string, unknown[]>): Promise<void> {
@@ -191,10 +289,17 @@ async function binaryRequest(action: string, init: RequestInit): Promise<{ blob:
   let response: Response
   try {
     const url = action.startsWith(`${API_BASE}?`) ? action : `${API_BASE}?action=${encodeURIComponent(action)}`
+    const rawHeaders = init.headers instanceof Headers
+      ? Object.fromEntries(init.headers.entries())
+      : Array.isArray(init.headers)
+        ? Object.fromEntries(init.headers)
+        : (init.headers ?? {}) as Record<string, string>
+    const headers = addUserActivityHeader(rawHeaders)
     response = await fetch(url, {
       credentials: 'same-origin',
       cache: 'no-store',
       ...init,
+      headers,
     })
   } catch {
     throw new ApiError('اتصال به API هاست برقرار نشد.')
@@ -236,8 +341,9 @@ export async function restoreFullBackup(file: File, currentPassword: string, arc
   form.append('archive_password', archivePassword)
   form.append('safety_password', safetyPassword)
   form.append('confirmation', confirmation)
-  const headers: Record<string, string> = { Accept: 'application/json' }
-  if (csrfToken) headers['X-CSRF-Token'] = csrfToken
+  const baseHeaders: Record<string, string> = { Accept: 'application/json' }
+  if (csrfToken) baseHeaders['X-CSRF-Token'] = csrfToken
+  const headers = addUserActivityHeader(baseHeaders)
   let response: Response
   try {
     response = await fetch(`${API_BASE}?action=backup_restore`, { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers, body: form })
@@ -288,14 +394,14 @@ export async function deleteUser(username: string): Promise<void> {
   await request<void>('user_delete', 'POST', { username })
 }
 
-export function updateProfile(input: Record<string, unknown>): Promise<User> {
-  return request<User>('profile_update', 'POST', input)
+export function updateProfile(input: Record<string, unknown>): Promise<User & { security?: { totp_enrolled: boolean } }> {
+  return request<User & { security?: { totp_enrolled: boolean } }>('profile_update', 'POST', input)
 }
 
 export function fetchTasks(): Promise<unknown[]> {
   return request<unknown[]>('tasks_get', 'GET')
 }
 
-export function syncTasks(tasks: unknown[], username: string): Promise<void> {
+export function syncTasks(tasks: unknown[], username: string): Promise<{ version: string; tasks: unknown[] }> {
   return queueStateWrite(`nab:tasks:${username}`, 'tasks_save', { tasks })
 }

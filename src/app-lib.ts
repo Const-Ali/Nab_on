@@ -265,7 +265,7 @@ export function permissionDependencyError(permissions: readonly Permission[]): s
   if (['create_role', 'edit_role', 'delete_role'].some(permission => selected.has(permission as Permission)) && !selected.has('view_roles')) return 'مدیریت نقش‌ها به مجوز «مشاهدهٔ نقش‌ها» نیز نیاز دارد.'
   return null
 }
-export const defaultSettings: AppSettings = { appName: 'سامانه مدیریت پرونده ناب', twoFactor: true, auditLog: true, autoLogout: false, autoLogoutMins: 30, font: 'vazir' }
+export const defaultSettings: AppSettings = { appName: 'سامانه مدیریت پرونده ناب', twoFactor: false, auditLog: true, autoLogout: false, autoLogoutMins: 30, font: 'vazir' }
 
 export const userByRole: Record<Role, { name: string; title: string }> = {
   admin: { name: 'احمد محمدی', title: 'مدیر سیستم' },

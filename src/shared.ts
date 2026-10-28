@@ -87,17 +87,42 @@ export const jalaliParts = (date: Date) => {
   return { y: Number(parts.year), m: Number(parts.month), d: Number(parts.day) }
 }
 
+const jalaliBreaks = [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178]
+
+/** Convert a modern Iranian Solar Hijri date to an integer Julian Day Number. */
 export const jalaliJdn = (y: number, m: number, d: number) => {
-  const epbase = y - (y >= 0 ? 474 : 473)
-  const epyear = 474 + (((epbase % 2820) + 2820) % 2820)
-  return (
-    d +
-    (m <= 7 ? (m - 1) * 31 : (m - 1) * 30 + 6) +
-    Math.floor((epyear * 682 - 110) / 2816) +
-    (epyear - 1) * 365 +
-    Math.floor(epbase / 2820) * 1029983 +
-    1948320
-  )
+  if (!Number.isInteger(y) || y < jalaliBreaks[0] || y >= jalaliBreaks[jalaliBreaks.length - 1]) {
+    throw new RangeError('سال جلالی خارج از محدودهٔ پشتیبانی است.')
+  }
+  const gy = y + 621
+  let leapJ = -14
+  let jp = jalaliBreaks[0]
+  let jump = 0
+  for (let i = 1; i < jalaliBreaks.length; i += 1) {
+    const jm = jalaliBreaks[i]
+    jump = jm - jp
+    if (y < jm) break
+    leapJ += Math.floor(jump / 33) * 8 + Math.floor((jump % 33) / 4)
+    jp = jm
+  }
+  const n = y - jp
+  leapJ += Math.floor(n / 33) * 8 + Math.floor(((n % 33) + 3) / 4)
+  if (jump % 33 === 4 && jump - n === 4) leapJ += 1
+
+  const leapG = Math.floor(gy / 4) - Math.floor((Math.floor(gy / 100) + 1) * 3 / 4) - 150
+  const march = 20 + leapJ - leapG
+
+  // Gregorian JDN for the March day on which Farvardin 1 begins.
+  const gregorianY = gy + 4800
+  const startJdn = march
+    + Math.floor(2 / 5)
+    + 365 * gregorianY
+    + Math.floor(gregorianY / 4)
+    - Math.floor(gregorianY / 100)
+    + Math.floor(gregorianY / 400)
+    - 32045
+  const monthOffset = (m - 1) * 31 - Math.floor(m / 7) * (m - 7)
+  return startJdn + monthOffset + d - 1
 }
 
 export const jdnToDate = (jdn: number): Date => new Date((jdn - 2440588) * 86400000 + 12 * 3600000)

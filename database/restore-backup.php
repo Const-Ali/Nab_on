@@ -152,6 +152,15 @@ try {
             'nab_state' => $pdo->query('SELECT state_key, state_json, updated_at, updated_by FROM nab_state ORDER BY state_key FOR UPDATE')->fetchAll(),
         ],
     ];
+    $maximumAuthVersion = 0;
+    foreach (($currentPayload['tables']['nab_users'] ?? []) as $currentUser) {
+        $maximumAuthVersion = max($maximumAuthVersion, (int)($currentUser['auth_version'] ?? 0));
+    }
+    foreach ($users as $restoredUser) {
+        $maximumAuthVersion = max($maximumAuthVersion, (int)($restoredUser['auth_version'] ?? 0));
+    }
+    if ($maximumAuthVersion >= 4294967295) throw new RuntimeException('Restore stopped because auth_version reached the INT UNSIGNED limit.');
+    $restoredAuthVersion = $maximumAuthVersion + 1;
     $safetyPath = nab_cli_write_safety_backup($currentPayload, $safetyPassphrase, $config, 'before-restore');
     $pdo->exec('DELETE FROM nab_state');
     $pdo->exec('DELETE FROM nab_login_attempts');
@@ -162,7 +171,7 @@ try {
             (int)$row['id'], (string)$row['username'], (string)$row['display_name'], (string)$row['role_id'],
             (string)($row['title'] ?? ''), (string)($row['tone'] ?? 'blue'), (string)$row['password_hash'],
             !empty($row['is_active']) ? 1 : 0, (string)$row['permissions_json'], $row['photo'] ?? null,
-            max(1, (int)($row['auth_version'] ?? 1)) + 1,
+            $restoredAuthVersion,
             (string)($row['created_at'] ?? gmdate('Y-m-d H:i:s')),
         ]);
     }

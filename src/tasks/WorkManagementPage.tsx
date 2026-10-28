@@ -39,7 +39,7 @@ interface Props {
   canEdit: boolean
   canChangeStatus: boolean
   canDelete: boolean
-  onTasksChange: (tasks: WorkTask[]) => void | Promise<void>
+  onTasksChange: (tasks: WorkTask[]) => void | WorkTask[] | Promise<void | WorkTask[]>
 }
 
 const defaultFilters: TaskFilterState = {
@@ -55,7 +55,24 @@ export default function WorkManagementPage({ users, sessionUsername, sessionName
   const [tasks, setTasks] = useState<WorkTask[]>(initialTasks)
 
   useEffect(() => {
-    void onTasksChange(tasks)
+    let active = true
+    const submitted = tasks
+    const submittedJson = JSON.stringify(submitted)
+    void (async () => {
+      try {
+        const saved = await onTasksChange(submitted)
+        if (!active || !Array.isArray(saved)) return
+        // The API assigns authoritative history timestamps. Adopt its canonical task
+        // snapshot only if the user has not made a newer edit while this save was in flight.
+        setTasks(current => {
+          if (JSON.stringify(current) !== submittedJson) return current
+          return JSON.stringify(current) === JSON.stringify(saved) ? current : saved as WorkTask[]
+        })
+      } catch {
+        // The parent surfaces the server error in the task page status area.
+      }
+    })()
+    return () => { active = false }
   }, [tasks, onTasksChange])
 
   const [tab, setTab] = useState<TaskType>('personal')

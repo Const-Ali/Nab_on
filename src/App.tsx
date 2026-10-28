@@ -27,6 +27,8 @@ import {
   importPeople as importPeopleOnServer,
   markNotificationsRead,
   getSetupStatus,
+  hasRecentUserActivity,
+  touchSession,
   importLegacyState,
   importLegacyTasks,
   login as loginOnServer,
@@ -34,7 +36,12 @@ import {
   saveUser as createUserOnServer,
   setupAdmin as setupAdminOnServer,
   saveWorkflow as saveWorkflowOnServer,
+  savePeopleBundle,
+  saveNotesBundle,
   syncSave,
+  verifyLoginMfa,
+  startTotpEnrollment,
+  confirmTotpEnrollment,
   updateProfile as updateProfileOnServer,
   updateUser as updateUserOnServer,
 } from './api-client'
@@ -185,6 +192,7 @@ export default function App() {
 
   const [page, setPage] = useState<Page>('dashboard')
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultSettings)
+  const [totpEnrolled, setTotpEnrolled] = useState(false)
   const [people, setPeople] = useState<Person[]>([])
   const [workflowConfig, setWorkflowConfig] = useState<WorkflowConfig>(defaultWorkflowConfig)
   const [workflowVersion, setWorkflowVersion] = useState('')
@@ -223,6 +231,7 @@ export default function App() {
 
   const applyServerBootstrap = (data: Awaited<ReturnType<typeof bootstrapServer>>) => {
     notificationOwnerRef.current = data.user.username
+    setTotpEnrolled(Boolean(data.security?.totp_enrolled))
     setNotifications([])
     setNotificationsOpen(false)
     setNotificationError('')
@@ -300,6 +309,7 @@ export default function App() {
       notificationOwnerRef.current = ''
       setSession(null)
       setServerReady(false)
+      setTotpEnrolled(false)
       setUsers([])
       setPeople([])
       setWorkflowConfig(defaultWorkflowConfig)
@@ -378,9 +388,6 @@ export default function App() {
 
   const has = (p: Permission) => Boolean(currentUser?.permissions.includes(p))
   const canViewPeople = has('view_persons')
-  const canViewActivities = has('view_activities')
-  const canViewAudit = has('view_audit_log')
-  const canViewNotes = canViewPeople && has('view_person_notes')
   const canCreateUsers = has('manage_users') || has('create_user')
   const canEditUsers = has('manage_users') || has('edit_user')
   const canDeleteUsers = has('manage_users') || has('delete_user')
@@ -444,36 +451,6 @@ export default function App() {
     }
   }, [serverReady, sessionUsername, canViewPeople])
 
-  // داده‌های پرونده فقط روی هاست ذخیره می‌شوند؛ اگر نوشتن ناموفق باشد، وضعیت به کاربر اعلام می‌شود.
-  useEffect(() => {
-    if (!serverReady || !session) return
-    let active = true
-    const persist = async () => {
-      try {
-        const writes: Promise<void>[] = []
-        if (canViewActivities) writes.push(syncSave('nab:activities', activities))
-        if (canViewAudit) writes.push(syncSave('nab:audit', audit))
-        if (canViewPeople) writes.push(syncSave('nab:people', people))
-        if (canViewNotes) writes.push(syncSave('nab:notes', notes))
-        if (canManageRoles) writes.push(syncSave('nab:roles', roles))
-        await Promise.all(writes)
-        if (active) {
-          setIsServerConnected(true)
-          setServerMessage('')
-        }
-      } catch (cause) {
-        if (active) {
-          const message = cause instanceof Error ? cause.message : 'ذخیره‌سازی روی هاست ناموفق بود.'
-          setIsServerConnected(false)
-          setServerMessage(message)
-          setToast(`ذخیره روی هاست ناموفق بود: ${message}`)
-        }
-      }
-    }
-    void persist()
-    return () => { active = false }
-  }, [people, activities, audit, roles, notes, serverReady, session, currentUser, canManageRoles, canViewActivities, canViewAudit, canViewPeople, canViewNotes])
-
   // یادآور سررسید
   useEffect(() => {
     if (session) {
@@ -527,29 +504,56 @@ export default function App() {
     }
   }, [mobileMoreOpen, calOpen, notificationsOpen])
 
-  const auditLog = (action: string, target: string) => {
-    const entry: Audit = { id: uid('AUD'), action, target, createdAt: nowStamp(), createdBy: currentUser?.name ?? 'کاربر' }
-    setAudit(cur => [entry, ...cur])
-  }
+  const auditLog = (action: string, target: string): Audit => ({
+    id: uid('AUD'), action, target, createdAt: nowStamp(), createdBy: currentUser?.name ?? 'کاربر',
+  })
 
-  const recordActivity = (entry: Pick<Activity, 'personId' | 'personName' | 'action'> & Partial<Pick<Activity, 'previousStatus' | 'newStatus' | 'rejectionReason' | 'details'>>) => {
-    const activity: Activity = {
-      id: uid('ACT'),
-      previousStatus: null,
-      newStatus: null,
-      rejectionReason: null,
-      ...entry,
-      createdAt: nowStamp(),
-      createdBy: currentUser?.name ?? 'کاربر',
-      createdByRole: currentUser?.role ?? 'admin',
-      ts: nowTs(),
-    }
-    setActivities(cur => [activity, ...cur])
-  }
+  const makeActivity = (entry: Pick<Activity, 'personId' | 'personName' | 'action'> & Partial<Pick<Activity, 'previousStatus' | 'newStatus' | 'rejectionReason' | 'details'>>): Activity => ({
+    id: uid('ACT'),
+    previousStatus: null,
+    newStatus: null,
+    rejectionReason: null,
+    ...entry,
+    createdAt: nowStamp(),
+    createdBy: currentUser?.name ?? 'کاربر',
+    createdByRole: currentUser?.role ?? 'admin',
+    ts: nowTs(),
+  })
 
   const showToast = (msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 4000)
+  }
+
+  const commitPeopleBundle = async (nextPeople: Person[], nextActivities: Activity[], nextAudit: Audit[]) => {
+    try {
+      const result = await savePeopleBundle(nextPeople, nextActivities, nextAudit)
+      setPeople(result.people)
+      setActivities(result.activities ?? nextActivities)
+      setAudit(result.audit ?? nextAudit)
+      setIsServerConnected(true)
+      setServerMessage('')
+      return result
+    } catch (cause) {
+      setIsServerConnected(false)
+      setServerMessage(cause instanceof Error ? cause.message : 'ذخیرهٔ پرونده و سوابق روی هاست ناموفق بود.')
+      throw cause
+    }
+  }
+
+  const commitNotesBundle = async (nextNotes: Note[], nextActivities: Activity[]) => {
+    try {
+      const result = await saveNotesBundle(nextNotes, nextActivities)
+      setNotes(result.notes)
+      setActivities(result.activities ?? nextActivities)
+      setIsServerConnected(true)
+      setServerMessage('')
+      return result
+    } catch (cause) {
+      setIsServerConnected(false)
+      setServerMessage(cause instanceof Error ? cause.message : 'ذخیرهٔ یادداشت و رویداد همراه آن ناموفق بود.')
+      throw cause
+    }
   }
 
   const handleExcelImport = async (rows: PeopleImportRow[]) => {
@@ -558,11 +562,8 @@ export default function App() {
     }
     const result = await importPeopleOnServer(rows)
     setPeople(result.people)
-    setAudit(result.audit)
-    if (result.activities?.length) {
-      const importedActivities = result.activities
-      setActivities(current => [...importedActivities, ...current])
-    }
+    if (result.audit) setAudit(result.audit)
+    if (result.activities) setActivities(result.activities)
     setExcelImportOpen(false)
     showToast(`${result.importedCount.toLocaleString('fa-IR')} پرونده از Excel روی سرور ثبت شد.`)
   }
@@ -587,6 +588,7 @@ export default function App() {
     if (!workflowVersion) throw new Error('نسخهٔ گردش‌کار در دسترس نیست؛ صفحه را تازه‌سازی کنید.')
     const result = await saveWorkflowOnServer(nextConfig, workflowVersion)
     setWorkflowVersion(result.version)
+    if (result.audit) setAudit(result.audit)
     setWorkflowConfig(nextConfig)
     const renamePerson = (person: Person): Person => {
       const id = stageIdForPerson(person, nextConfig)
@@ -613,6 +615,7 @@ export default function App() {
     try { await logoutFromServer() } catch { /* The local view is cleared even if the host is offline. */ }
     setSession(null)
     setServerReady(false)
+    setTotpEnrolled(false)
     setUsers([])
     setPeople([])
     setWorkflowConfig(defaultWorkflowConfig)
@@ -629,6 +632,52 @@ export default function App() {
     setProfileOpen(false)
     setServerMessage('از حساب خارج شدید.')
   }
+
+  useEffect(() => {
+    if (!serverReady || !sessionUsername || !appSettings.autoLogout) return
+    const timeoutMs = appSettings.autoLogoutMins * 60_000
+    let lastActivityAt = Date.now()
+    let expired = false
+    let timer = 0
+    const expire = () => {
+      if (expired) return
+      expired = true
+      window.dispatchEvent(new CustomEvent('nab:auth-expired'))
+      void logoutFromServer().catch(() => undefined)
+    }
+    const schedule = () => {
+      window.clearTimeout(timer)
+      const remaining = timeoutMs - (Date.now() - lastActivityAt)
+      timer = window.setTimeout(expire, Math.max(0, remaining))
+    }
+    const markActivity = () => {
+      lastActivityAt = Date.now()
+      schedule()
+    }
+    const checkAfterVisibility = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastActivityAt >= timeoutMs) expire()
+    }
+    const activityEvents = ['pointerdown', 'keydown', 'touchstart', 'scroll'] as const
+    for (const event of activityEvents) window.addEventListener(event, markActivity, { passive: true })
+    document.addEventListener('visibilitychange', checkAfterVisibility)
+    schedule()
+    return () => {
+      expired = true
+      window.clearTimeout(timer)
+      for (const event of activityEvents) window.removeEventListener(event, markActivity)
+      document.removeEventListener('visibilitychange', checkAfterVisibility)
+    }
+  }, [serverReady, sessionUsername, appSettings.autoLogout, appSettings.autoLogoutMins])
+
+  useEffect(() => {
+    if (!serverReady || !sessionUsername || !appSettings.autoLogout) return
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && hasRecentUserActivity(75_000)) {
+        void touchSession().catch(() => undefined)
+      }
+    }, 30_000)
+    return () => window.clearInterval(interval)
+  }, [serverReady, sessionUsername, appSettings.autoLogout])
 
   const handleLegacyImport = async () => {
     if (!legacySnapshot || !legacyCanImport || !currentUser) throw new Error('انتقال داده‌های قدیمی در این وضعیت مجاز نیست.')
@@ -666,9 +715,8 @@ export default function App() {
     }
   }
 
-  const handleCreatePerson = (p: Person) => {
-    if (!has('view_persons') || !has('create_person')) { showToast('برای ایجاد پرونده، مجوز مشاهده و ایجاد لازم است.'); return }
-    setPeople(cur => [p, ...cur])
+  const handleCreatePerson = async (p: Person) => {
+    if (!has('view_persons') || !has('create_person')) throw new Error('برای ایجاد پرونده، مجوز مشاهده و ایجاد لازم است.')
     const act: Activity = {
       id: uid('ACT'),
       personId: p.id,
@@ -682,14 +730,14 @@ export default function App() {
       createdByRole: currentUser?.role ?? 'admin',
       ts: nowTs(),
     }
-    setActivities(cur => [act, ...cur])
-    auditLog('افزودن فرد جدید', `${p.firstName} ${p.lastName} (${p.id})`)
+    const auditEntry = auditLog('افزودن فرد جدید', `${p.firstName} ${p.lastName} (${p.id})`)
+    await commitPeopleBundle([p, ...people], [act, ...activities], [auditEntry, ...audit])
     setCreateOpen(false)
     playChime('success')
     showToast(`پرونده «${p.firstName} ${p.lastName}» ثبت شد.`)
   }
 
-  const handleUpdateStatus = (p: Person, targetStageId: string, reason: string | null) => {
+  const handleUpdateStatus = async (p: Person, targetStageId: string, reason: string | null) => {
     if (!has('change_status')) { showToast('مجوز تغییر مرحله را ندارید.'); return }
     const currentStageId = stageIdForPerson(p, workflowConfig)
     const currentStage = stageById(workflowConfig, currentStageId)
@@ -716,8 +764,6 @@ export default function App() {
       updatedBy: currentUser?.name ?? 'کاربر',
       ts: Date.parse(stageEnteredAt),
     }
-    setPeople(cur => cur.map(x => (x.id === p.id ? updated : x)))
-    setSelected(updated)
     const act: Activity = {
       id: uid('ACT'),
       personId: p.id,
@@ -731,13 +777,18 @@ export default function App() {
       createdByRole: currentUser?.role ?? 'admin',
       ts: nowTs(),
     }
-    setActivities(cur => [act, ...cur])
-    auditLog('تغییر وضعیت پرونده', `${p.id}: از «${prev}» به «${next}»`)
-    playChime('complete')
-    showToast(`مرحلهٔ پرونده به «${next}» به‌روزرسانی شد.`)
+    const auditEntry = auditLog('تغییر وضعیت پرونده', `${p.id}: از «${prev}» به «${next}»`)
+    try {
+      const result = await commitPeopleBundle(people.map(x => x.id === p.id ? updated : x), [act, ...activities], [auditEntry, ...audit])
+      setSelected(result.people.find(person => person.id === p.id) ?? updated)
+      playChime('complete')
+      showToast(`مرحلهٔ پرونده به «${next}» به‌روزرسانی شد.`)
+    } catch (cause) {
+      showToast(cause instanceof Error ? `ذخیرهٔ تغییر مرحله ناموفق بود: ${cause.message}` : 'ذخیرهٔ تغییر مرحله ناموفق بود.')
+    }
   }
 
-  const handleChecklistToggle = (p: Person, stageId: string, itemId: string, done: boolean) => {
+  const handleChecklistToggle = async (p: Person, stageId: string, itemId: string, done: boolean) => {
     if (!has('complete_checklist') || !done) return
     const currentStageId = stageIdForPerson(p, workflowConfig)
     const stage = stageById(workflowConfig, stageId)
@@ -758,8 +809,6 @@ export default function App() {
       updatedBy: currentUser?.name ?? 'کاربر',
       ts: nowTs(),
     }
-    setPeople(cur => cur.map(person => person.id === p.id ? updated : person))
-    setSelected(updated)
     const activity: Activity = {
       id: uid('ACT'),
       personId: p.id,
@@ -773,67 +822,76 @@ export default function App() {
       createdByRole: currentUser?.role ?? 'admin',
       ts: nowTs(),
     }
-    setActivities(cur => [activity, ...cur])
-    auditLog('تکمیل چک‌لیست', `${p.id}: ${stage.label} — ${item.label}`)
-    showToast(`«${item.label}» با نام شما و زمان ثبت ذخیره شد.`)
+    const auditEntry = auditLog('تکمیل چک‌لیست', `${p.id}: ${stage.label} — ${item.label}`)
+    try {
+      const result = await commitPeopleBundle(people.map(person => person.id === p.id ? updated : person), [activity, ...activities], [auditEntry, ...audit])
+      setSelected(result.people.find(person => person.id === p.id) ?? updated)
+      showToast(`«${item.label}» با نام شما و زمان ثبت ذخیره شد.`)
+    } catch (cause) {
+      showToast(cause instanceof Error ? `ذخیرهٔ چک‌لیست ناموفق بود: ${cause.message}` : 'ذخیرهٔ چک‌لیست ناموفق بود.')
+    }
   }
 
-  const handleBulkStatus = (ids: string[], targetStageId: string) => {
-    if (!has('change_status')) { showToast('مجوز تغییر مرحله را ندارید.'); return }
+  const handleBulkStatus = async (ids: string[], targetStageId: string): Promise<boolean> => {
+    if (!has('change_status')) { showToast('مجوز تغییر مرحله را ندارید.'); return false }
     const selectedPeople = people.filter(person => ids.includes(person.id))
-    if (!selectedPeople.length || selectedPeople.length !== new Set(ids).size) { showToast('فهرست پرونده‌های انتخاب‌شده معتبر نیست.'); return }
+    if (!selectedPeople.length || selectedPeople.length !== new Set(ids).size) { showToast('فهرست پرونده‌های انتخاب‌شده معتبر نیست.'); return false }
     const sourceIds = new Set(selectedPeople.map(person => stageIdForPerson(person, workflowConfig)))
-    if (sourceIds.size !== 1) { showToast('انتقال گروهی فقط برای پرونده‌های هم‌مرحله ممکن است.'); return }
+    if (sourceIds.size !== 1) { showToast('انتقال گروهی فقط برای پرونده‌های هم‌مرحله ممکن است.'); return false }
     const sourceId = [...sourceIds][0]
     const sourceStage = stageById(workflowConfig, sourceId)
     const targetStage = stageById(workflowConfig, targetStageId)
     if (!sourceStage || !targetStage || targetStage.archived || targetStageId === 'rejected' || !sourceStage.nextStageIds.includes(targetStageId)) {
       showToast('مرحلهٔ مقصد در مسیر بعدی مشترک این پرونده‌ها نیست.')
-      return
+      return false
     }
     const incomplete = selectedPeople.filter(person => checklistMissing(sourceStage, person).length > 0)
-    if (incomplete.length) { showToast(`چک‌لیست ${incomplete.length.toLocaleString('fa-IR')} پرونده کامل نیست؛ انتقال انجام نشد.`); return }
+    if (incomplete.length) { showToast(`چک‌لیست ${incomplete.length.toLocaleString('fa-IR')} پرونده کامل نیست؛ انتقال انجام نشد.`); return false }
     const timestamp = nowStamp()
     const now = nowTs()
     const stageEnteredAt = new Date(now).toISOString()
     const updated = selectedPeople.map(person => ({ ...person, stageId: targetStageId, status: targetStage.label, stageEnteredAt, updatedAt: timestamp, updatedBy: currentUser?.name ?? 'کاربر', ts: now }))
     const byId = new Map(updated.map(person => [person.id, person]))
-    setPeople(cur => cur.map(person => byId.get(person.id) ?? person))
-    setActivities(cur => [
-      ...updated.map(person => ({
-        id: uid('ACT'), personId: person.id, personName: `${person.firstName} ${person.lastName}`,
-        action: 'تغییر وضعیت', previousStatus: sourceStage.label, newStatus: targetStage.label,
-        rejectionReason: null, createdAt: timestamp, createdBy: currentUser?.name ?? 'کاربر',
-        createdByRole: currentUser?.role ?? 'admin', ts: now,
-      })),
-      ...cur,
-    ])
-    auditLog('تغییر وضعیت پرونده', `انتقال گروهی ${updated.length} پرونده از «${sourceStage.label}» به «${targetStage.label}»`)
-    showToast(`مرحلهٔ ${updated.length.toLocaleString('fa-IR')} پرونده تغییر یافت.`)
+    const nextPeople = people.map(person => byId.get(person.id) ?? person)
+    const events: Activity[] = updated.map(person => ({
+      id: uid('ACT'), personId: person.id, personName: `${person.firstName} ${person.lastName}`,
+      action: 'تغییر وضعیت', previousStatus: sourceStage.label, newStatus: targetStage.label,
+      rejectionReason: null, createdAt: timestamp, createdBy: currentUser?.name ?? 'کاربر',
+      createdByRole: currentUser?.role ?? 'admin', ts: now,
+    }))
+    const auditEntry = auditLog('تغییر وضعیت پرونده', `انتقال گروهی ${updated.length} پرونده از «${sourceStage.label}» به «${targetStage.label}»`)
+    try {
+      await commitPeopleBundle(nextPeople, [...events, ...activities], [auditEntry, ...audit])
+      showToast(`مرحلهٔ ${updated.length.toLocaleString('fa-IR')} پرونده تغییر یافت.`)
+      return true
+    } catch (cause) {
+      showToast(cause instanceof Error ? `ذخیرهٔ انتقال گروهی ناموفق بود: ${cause.message}` : 'ذخیرهٔ انتقال گروهی ناموفق بود.')
+      return false
+    }
   }
 
-  const handleDeletePerson = (p: Person) => {
+  const handleDeletePerson = async (p: Person) => {
     if (!has('delete_person') || !has('view_persons')) { showToast('مجوز حذف پرونده را ندارید.'); return }
     if (!window.confirm(`آیا از حذف پرونده «${p.firstName} ${p.lastName}» اطمینان دارید؟`)) return
-    setPeople(cur => cur.filter(x => x.id !== p.id))
-    recordActivity({
-      personId: p.id,
-      personName: `${p.firstName} ${p.lastName}`,
-      action: 'حذف پرونده',
-      previousStatus: stageById(workflowConfig, stageIdForPerson(p, workflowConfig))?.label ?? p.status,
-      details: 'پرونده از سامانه حذف شد.',
-    })
-    auditLog('حذف پرونده', `${p.firstName} ${p.lastName} (${p.id})`)
-    setSelected(null)
-    playChime('alert')
-    showToast('پرونده حذف شد.')
+    const activity: Activity = {
+      id: uid('ACT'), personId: p.id, personName: `${p.firstName} ${p.lastName}`,
+      action: 'حذف پرونده', previousStatus: stageById(workflowConfig, stageIdForPerson(p, workflowConfig))?.label ?? p.status,
+      newStatus: null, rejectionReason: null, details: 'پرونده از سامانه حذف شد.',
+      createdAt: nowStamp(), createdBy: currentUser?.name ?? 'کاربر', createdByRole: currentUser?.role ?? 'admin', ts: nowTs(),
+    }
+    const auditEntry = auditLog('حذف پرونده', `${p.firstName} ${p.lastName} (${p.id})`)
+    try {
+      await commitPeopleBundle(people.filter(person => person.id !== p.id), [activity, ...activities], [auditEntry, ...audit])
+      setSelected(null)
+      playChime('alert')
+      showToast('پرونده حذف شد.')
+    } catch (cause) {
+      showToast(cause instanceof Error ? `حذف پرونده ناموفق بود: ${cause.message}` : 'حذف پرونده ناموفق بود.')
+    }
   }
 
-  const handleEditPerson = (p: Person, changes: string[]) => {
-    if (!has('edit_person') || !has('view_persons')) { showToast('مجوز ویرایش پرونده را ندارید.'); return }
-    setPeople(cur => cur.map(x => (x.id === p.id ? p : x)))
-    setSelected(p)
-    setEditingPerson(null)
+  const handleEditPerson = async (p: Person, changes: string[]) => {
+    if (!has('edit_person') || !has('view_persons')) throw new Error('مجوز ویرایش پرونده را ندارید.')
     const act: Activity = {
       id: uid('ACT'),
       personId: p.id,
@@ -841,71 +899,71 @@ export default function App() {
       action: 'ویرایش اطلاعات فرد',
       previousStatus: null,
       newStatus: null,
-      rejectionReason: null,
+      rejectionReason: changes.join(' · '),
       details: changes.join(' · '),
       createdAt: nowStamp(),
       createdBy: currentUser?.name ?? 'کاربر',
       createdByRole: currentUser?.role ?? 'admin',
       ts: nowTs(),
     }
-    setActivities(cur => [act, ...cur])
-    auditLog('ویرایش اطلاعات فرد', `${p.id}: ${changes.join('، ')}`)
+    const auditEntry = auditLog('ویرایش اطلاعات فرد', `${p.id}: ${changes.join('، ')}`)
+    const result = await commitPeopleBundle(people.map(person => person.id === p.id ? p : person), [act, ...activities], [auditEntry, ...audit])
+    const savedPerson = result.people.find(person => person.id === p.id) ?? p
+    setSelected(savedPerson)
+    setEditingPerson(null)
     playChime('success')
     showToast('اطلاعات با موفقیت ذخیره شد.')
   }
 
-  const handleAddNote = (personId: string, text: string, replyTo?: { author: string; text: string }) => {
-    if (!has('view_persons') || !has('view_person_notes') || !has('create_person_note')) { showToast('مجوز ثبت یادداشت پرونده را ندارید.'); return }
+  const handleAddNote = async (personId: string, text: string, replyTo?: { author: string; text: string }) => {
+    if (!has('view_persons') || !has('view_person_notes') || !has('create_person_note')) throw new Error('مجوز ثبت یادداشت پرونده را ندارید.')
     const note: Note = {
-      id: uid('NOTE'),
-      personId,
-      author: currentUser?.name ?? 'کاربر',
-      authorUsername: currentUser?.username ?? '',
-      role: currentUser?.role ?? 'admin',
-      title: currentUser?.title ?? 'کارشناس',
-      text,
-      createdAt: nowStamp(),
-      replyTo,
+      id: uid('NOTE'), personId,
+      author: currentUser?.name ?? 'کاربر', authorUsername: currentUser?.username ?? '',
+      role: currentUser?.role ?? 'admin', title: currentUser?.title ?? 'کارشناس', text,
+      createdAt: nowStamp(), replyTo,
     }
-    setNotes(cur => [...cur, note])
     const person = people.find(candidate => candidate.id === personId)
-    recordActivity({
+    const activity = makeActivity({
       personId,
       personName: person ? `${person.firstName} ${person.lastName}` : personId,
       action: 'ثبت یادداشت',
       details: replyTo ? `پاسخ به یادداشت ${replyTo.author}` : 'یادداشت تازه ثبت شد.',
     })
+    await commitNotesBundle([...notes, note], [activity, ...activities])
     playChime('click')
+    showToast('یادداشت روی سرور ثبت شد.')
   }
 
-  const handleEditNote = (noteId: string, text: string) => {
-    if (!has('view_person_notes') || !has('edit_person_note')) { showToast('مجوز ویرایش یادداشت را ندارید.'); return }
+  const handleEditNote = async (noteId: string, text: string) => {
+    if (!has('view_person_notes') || !has('edit_person_note')) throw new Error('مجوز ویرایش یادداشت را ندارید.')
     const note = notes.find(candidate => candidate.id === noteId)
-    setNotes(cur => cur.map(item => item.id === noteId ? { ...item, text, edited: true } : item))
-    if (note) {
-      const person = people.find(candidate => candidate.id === note.personId)
-      recordActivity({
-        personId: note.personId,
-        personName: person ? `${person.firstName} ${person.lastName}` : note.personId,
-        action: 'ویرایش یادداشت',
-        details: 'یادداشت ویرایش شد.',
-      })
-    }
+    if (!note) throw new Error('یادداشت موردنظر پیدا نشد؛ صفحه را تازه‌سازی کنید.')
+    const person = people.find(candidate => candidate.id === note.personId)
+    const activity = makeActivity({
+      personId: note.personId,
+      personName: person ? `${person.firstName} ${person.lastName}` : note.personId,
+      action: 'ویرایش یادداشت',
+      details: 'یادداشت ویرایش شد.',
+    })
+    const nextNotes = notes.map(item => item.id === noteId ? { ...item, text, edited: true } : item)
+    await commitNotesBundle(nextNotes, [activity, ...activities])
+    showToast('یادداشت ویرایش شد.')
   }
 
-  const handleDeleteNote = (noteId: string) => {
-    if (!has('view_person_notes') || !has('delete_person_note')) { showToast('مجوز حذف یادداشت را ندارید.'); return }
+  const handleDeleteNote = async (noteId: string) => {
+    if (!has('view_person_notes') || !has('delete_person_note')) throw new Error('مجوز حذف یادداشت را ندارید.')
     const note = notes.find(candidate => candidate.id === noteId)
-    setNotes(cur => cur.filter(item => item.id !== noteId))
-    if (note) {
-      const person = people.find(candidate => candidate.id === note.personId)
-      recordActivity({
-        personId: note.personId,
-        personName: person ? `${person.firstName} ${person.lastName}` : note.personId,
-        action: 'حذف یادداشت',
-        details: 'یادداشت حذف شد.',
-      })
-    }
+    if (!note) throw new Error('یادداشت موردنظر پیدا نشد؛ صفحه را تازه‌سازی کنید.')
+    const person = people.find(candidate => candidate.id === note.personId)
+    const activity = makeActivity({
+      personId: note.personId,
+      personName: person ? `${person.firstName} ${person.lastName}` : note.personId,
+      action: 'حذف یادداشت',
+      details: 'یادداشت حذف شد.',
+    })
+    await commitNotesBundle(notes.filter(item => item.id !== noteId), [activity, ...activities])
+    showToast('یادداشت حذف شد.')
   }
 
   const exportAllPeople = () => {
@@ -987,7 +1045,13 @@ export default function App() {
         serverMessage={serverMessage}
         onShowSetup={() => setSetupOpen(true)}
         onLogin={async (username, password, remember) => {
-          const data = await loginOnServer(username, password, remember)
+          const result = await loginOnServer(username, password, remember)
+          if ('mfa_required' in result) return result
+          applyServerBootstrap(result)
+          playChime('success')
+        }}
+        onVerifyMfa={async (code, remember) => {
+          const data = await verifyLoginMfa(code, remember)
           applyServerBootstrap(data)
           playChime('success')
         }}
@@ -1324,12 +1388,12 @@ export default function App() {
               onExportExcel={() => { void handleExportServerPeople() }}
               onSelect={setSelected}
               onBulkStatus={handleBulkStatus}
-              onBulkDelete={ids => {
+              onBulkDelete={async ids => {
                 if (!has('delete_person')) { showToast('مجوز حذف گروهی پرونده را ندارید.'); return false }
                 if (!window.confirm(`حذف ${ids.length} پرونده انتخاب‌شده؟`)) return false
                 const deletedPeople = people.filter(person => ids.includes(person.id))
-                setPeople(cur => cur.filter(person => !ids.includes(person.id)))
-                const deletedActivities = deletedPeople.map(person => ({
+                if (!deletedPeople.length || deletedPeople.length !== new Set(ids).size) { showToast('فهرست پرونده‌های انتخاب‌شده معتبر نیست.'); return false }
+                const deletedActivities: Activity[] = deletedPeople.map(person => ({
                   id: uid('ACT'),
                   personId: person.id,
                   personName: `${person.firstName} ${person.lastName}`,
@@ -1343,10 +1407,15 @@ export default function App() {
                   createdByRole: currentUser.role,
                   ts: nowTs(),
                 }))
-                setActivities(cur => [...deletedActivities, ...cur])
-                auditLog('حذف پرونده', `حذف گروهی ${deletedPeople.length} پرونده`)
-                showToast(`${deletedPeople.length} پرونده حذف شدند.`)
-                return true
+                const auditEntry = auditLog('حذف پرونده', `حذف گروهی ${deletedPeople.length} پرونده`)
+                try {
+                  await commitPeopleBundle(people.filter(person => !ids.includes(person.id)), [...deletedActivities, ...activities], [auditEntry, ...audit])
+                  showToast(`${deletedPeople.length} پرونده حذف شدند.`)
+                  return true
+                } catch (cause) {
+                  showToast(cause instanceof Error ? `حذف گروهی ناموفق بود: ${cause.message}` : 'حذف گروهی ناموفق بود.')
+                  return false
+                }
               }}
             />
           )}
@@ -1432,7 +1501,22 @@ export default function App() {
             />
           )}
 
-          {page === 'settings' && canViewSettings && <Settings key={JSON.stringify(appSettings)} settings={appSettings} canManage={has('manage_settings')} canManageWorkflow={has('manage_workflow')} onManageWorkflow={() => setWorkflowManagerOpen(true)} onSave={handleSaveSettings} />}
+          {page === 'settings' && canViewSettings && currentUser && <Settings
+            key={JSON.stringify(appSettings)}
+            settings={appSettings}
+            canManage={has('manage_settings')}
+            canManageWorkflow={has('manage_workflow')}
+            isSystemAdmin={currentUser.role === 'admin'}
+            totpEnrolled={totpEnrolled}
+            onStartTotpEnrollment={startTotpEnrollment}
+            onConfirmTotpEnrollment={async code => {
+              await confirmTotpEnrollment(code)
+              setTotpEnrolled(true)
+              showToast('برنامهٔ احراز هویت برای حساب مدیر ثبت شد.')
+            }}
+            onManageWorkflow={() => setWorkflowManagerOpen(true)}
+            onSave={handleSaveSettings}
+          />}
           {(!canOpenPage(page) || page === 'tasks') && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"><b className="block">این بخش برای حساب شما در دسترس نیست.</b><span>از مدیر سامانه بخواهید مجوز صفحه یا عملیات موردنیاز را در نقش یا تنظیم اختصاصی کاربر فعال کند.</span></section>}
         </div>
       </main>
@@ -1490,23 +1574,27 @@ export default function App() {
             setEditingPerson(p)
             setSelected(null)
           }}
-          onAssign={(p, uname) => {
+          onAssign={async (p, uname) => {
             if (!has('assign_person')) { showToast('مجوز ارجاع پرونده را ندارید.'); return }
             const previousAssignee = p.assignee ?? ''
             if (previousAssignee === uname) return
             const up = { ...p, assignee: uname || undefined }
             const previousName = users.find(user => user.username === previousAssignee)?.name ?? (previousAssignee || 'بدون ارجاع')
             const nextName = users.find(user => user.username === uname)?.name ?? (uname || 'بدون ارجاع')
-            setPeople(cur => cur.map(x => (x.id === p.id ? up : x)))
-            setSelected(up)
-            recordActivity({
-              personId: p.id,
-              personName: `${p.firstName} ${p.lastName}`,
-              action: 'ارجاع پرونده',
-              details: `از «${previousName}» به «${nextName}»`,
-            })
-            auditLog('ارجاع پرونده', `${p.id}: از «${previousName}» به «${nextName}»`)
-            showToast('پرونده با موفقیت ارجاع داده شد.')
+            const activity: Activity = {
+              id: uid('ACT'), personId: p.id, personName: `${p.firstName} ${p.lastName}`,
+              action: 'ارجاع پرونده', previousStatus: null, newStatus: null, rejectionReason: null,
+              details: `از «${previousName}» به «${nextName}»`, createdAt: nowStamp(),
+              createdBy: currentUser?.name ?? 'کاربر', createdByRole: currentUser?.role ?? 'admin', ts: nowTs(),
+            }
+            const auditEntry = auditLog('ارجاع پرونده', `${p.id}: از «${previousName}» به «${nextName}»`)
+            try {
+              const result = await commitPeopleBundle(people.map(person => person.id === p.id ? up : person), [activity, ...activities], [auditEntry, ...audit])
+              setSelected(result.people.find(person => person.id === p.id) ?? up)
+              showToast('پرونده با موفقیت ارجاع داده شد.')
+            } catch (cause) {
+              showToast(cause instanceof Error ? `ارجاع پرونده ناموفق بود: ${cause.message}` : 'ارجاع پرونده ناموفق بود.')
+            }
           }}
           onAddNote={handleAddNote}
           onEditNote={handleEditNote}
@@ -1584,6 +1672,7 @@ export default function App() {
           onSave={async (name, photo, currentPassword, newPassword) => {
             const updated = await updateProfileOnServer({ name, photo: photo || null, current_password: currentPassword, new_password: newPassword })
             setUsers(cur => cur.map(x => (x.username === currentUser.username ? normalizeUser(updated) : x)))
+            if (updated.security) setTotpEnrolled(updated.security.totp_enrolled)
             setProfileOpen(false)
             showToast('پروفایل به‌روزرسانی شد.')
           }}

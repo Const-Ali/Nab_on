@@ -337,7 +337,7 @@ function upgrade_permission_catalog(PDO $pdo, int $actorId): void {
 }
 
 function default_settings(): array {
-    return ['appName' => 'سامانه مدیریت پرونده ناب', 'twoFactor' => true, 'auditLog' => true, 'autoLogout' => false, 'autoLogoutMins' => 30, 'font' => 'vazir'];
+    return ['appName' => 'سامانه مدیریت پرونده ناب', 'twoFactor' => false, 'auditLog' => true, 'autoLogout' => false, 'autoLogoutMins' => 30, 'font' => 'vazir'];
 }
 
 function default_workflow_config(): array {
@@ -486,6 +486,28 @@ function current_user(PDO $pdo): ?array {
         session_destroy();
         return null;
     }
+
+    // Idle expiry is checked on the server, but only genuine browser interaction (or an
+    // activity heartbeat) advances the timestamp. Background notification polls do not.
+    $settings = state_value($pdo, 'nab:settings', []);
+    $settingsRow = isset($settings[0]) && is_array($settings[0]) ? $settings[0] : [];
+    $now = time();
+    $lastActivity = (int)($_SESSION['last_activity'] ?? 0);
+    $minutes = filter_var($settingsRow['autoLogoutMins'] ?? 30, FILTER_VALIDATE_INT);
+    if (!in_array($minutes, [5, 10, 15, 30, 60], true)) $minutes = 30;
+    if (!empty($settingsRow['autoLogout']) && $lastActivity > 0 && $now - $lastActivity >= $minutes * 60) {
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+        }
+        session_destroy();
+        return null;
+    }
+    if ($lastActivity <= 0 || (string)($_SERVER['HTTP_X_NAB_USER_ACTIVITY'] ?? '') === '1') {
+        $_SESSION['last_activity'] = $now;
+    }
+
     upgrade_permission_catalog($pdo, (int)$user['id']);
     return find_user_by_id($pdo, (int)$user['id']) ?? $user;
 }
@@ -511,6 +533,152 @@ function state_value(PDO $pdo, string $key, $fallback = []): array {
     if ($raw === false) return $fallback;
     $value = json_decode((string)$raw, true);
     return is_array($value) ? $value : $fallback;
+}
+
+function totp_base32_encode(string $value): string {
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $buffer = 0;
+    $bits = 0;
+    $encoded = '';
+    for ($i = 0, $length = strlen($value); $i < $length; $i++) {
+        $buffer = ($buffer << 8) | ord($value[$i]);
+        $bits += 8;
+        while ($bits >= 5) {
+            $bits -= 5;
+            $encoded .= $alphabet[($buffer >> $bits) & 31];
+        }
+        $buffer &= $bits > 0 ? (1 << $bits) - 1 : 0;
+    }
+    if ($bits > 0) $encoded .= $alphabet[($buffer << (5 - $bits)) & 31];
+    return $encoded;
+}
+
+function totp_base32_decode(string $value): ?string {
+    $value = strtoupper(preg_replace('/[^A-Z2-7]/', '', $value) ?? '');
+    if ($value === '') return null;
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $buffer = 0;
+    $bits = 0;
+    $decoded = '';
+    for ($i = 0, $length = strlen($value); $i < $length; $i++) {
+        $digit = strpos($alphabet, $value[$i]);
+        if ($digit === false) return null;
+        $buffer = ($buffer << 5) | $digit;
+        $bits += 5;
+        if ($bits >= 8) {
+            $bits -= 8;
+            $decoded .= chr(($buffer >> $bits) & 255);
+            $buffer &= $bits > 0 ? (1 << $bits) - 1 : 0;
+        }
+    }
+    return $decoded === '' ? null : $decoded;
+}
+
+function totp_derive_key(string $password, string $salt): string {
+    return hash_pbkdf2('sha256', $password, $salt, 300000, 32, true);
+}
+
+function totp_encrypt_secret(string $secret, string $key, string $salt): array {
+    if (!function_exists('openssl_encrypt') || strlen($key) !== 32 || strlen($salt) !== 16) fail(503, 'OpenSSL برای ثبت تأیید دومرحله‌ای روی هاست فعال نیست.');
+    $nonce = random_bytes(12);
+    $tag = '';
+    $ciphertext = openssl_encrypt($secret, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $nonce, $tag, 'NAB-TOTP-v1', 16);
+    if ($ciphertext === false || strlen($tag) !== 16) fail(503, 'رمزگذاری کلید تأیید دومرحله‌ای ناموفق بود.');
+    return [
+        'version' => 1,
+        'salt' => base64_encode($salt),
+        'nonce' => base64_encode($nonce),
+        'tag' => base64_encode($tag),
+        'ciphertext' => base64_encode($ciphertext),
+    ];
+}
+
+function totp_decrypt_secret(array $record, string $key): ?string {
+    if (!function_exists('openssl_decrypt') || strlen($key) !== 32 || (int)($record['version'] ?? 0) !== 1) return null;
+    $nonce = base64_decode((string)($record['nonce'] ?? ''), true);
+    $tag = base64_decode((string)($record['tag'] ?? ''), true);
+    $ciphertext = base64_decode((string)($record['ciphertext'] ?? ''), true);
+    if ($nonce === false || strlen($nonce) !== 12 || $tag === false || strlen($tag) !== 16 || $ciphertext === false) return null;
+    $secret = openssl_decrypt($ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $nonce, $tag, 'NAB-TOTP-v1');
+    return is_string($secret) && strlen($secret) >= 16 ? $secret : null;
+}
+
+function totp_code(string $secret, int $timestamp): string {
+    $counter = intdiv($timestamp, 30);
+    $message = pack('N2', intdiv($counter, 4294967296), $counter % 4294967296);
+    $digest = hash_hmac('sha1', $message, $secret, true);
+    $offset = ord($digest[strlen($digest) - 1]) & 0x0f;
+    $binary = unpack('N', substr($digest, $offset, 4));
+    $number = ((int)($binary[1] ?? 0)) & 0x7fffffff;
+    return str_pad((string)($number % 1000000), 6, '0', STR_PAD_LEFT);
+}
+
+function totp_verify(string $secret, string $code): bool {
+    $code = normalize_digits(trim($code));
+    if (!preg_match('/^\\d{6}$/', $code)) return false;
+    $now = time();
+    for ($window = -1; $window <= 1; $window++) {
+        if (hash_equals(totp_code($secret, $now + $window * 30), $code)) return true;
+    }
+    return false;
+}
+
+function totp_records(PDO $pdo): array {
+    return state_value($pdo, 'nab:security:totp', []);
+}
+
+function totp_is_enrolled(PDO $pdo, int $userId): bool {
+    $record = totp_records($pdo)[(string)$userId] ?? null;
+    if (!is_array($record) || (int)($record['version'] ?? 0) !== 1) return false;
+    $salt = base64_decode((string)($record['salt'] ?? ''), true);
+    $nonce = base64_decode((string)($record['nonce'] ?? ''), true);
+    $tag = base64_decode((string)($record['tag'] ?? ''), true);
+    $ciphertext = base64_decode((string)($record['ciphertext'] ?? ''), true);
+    return $salt !== false && strlen($salt) === 16
+        && $nonce !== false && strlen($nonce) === 12
+        && $tag !== false && strlen($tag) === 16
+        && $ciphertext !== false && strlen($ciphertext) >= 16;
+}
+
+function put_totp_record(PDO $pdo, int $userId, array $record, ?int $updatedBy): void {
+    $records = totp_records($pdo);
+    $records[(string)$userId] = $record;
+    put_state($pdo, 'nab:security:totp', $records, $updatedBy);
+}
+
+function remove_totp_record(PDO $pdo, int $userId, ?int $updatedBy): void {
+    $records = totp_records($pdo);
+    if (!array_key_exists((string)$userId, $records)) return;
+    unset($records[(string)$userId]);
+    if ($records) put_state($pdo, 'nab:security:totp', $records, $updatedBy);
+    else {
+        $stmt = $pdo->prepare('DELETE FROM nab_state WHERE state_key = ?');
+        $stmt->execute(['nab:security:totp']);
+    }
+}
+
+function rekey_totp_record_for_password(PDO $pdo, int $userId, string $oldPassword, string $newPassword, ?int $updatedBy): void {
+    $record = totp_records($pdo)[(string)$userId] ?? null;
+    if (!is_array($record)) return;
+    $oldSalt = base64_decode((string)($record['salt'] ?? ''), true);
+    if ($oldSalt === false || strlen($oldSalt) !== 16) {
+        remove_totp_record($pdo, $userId, $updatedBy);
+        return;
+    }
+    $secret = totp_decrypt_secret($record, totp_derive_key($oldPassword, $oldSalt));
+    if ($secret === null) {
+        remove_totp_record($pdo, $userId, $updatedBy);
+        return;
+    }
+    $newSalt = random_bytes(16);
+    $newKey = totp_derive_key($newPassword, $newSalt);
+    put_totp_record($pdo, $userId, totp_encrypt_secret($secret, $newKey, $newSalt), $updatedBy);
+}
+
+function totp_otpauth_uri(string $username, string $secret): string {
+    $issuer = 'Nab';
+    $label = rawurlencode($issuer . ':' . $username);
+    return 'otpauth://totp/' . $label . '?secret=' . rawurlencode($secret) . '&issuer=' . rawurlencode($issuer) . '&algorithm=SHA1&digits=6&period=30';
 }
 
 function state_version(PDO $pdo, string $key): string {
@@ -576,7 +744,7 @@ function backup_snapshot_payload(PDO $pdo, bool $lockRows = false): array {
     ];
 }
 
-function restore_backup_rows(PDO $pdo, array $restored): void {
+function restore_backup_rows(PDO $pdo, array $restored, int $restoredAuthVersion): void {
     $pdo->exec('DELETE FROM nab_state');
     $pdo->exec('DELETE FROM nab_login_attempts');
     $pdo->exec('DELETE FROM nab_users');
@@ -590,7 +758,7 @@ function restore_backup_rows(PDO $pdo, array $restored): void {
             (int)$row['id'], (string)$row['username'], (string)$row['display_name'], $roleId,
             (string)$row['title'], (string)($row['tone'] ?? 'blue'), (string)$row['password_hash'],
             !empty($row['is_active']) ? 1 : 0, $permissionsJson, $row['photo'] ?? null,
-            max(1, (int)($row['auth_version'] ?? 1)) + 1,
+            $restoredAuthVersion,
             (string)($row['created_at'] ?? gmdate('Y-m-d H:i:s')),
         ]);
     }
@@ -880,6 +1048,7 @@ function state_payload(PDO $pdo, array $user): array {
         'users' => visible_users_payload($pdo, $user),
         'user_count' => is_system_admin($user) ? (int)$pdo->query('SELECT COUNT(*) FROM nab_users')->fetchColumn() : null,
         'csrf' => (string)($_SESSION['csrf_token'] ?? ''),
+        'security' => ['totp_enrolled' => totp_is_enrolled($pdo, (int)$user['id'])],
         'state_versions' => state_versions($pdo, $user),
         'state' => [
             'nab:people' => $people,
@@ -897,14 +1066,46 @@ function state_payload(PDO $pdo, array $user): array {
 }
 
 function jalali_jdn(int $year, int $month, int $day): int {
-    $epbase = $year - ($year >= 0 ? 474 : 473);
-    $epyear = 474 + ((($epbase % 2820) + 2820) % 2820);
-    return $day
-        + ($month <= 7 ? ($month - 1) * 31 : ($month - 1) * 30 + 6)
-        + (int)floor(($epyear * 682 - 110) / 2816)
-        + ($epyear - 1) * 365
-        + (int)floor($epbase / 2820) * 1029983
-        + 1948320;
+    // Borkowski's break-point calendar agrees with the modern Iranian Solar Hijri
+    // calendar. The older 2820-year arithmetic cycle misclassified 1403 as common
+    // and 1404 as leap, rejecting the real 1403/12/30 date.
+    static $breaks = [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178];
+    $last = count($breaks) - 1;
+    if ($year < $breaks[0] || $year >= $breaks[$last]) throw new InvalidArgumentException('Jalali year is outside the supported range.');
+
+    $gregorianYear = $year + 621;
+    $leapJalali = -14;
+    $previousBreak = $breaks[0];
+    $jump = 0;
+    for ($i = 1; $i < count($breaks); $i++) {
+        $nextBreak = $breaks[$i];
+        $jump = $nextBreak - $previousBreak;
+        if ($year < $nextBreak) break;
+        $leapJalali += intdiv($jump, 33) * 8 + intdiv($jump % 33, 4);
+        $previousBreak = $nextBreak;
+    }
+    $yearSinceBreak = $year - $previousBreak;
+    $leapJalali += intdiv($yearSinceBreak, 33) * 8 + intdiv(($yearSinceBreak % 33) + 3, 4);
+    if (($jump % 33) === 4 && $jump - $yearSinceBreak === 4) $leapJalali++;
+
+    $leapGregorian = intdiv($gregorianYear, 4)
+        - intdiv((intdiv($gregorianYear, 100) + 1) * 3, 4)
+        - 150;
+    $marchDay = 20 + $leapJalali - $leapGregorian;
+
+    // Gregorian date -> Julian Day Number for Farvardin 1.
+    $gregorianY = $gregorianYear + 4800;
+    $gregorianMonth = 0; // March, after applying the standard March-based JDN formula.
+    $startJdn = $marchDay
+        + intdiv(153 * $gregorianMonth + 2, 5)
+        + 365 * $gregorianY
+        + intdiv($gregorianY, 4)
+        - intdiv($gregorianY, 100)
+        + intdiv($gregorianY, 400)
+        - 32045;
+
+    $monthOffset = ($month - 1) * 31 - intdiv($month, 7) * ($month - 7);
+    return $startJdn + $monthOffset + $day - 1;
 }
 
 function valid_jalali_date(string $value, bool $allowEmpty = false): bool {
@@ -1134,6 +1335,29 @@ function workflow_checklist_missing(array $stage, array $person): array {
     return $missing;
 }
 
+function checklist_mark_signature(mixed $mark): array {
+    $mark = is_array($mark) ? $mark : [];
+    $done = !empty($mark['done']);
+    if (!$done) return ['done' => false];
+    return [
+        'done' => true,
+        'checkedBy' => (string)($mark['checkedBy'] ?? ''),
+        'checkedAt' => (string)($mark['checkedAt'] ?? ''),
+    ];
+}
+
+function same_checklist_progress(array $left, array $right): bool {
+    $ids = array_values(array_unique(array_map('strval', array_merge(array_keys($left), array_keys($right)))));
+    sort($ids, SORT_STRING);
+    $normalizedLeft = [];
+    $normalizedRight = [];
+    foreach ($ids as $id) {
+        $normalizedLeft[$id] = checklist_mark_signature($left[$id] ?? null);
+        $normalizedRight[$id] = checklist_mark_signature($right[$id] ?? null);
+    }
+    return json_encode($normalizedLeft, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) === json_encode($normalizedRight, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
 function authorize_stage_checklist(array $before, array $candidate, array $user, array $workflow): array {
     $oldProgress = is_array($before['stageChecklist'] ?? null) ? $before['stageChecklist'] : [];
     $requested = is_array($candidate['stageChecklist'] ?? null) ? $candidate['stageChecklist'] : [];
@@ -1142,7 +1366,10 @@ function authorize_stage_checklist(array $before, array $candidate, array $user,
     if (!$stage) fail(422, 'مرحلهٔ جاری پرونده در گردش‌کار پیدا نشد.');
     $oldCurrent = is_array($oldProgress[$currentId] ?? null) ? $oldProgress[$currentId] : [];
     $requestedCurrent = is_array($requested[$currentId] ?? null) ? $requested[$currentId] : $oldCurrent;
-    if (!has_permission($user, 'complete_checklist') && $requestedCurrent !== $oldCurrent) fail(403, 'مجوز تکمیل چک‌لیست مرحله را ندارید.');
+    // A missing uncompleted mark and an explicit {done:false} are the same manual checklist state.
+    // The server may materialize false marks when a rule is first saved; that normalization must not
+    // turn a later unrelated edit into a checklist permission failure.
+    if (!has_permission($user, 'complete_checklist') && !same_checklist_progress($requestedCurrent, $oldCurrent)) fail(403, 'مجوز تکمیل چک‌لیست مرحله را ندارید.');
 
     $allowed = [];
     foreach (($stage['checklist'] ?? []) as $rule) {
@@ -1650,7 +1877,7 @@ try {
     if (!is_array($config)) fail(503, 'پیکربندی هاست معتبر نیست.');
     $pdo = db_connection($config);
 
-    $remember = $action === 'login' && !empty($body['remember']);
+    $remember = in_array($action, ['login', 'mfa_verify'], true) && !empty($body['remember']);
     $cookieSecure = (bool)($config['secure_cookie'] ?? true);
     session_name('NABSESSID');
     ini_set('session.use_strict_mode', '1');
@@ -1663,10 +1890,22 @@ try {
         'samesite' => 'Lax',
     ]);
     session_start();
+    foreach (['mfa_pending', 'mfa_setup_pending'] as $pendingKey) {
+        $pendingState = $_SESSION[$pendingKey] ?? null;
+        if (is_array($pendingState) && (int)($pendingState['expires_at'] ?? 0) < time()) unset($_SESSION[$pendingKey]);
+    }
 
     if ($method === 'OPTIONS') reply(204, ['success' => true]);
     if ($method === 'POST' && !in_array($action, ['login', 'setup'], true)) {
-        if (!current_user($pdo)) fail(401, 'نشست شما معتبر نیست یا منقضی شده است؛ دوباره وارد شوید.');
+        if ($action === 'mfa_verify') {
+            $pendingMfa = $_SESSION['mfa_pending'] ?? null;
+            if (!is_array($pendingMfa) || (int)($pendingMfa['expires_at'] ?? 0) < time()) {
+                unset($_SESSION['mfa_pending']);
+                fail(401, 'مرحلهٔ تأیید دومرحله‌ای منقضی شده است؛ دوباره وارد شوید.');
+            }
+        } elseif (!current_user($pdo)) {
+            fail(401, 'نشست شما معتبر نیست یا منقضی شده است؛ دوباره وارد شوید.');
+        }
         require_csrf();
     }
 
@@ -1700,11 +1939,13 @@ try {
         $user = find_user_by_id($pdo, $adminId);
         $_SESSION['user_id'] = $adminId;
         $_SESSION['auth_version'] = 1;
+        $_SESSION['last_activity'] = time();
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         reply(201, ['success' => true, 'data' => state_payload($pdo, $user)]);
     }
 
     if ($action === 'login' && $method === 'POST') {
+        unset($_SESSION['mfa_pending']);
         $username = strtolower(trim((string)($body['username'] ?? '')));
         $password = (string)($body['password'] ?? '');
         if ($username === '' || $password === '' || strlen($username) > 64 || strlen($password) > 1024) fail(422, 'نام کاربری و رمز عبور را وارد کنید.');
@@ -1722,23 +1963,203 @@ try {
             $stmt->execute([$attemptKey, $count >= 5 ? 0 : $count, $lockedUntil]);
             fail(401, 'نام کاربری یا رمز عبور نادرست است.');
         }
-        $stmt = $pdo->prepare('DELETE FROM nab_login_attempts WHERE attempt_key = ?');
-        $stmt->execute([$attemptKey]);
         if (password_needs_rehash((string)$user['password_hash'], PASSWORD_DEFAULT)) {
             $stmt = $pdo->prepare('UPDATE nab_users SET password_hash = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
             $stmt->execute([password_hash($password, PASSWORD_DEFAULT), (int)$user['id']]);
         }
+
+        $settings = state_value($pdo, 'nab:settings', []);
+        $settingsRow = isset($settings[0]) && is_array($settings[0]) ? $settings[0] : [];
+        $requiresTotp = !empty($settingsRow['twoFactor']) && (string)$user['role_id'] === 'admin';
+        if ($requiresTotp) {
+            $mode = 'setup';
+            $salt = random_bytes(16);
+            $key = totp_derive_key($password, $salt);
+            $records = totp_records($pdo);
+            if (array_key_exists((string)$user['id'], $records)) {
+                $record = $records[(string)$user['id']];
+                if (!is_array($record)) fail(503, 'اطلاعات تأیید دومرحله‌ای این حساب معتبر نیست؛ مدیر سیستم باید ثبت دستگاه را بازنشانی کند.');
+                $storedSalt = base64_decode((string)($record['salt'] ?? ''), true);
+                if ($storedSalt === false || strlen($storedSalt) !== 16) fail(503, 'اطلاعات تأیید دومرحله‌ای این حساب معتبر نیست؛ مدیر سیستم باید ثبت دستگاه را بازنشانی کند.');
+                $storedKey = totp_derive_key($password, $storedSalt);
+                $storedSecret = totp_decrypt_secret($record, $storedKey);
+                if ($storedSecret === null) fail(503, 'کلید تأیید دومرحله‌ای با رمز فعلی بازگشایی نشد؛ مدیر سیستم باید ثبت دستگاه را بازنشانی کند.');
+                $mode = 'verify';
+                $secret = totp_base32_encode($storedSecret);
+                $salt = $storedSalt;
+                $key = $storedKey;
+            } else {
+                $secret = totp_base32_encode(random_bytes(20));
+            }
+            session_regenerate_id(true);
+            $_SESSION = [];
+            $_SESSION['mfa_pending'] = [
+                'user_id' => (int)$user['id'],
+                'auth_version' => (int)$user['auth_version'],
+                'mode' => $mode,
+                'secret' => $secret,
+                'salt' => base64_encode($salt),
+                'key' => base64_encode($key),
+                'attempt_key' => $attemptKey,
+                'expires_at' => time() + 300,
+                'remember' => $remember,
+            ];
+            $_SESSION['last_activity'] = time();
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            $challenge = ['mfa_required' => true, 'mode' => $mode, 'username' => $username];
+            if ($mode === 'setup') {
+                $challenge['secret'] = $secret;
+                $challenge['otpauth_uri'] = totp_otpauth_uri($username, $secret);
+            }
+            reply(200, ['success' => true, 'data' => $challenge, 'csrf' => $_SESSION['csrf_token']]);
+        }
+
+        $stmt = $pdo->prepare('DELETE FROM nab_login_attempts WHERE attempt_key = ?');
+        $stmt->execute([$attemptKey]);
         session_regenerate_id(true);
+        $_SESSION = [];
         $_SESSION['user_id'] = (int)$user['id'];
         $_SESSION['auth_version'] = (int)$user['auth_version'];
+        $_SESSION['last_activity'] = time();
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         reply(200, ['success' => true, 'data' => state_payload($pdo, $user)]);
+    }
+
+    if ($action === 'mfa_verify' && $method === 'POST') {
+        $pending = $_SESSION['mfa_pending'] ?? null;
+        if (!is_array($pending) || (int)($pending['expires_at'] ?? 0) < time()) {
+            unset($_SESSION['mfa_pending']);
+            fail(401, 'مرحلهٔ تأیید دومرحله‌ای منقضی شده است؛ دوباره وارد شوید.');
+        }
+        if ((bool)($pending['remember'] ?? false) !== $remember) fail(422, 'گزینهٔ ماندگاری نشست تغییر کرده است؛ ورود را دوباره آغاز کنید.');
+        $user = find_user_by_id($pdo, (int)($pending['user_id'] ?? 0));
+        if (!$user || !(bool)$user['is_active'] || (int)$user['auth_version'] !== (int)($pending['auth_version'] ?? -1)) {
+            unset($_SESSION['mfa_pending']);
+            fail(401, 'حساب تغییر کرده یا غیرفعال شده است؛ دوباره وارد شوید.');
+        }
+        $secret = totp_base32_decode((string)($pending['secret'] ?? ''));
+        $code = (string)($body['code'] ?? '');
+        if ($secret === null || !totp_verify($secret, $code)) {
+            $attemptKey = (string)($pending['attempt_key'] ?? '');
+            if (preg_match('/^[a-f0-9]{64}$/', $attemptKey)) {
+                $stmt = $pdo->prepare('SELECT fail_count, locked_until FROM nab_login_attempts WHERE attempt_key = ?');
+                $stmt->execute([$attemptKey]);
+                $lock = $stmt->fetch();
+                $count = (int)($lock['fail_count'] ?? 0) + 1;
+                $lockedUntil = $count >= 5 ? gmdate('Y-m-d H:i:s', time() + 15 * 60) : null;
+                $stmt = $pdo->prepare('INSERT INTO nab_login_attempts (attempt_key, fail_count, locked_until, updated_at) VALUES (?, ?, ?, UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE fail_count = VALUES(fail_count), locked_until = VALUES(locked_until), updated_at = VALUES(updated_at)');
+                $stmt->execute([$attemptKey, $count >= 5 ? 0 : $count, $lockedUntil]);
+                if ($count >= 5) {
+                    unset($_SESSION['mfa_pending']);
+                    fail(429, 'به‌دلیل کدهای دومرحله‌ای نادرست، ورود موقتاً قفل شد.');
+                }
+            }
+            fail(422, 'کد شش‌رقمی دومرحله‌ای نادرست است یا منقضی شده است.');
+        }
+
+        if ((string)($pending['mode'] ?? '') === 'setup') {
+            $key = base64_decode((string)($pending['key'] ?? ''), true);
+            $salt = base64_decode((string)($pending['salt'] ?? ''), true);
+            if ($key === false || strlen($key) !== 32 || $salt === false || strlen($salt) !== 16) fail(401, 'فرایند ثبت دستگاه منقضی شده است؛ دوباره وارد شوید.');
+            $record = totp_encrypt_secret($secret, $key, $salt);
+            acquire_state_write_lock($pdo);
+            try {
+                $pdo->beginTransaction();
+                put_totp_record($pdo, (int)$user['id'], $record, (int)$user['id']);
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                release_state_write_lock($pdo);
+                throw $error;
+            }
+            release_state_write_lock($pdo);
+        }
+
+        $attemptKey = (string)($pending['attempt_key'] ?? '');
+        if (preg_match('/^[a-f0-9]{64}$/', $attemptKey)) {
+            $stmt = $pdo->prepare('DELETE FROM nab_login_attempts WHERE attempt_key = ?');
+            $stmt->execute([$attemptKey]);
+        }
+        session_regenerate_id(true);
+        $_SESSION = [];
+        $_SESSION['user_id'] = (int)$user['id'];
+        $_SESSION['auth_version'] = (int)$user['auth_version'];
+        $_SESSION['last_activity'] = time();
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        reply(200, ['success' => true, 'data' => state_payload($pdo, $user)]);
+    }
+
+    if ($action === 'mfa_enroll_start' && $method === 'POST') {
+        $user = require_user($pdo);
+        if ((string)$user['role_id'] !== 'admin') fail(403, 'ثبت احراز دومرحله‌ای فقط برای حساب مدیر سیستم فعال است.');
+        $currentPassword = (string)($body['current_password'] ?? '');
+        if (!password_verify($currentPassword, (string)$user['password_hash'])) fail(422, 'رمز فعلی حساب نادرست است.');
+        $secret = totp_base32_encode(random_bytes(20));
+        $salt = random_bytes(16);
+        $key = totp_derive_key($currentPassword, $salt);
+        $_SESSION['mfa_setup_pending'] = [
+            'user_id' => (int)$user['id'],
+            'auth_version' => (int)$user['auth_version'],
+            'secret' => $secret,
+            'salt' => base64_encode($salt),
+            'key' => base64_encode($key),
+            'expires_at' => time() + 300,
+            'attempts' => 0,
+        ];
+        reply(200, ['success' => true, 'data' => [
+            'secret' => $secret,
+            'otpauth_uri' => totp_otpauth_uri((string)$user['username'], $secret),
+            'expires_in' => 300,
+        ]]);
+    }
+
+    if ($action === 'mfa_enroll_confirm' && $method === 'POST') {
+        $user = require_user($pdo);
+        if ((string)$user['role_id'] !== 'admin') fail(403, 'ثبت احراز دومرحله‌ای فقط برای حساب مدیر سیستم فعال است.');
+        $pending = $_SESSION['mfa_setup_pending'] ?? null;
+        if (!is_array($pending) || (int)($pending['user_id'] ?? 0) !== (int)$user['id']
+            || (int)($pending['auth_version'] ?? -1) !== (int)$user['auth_version'] || (int)($pending['expires_at'] ?? 0) < time()) {
+            unset($_SESSION['mfa_setup_pending']);
+            fail(422, 'فرایند ثبت دستگاه منقضی شده است؛ دوباره آغاز کنید.');
+        }
+        $secret = totp_base32_decode((string)($pending['secret'] ?? ''));
+        if ($secret === null || !totp_verify($secret, (string)($body['code'] ?? ''))) {
+            $attempts = (int)($pending['attempts'] ?? 0) + 1;
+            if ($attempts >= 5) {
+                unset($_SESSION['mfa_setup_pending']);
+                fail(429, 'تعداد تلاش‌های ثبت کد بیشتر از حد مجاز شد؛ ثبت دستگاه را دوباره آغاز کنید.');
+            }
+            $_SESSION['mfa_setup_pending']['attempts'] = $attempts;
+            fail(422, 'کد شش‌رقمی برنامهٔ احراز هویت نادرست یا منقضی است.');
+        }
+        $key = base64_decode((string)($pending['key'] ?? ''), true);
+        $salt = base64_decode((string)($pending['salt'] ?? ''), true);
+        if ($key === false || strlen($key) !== 32 || $salt === false || strlen($salt) !== 16) fail(422, 'فرایند رمزگذاری ثبت دستگاه معتبر نیست؛ دوباره آغاز کنید.');
+        $record = totp_encrypt_secret($secret, $key, $salt);
+        acquire_state_write_lock($pdo);
+        try {
+            $pdo->beginTransaction();
+            put_totp_record($pdo, (int)$user['id'], $record, (int)$user['id']);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            release_state_write_lock($pdo);
+            throw $error;
+        }
+        release_state_write_lock($pdo);
+        unset($_SESSION['mfa_setup_pending']);
+        reply(200, ['success' => true, 'data' => ['enrolled' => true]]);
     }
 
     if ($action === 'bootstrap' && $method === 'GET') {
         $user = require_user($pdo);
         if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         reply(200, ['success' => true, 'data' => state_payload($pdo, $user)]);
+    }
+
+    if ($action === 'session_touch' && $method === 'GET') {
+        require_user($pdo);
+        reply(200, ['success' => true]);
     }
 
     if ($action === 'logout' && $method === 'POST') {
@@ -1818,8 +2239,19 @@ try {
         try {
             $pdo->beginTransaction();
             $currentSnapshot = backup_snapshot_payload($pdo, true);
+            $maximumAuthVersion = 0;
+            foreach (($currentSnapshot['tables']['nab_users'] ?? []) as $currentUserRow) {
+                $maximumAuthVersion = max($maximumAuthVersion, (int)($currentUserRow['auth_version'] ?? 0));
+            }
+            foreach ($restored['users'] as $restoredUserRow) {
+                $maximumAuthVersion = max($maximumAuthVersion, (int)($restoredUserRow['auth_version'] ?? 0));
+            }
+            // auth_version is INT UNSIGNED. Set every restored account above every version
+            // present before or inside the backup, so no old cookie can match after restore.
+            if ($maximumAuthVersion >= 4294967295) fail(409, 'بازیابی به‌دلیل رسیدن نسخهٔ نشست به سقف مجاز متوقف شد؛ با پشتیبانی هاست تماس بگیرید.');
+            $restoredAuthVersion = $maximumAuthVersion + 1;
             $safety = write_safety_backup($currentSnapshot, $safetyPassword, $config, $configPath, 'before-restore');
-            restore_backup_rows($pdo, $restored);
+            restore_backup_rows($pdo, $restored, $restoredAuthVersion);
             $pdo->commit();
         } catch (Throwable $error) {
             if ($pdo->inTransaction()) $pdo->rollBack();
@@ -1849,7 +2281,7 @@ try {
                 'nab:roles', 'nab:workflow', 'nab:settings',
                 'nab:permissions_catalog_v2', 'nab:permissions_catalog_v3', 'nab:permissions_catalog_v4',
                 'nab:permissions_catalog_v5', 'nab:permissions_catalog_v6', 'nab:permissions_catalog_v7',
-                'nab:legacy_migration_completed',
+                'nab:legacy_migration_completed', 'nab:security:totp',
             ];
             $placeholders = implode(',', array_fill(0, count($preservedKeys), '?'));
             $deleteStates = $pdo->prepare('DELETE FROM nab_state WHERE state_key NOT IN (' . $placeholders . ')');
@@ -1896,11 +2328,87 @@ try {
             'ts' => server_timestamp_ms(),
         ];
         put_state($pdo, 'nab:audit', $audit, (int)$user['id']);
-        $versions = state_versions($pdo, $user);
+        $allVersions = state_versions($pdo, $user);
+        $versions = array_intersect_key($allVersions, array_flip(['nab:workflow']));
         $version = $versions['nab:workflow'];
+        $result = ['version' => $version, 'state_versions' => $versions];
+        if (has_permission($user, 'view_audit_log')) {
+            $result['audit'] = $audit;
+            $result['state_versions']['nab:audit'] = state_version($pdo, 'nab:audit');
+        }
         $pdo->commit();
         release_state_write_lock($pdo);
-        reply(200, ['success' => true, 'data' => ['version' => $version, 'state_versions' => $versions]]);
+        reply(200, ['success' => true, 'data' => $result]);
+    }
+
+    if ($action === 'notes_save' && $method === 'POST') {
+        $user = require_user($pdo);
+        if (!has_permission($user, 'view_persons') || !has_permission($user, 'view_person_notes')) fail(403, 'مجوز دسترسی به گفتگوها را ندارید.');
+        $notes = $body['notes'] ?? null;
+        $activities = $body['activities'] ?? [];
+        $expectedVersion = $body['expected_version'] ?? '';
+        if (!is_array($notes) || count($notes) > 50000 || !is_array($activities) || count($activities) > 50000) fail(422, 'فهرست یادداشت‌ها یا رویدادها معتبر نیست.');
+        if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ یادداشت‌ها در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
+        acquire_state_write_lock($pdo);
+        try {
+            $pdo->beginTransaction();
+            verify_expected_state_version($pdo, 'nab:notes', $expectedVersion);
+            $cleanNotes = authorize_notes($pdo, $user, $notes);
+            $cleanActivities = sanitize_append_only($pdo, $user, 'nab:activities', $activities);
+            put_state($pdo, 'nab:notes', $cleanNotes, (int)$user['id']);
+            put_state($pdo, 'nab:activities', $cleanActivities, (int)$user['id']);
+            $allVersions = state_versions($pdo, $user);
+            $versions = array_intersect_key($allVersions, array_flip(['nab:notes', 'nab:activities']));
+            $result = ['notes' => $cleanNotes, 'state_versions' => $versions];
+            if (has_permission($user, 'view_activities')) $result['activities'] = $cleanActivities;
+            $pdo->commit();
+            release_state_write_lock($pdo);
+            reply(200, ['success' => true, 'data' => $result]);
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            release_state_write_lock($pdo);
+            throw $error;
+        }
+    }
+
+    if ($action === 'people_save' && $method === 'POST') {
+        $user = require_user($pdo);
+        if (!has_permission($user, 'view_persons')) fail(403, 'مجوز دسترسی به پرونده‌ها را ندارید.');
+        $people = $body['people'] ?? null;
+        $activities = $body['activities'] ?? [];
+        $audit = $body['audit'] ?? [];
+        $expectedVersion = $body['expected_version'] ?? '';
+        if (!is_array($people) || count($people) > 10000) fail(422, 'فهرست پرونده‌ها معتبر نیست.');
+        if (!is_array($activities) || count($activities) > 50000 || !is_array($audit) || count($audit) > 50000) fail(422, 'فهرست سوابق پرونده معتبر نیست.');
+        if (!is_string($expectedVersion) || !preg_match('/^[a-f0-9]{64}$/', $expectedVersion)) fail(428, 'نسخهٔ پرونده‌ها در دسترس نیست؛ صفحه را تازه‌سازی کنید.');
+
+        acquire_state_write_lock($pdo);
+        try {
+            $pdo->beginTransaction();
+            verify_expected_state_version($pdo, 'nab:people', $expectedVersion);
+            $previousPeople = state_value($pdo, 'nab:people', []);
+            $cleanPeople = authorize_people_change($pdo, $user, $people);
+            record_assignment_notifications($pdo, $user, $previousPeople, $cleanPeople);
+            // Activity and audit writes are operation-authorized and append-only. This lets
+            // users perform permitted work without granting them permission to read reports.
+            $cleanActivities = sanitize_append_only($pdo, $user, 'nab:activities', $activities);
+            $cleanAudit = sanitize_append_only($pdo, $user, 'nab:audit', $audit);
+            put_state($pdo, 'nab:people', $cleanPeople, (int)$user['id']);
+            put_state($pdo, 'nab:activities', $cleanActivities, (int)$user['id']);
+            put_state($pdo, 'nab:audit', $cleanAudit, (int)$user['id']);
+            $allVersions = state_versions($pdo, $user);
+            $versions = array_intersect_key($allVersions, array_flip(['nab:people', 'nab:activities', 'nab:audit', notification_state_key((string)$user['username'])]));
+            $result = ['people' => $cleanPeople, 'state_versions' => $versions];
+            if (has_permission($user, 'view_activities')) $result['activities'] = $cleanActivities;
+            if (has_permission($user, 'view_audit_log')) $result['audit'] = $cleanAudit;
+            $pdo->commit();
+            release_state_write_lock($pdo);
+            reply(200, ['success' => true, 'data' => $result]);
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            release_state_write_lock($pdo);
+            throw $error;
+        }
     }
 
     if ($action === 'state_save' && $method === 'POST') {
@@ -1948,14 +2456,19 @@ try {
                 $role['permissions'] = array_values(array_unique(array_intersect(all_permissions(), array_filter($role['permissions'], 'is_string'))));
                 $dependencyError = permission_dependency_error($role['permissions']);
                 if ($dependencyError !== null) fail(422, $dependencyError);
+                $previousRole = $oldById[$role['id']] ?? null;
                 if ($role['id'] === 'admin') {
-                    if (!is_system_admin($user)) fail(403, 'تعریف نقش مدیر سیستم فقط توسط مدیر سیستم قابل ویرایش است.');
+                    if (!is_system_admin($user)) {
+                        $adminUnchanged = $previousRole !== null
+                            && trim((string)($previousRole['title'] ?? '')) === $role['title']
+                            && same_permission_set($role['permissions'], $previousRole['permissions'] ?? null);
+                        if (!$adminUnchanged) fail(403, 'تعریف نقش مدیر سیستم فقط توسط مدیر سیستم قابل ویرایش است.');
+                    }
                     $role['permissions'] = all_permissions();
                 } else {
                     $role['permissions'] = array_values(array_diff(array_values(array_filter($role['permissions'], 'is_string')), ['purge_server_data']));
                 }
 
-                $previousRole = $oldById[$role['id']] ?? null;
                 if ($previousRole === null) {
                     if (!$canCreateRole) fail(403, 'برای ایجاد نقش جدید به مجوز مستقل ایجاد نقش نیاز دارید.');
                 } else {
@@ -2181,9 +2694,12 @@ try {
             'ts' => server_timestamp_ms(),
         ];
         put_state($pdo, 'nab:audit', $audit, (int)$user['id']);
-        $versions = state_versions($pdo, $user);
-        $result = ['people' => $allPeople, 'audit' => $audit, 'importedCount' => count($newPeople), 'state_versions' => $versions];
-        if (has_permission($user, 'view_activities')) $result['activities'] = array_reverse($importActivities);
+        $allVersions = state_versions($pdo, $user);
+        $changedKeys = ['nab:people', 'nab:audit', 'nab:activities', notification_state_key((string)$user['username'])];
+        $versions = array_intersect_key($allVersions, array_flip($changedKeys));
+        $result = ['people' => $allPeople, 'importedCount' => count($newPeople), 'state_versions' => $versions];
+        if (has_permission($user, 'view_audit_log')) $result['audit'] = $audit;
+        if (has_permission($user, 'view_activities')) $result['activities'] = $allActivities;
         $pdo->commit();
         release_state_write_lock($pdo);
         reply(200, ['success' => true, 'data' => $result]);
@@ -2374,9 +2890,23 @@ try {
         $photo = isset($body['photo']) ? (string)$body['photo'] : ($target['photo'] ?? null);
         if ($photo !== null && strlen((string)$photo) > 2 * 1024 * 1024) fail(413, 'حجم تصویر پروفایل بیش از حد مجاز است.');
         $hash = $password !== '' ? password_hash($password, PASSWORD_DEFAULT) : (string)$target['password_hash'];
-        $version = (int)$target['auth_version'] + ($password !== '' || !$active ? 1 : 0);
-        $stmt = $pdo->prepare('UPDATE nab_users SET display_name = ?, role_id = ?, title = ?, tone = ?, password_hash = ?, is_active = ?, permissions_json = ?, photo = ?, auth_version = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
-        $stmt->execute([$name, $role, $title, $tone, $hash, $active ? 1 : 0, json_encode($permissions), $photo, $version, (int)$target['id']]);
+        $accessChanged = $role !== (string)$target['role_id']
+            || $active !== (bool)$target['is_active']
+            || !same_permission_set($permissions, user_permissions($target));
+        $version = (int)$target['auth_version'] + ($password !== '' || $accessChanged ? 1 : 0);
+        acquire_state_write_lock($pdo);
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare('UPDATE nab_users SET display_name = ?, role_id = ?, title = ?, tone = ?, password_hash = ?, is_active = ?, permissions_json = ?, photo = ?, auth_version = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
+            $stmt->execute([$name, $role, $title, $tone, $hash, $active ? 1 : 0, json_encode($permissions), $photo, $version, (int)$target['id']]);
+            if ($password !== '') remove_totp_record($pdo, (int)$target['id'], (int)$actor['id']);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            release_state_write_lock($pdo);
+            throw $error;
+        }
+        release_state_write_lock($pdo);
         reply(200, ['success' => true, 'data' => updated_user($pdo, $username)]);
     }
 
@@ -2388,8 +2918,19 @@ try {
         if (!$target) fail(404, 'کاربر پیدا نشد.');
         if ((int)$target['id'] === (int)$actor['id']) fail(403, 'حساب فعال خودتان را نمی‌توانید حذف کنید.');
         if ((string)$target['role_id'] === 'admin') ensure_another_admin($pdo, (int)$target['id']);
-        $stmt = $pdo->prepare('DELETE FROM nab_users WHERE id = ?');
-        $stmt->execute([(int)$target['id']]);
+        acquire_state_write_lock($pdo);
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare('DELETE FROM nab_users WHERE id = ?');
+            $stmt->execute([(int)$target['id']]);
+            remove_totp_record($pdo, (int)$target['id'], (int)$actor['id']);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            release_state_write_lock($pdo);
+            throw $error;
+        }
+        release_state_write_lock($pdo);
         reply(200, ['success' => true]);
     }
 
@@ -2404,18 +2945,33 @@ try {
         $passwordHash = (string)$actor['password_hash'];
         $version = (int)$actor['auth_version'];
         if ($newPassword !== '' || $currentPassword !== '') {
-            if (!password_verify($currentPassword, $passwordHash)) fail(401, 'رمز فعلی نادرست است.');
+            if (!password_verify($currentPassword, $passwordHash)) fail(422, 'رمز فعلی نادرست است.');
             check_password_length($newPassword);
             $passwordHash = password_hash($newPassword, PASSWORD_DEFAULT);
             $version++;
         }
-        $stmt = $pdo->prepare('UPDATE nab_users SET display_name = ?, photo = ?, password_hash = ?, auth_version = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
-        $stmt->execute([$name, $photo, $passwordHash, $version, (int)$actor['id']]);
+        acquire_state_write_lock($pdo);
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare('UPDATE nab_users SET display_name = ?, photo = ?, password_hash = ?, auth_version = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?');
+            $stmt->execute([$name, $photo, $passwordHash, $version, (int)$actor['id']]);
+            if ($newPassword !== '') rekey_totp_record_for_password($pdo, (int)$actor['id'], $currentPassword, $newPassword, (int)$actor['id']);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            release_state_write_lock($pdo);
+            throw $error;
+        }
+        release_state_write_lock($pdo);
+        if ($newPassword !== '') unset($_SESSION['mfa_setup_pending']);
         $_SESSION['auth_version'] = $version;
         session_regenerate_id(true);
         $_SESSION['user_id'] = (int)$actor['id'];
+        $_SESSION['last_activity'] = time();
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-        reply(200, ['success' => true, 'data' => updated_user($pdo, (string)$actor['username']), 'csrf' => $_SESSION['csrf_token']]);
+        $profileData = updated_user($pdo, (string)$actor['username']);
+        $profileData['security'] = ['totp_enrolled' => totp_is_enrolled($pdo, (int)$actor['id'])];
+        reply(200, ['success' => true, 'data' => $profileData, 'csrf' => $_SESSION['csrf_token']]);
     }
 
     if ($action === 'tasks_get' && $method === 'GET') {
@@ -2651,14 +3207,15 @@ try {
         $version = state_version($pdo, $taskKey);
         $pdo->commit();
         release_state_write_lock($pdo);
-        reply(200, ['success' => true, 'data' => ['version' => $version]]);
+        reply(200, ['success' => true, 'data' => ['version' => $version, 'tasks' => $cleanTasks]]);
     }
 
     if ($action === 'notifications_get' && $method === 'GET') {
         $user = require_user($pdo);
         if (!has_permission($user, 'view_persons')) fail(403, 'برای مشاهدهٔ اعلان‌های پرونده، مجوز مشاهدهٔ پرونده‌ها لازم است.');
         $items = notifications_for_user($pdo, $user);
-        reply(200, ['success' => true, 'data' => ['items' => $items, 'state_versions' => state_versions($pdo, $user)]]);
+        $notificationKey = notification_state_key((string)$user['username']);
+        reply(200, ['success' => true, 'data' => ['items' => $items, 'state_versions' => [$notificationKey => state_version($pdo, $notificationKey)]]]);
     }
 
     if ($action === 'notifications_read' && $method === 'POST') {
@@ -2685,7 +3242,7 @@ try {
             if (count($read) > 2000) $read = array_slice($read, -2000, null, true);
             put_state($pdo, $key, ['events' => $events, 'read' => $read], (int)$user['id']);
         }
-        $versions = state_versions($pdo, $user);
+        $versions = [$key => state_version($pdo, $key)];
         $pdo->commit();
         release_state_write_lock($pdo);
         reply(200, ['success' => true, 'data' => ['items' => notifications_for_user($pdo, $user), 'state_versions' => $versions]]);

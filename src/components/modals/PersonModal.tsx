@@ -62,9 +62,9 @@ export function PersonModal({
   onDelete: (p: Person) => void
   onEdit: (p: Person) => void
   onAssign: (p: Person, username: string) => void
-  onAddNote: (personId: string, text: string, replyTo?: { author: string; text: string }) => void
-  onEditNote: (noteId: string, text: string) => void
-  onDeleteNote: (noteId: string) => void
+  onAddNote: (personId: string, text: string, replyTo?: { author: string; text: string }) => Promise<void>
+  onEditNote: (noteId: string, text: string) => Promise<void>
+  onDeleteNote: (noteId: string) => Promise<void>
 }) {
   const currentStageId = stageIdForPerson(person, workflowConfig)
   const currentStage = stageById(workflowConfig, currentStageId)
@@ -82,11 +82,32 @@ export function PersonModal({
   const [editingNote, setEditingNote] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [replyTo, setReplyTo] = useState<Note | null>(null)
+  const [noteSaving, setNoteSaving] = useState(false)
+  const [noteError, setNoteError] = useState('')
 
-  const saveNoteEdit = () => {
-    if (editingNote && editText.trim()) {
-      onEditNote(editingNote, editText.trim())
+  const saveNoteEdit = async () => {
+    if (!editingNote || !editText.trim()) return
+    setNoteSaving(true)
+    setNoteError('')
+    try {
+      await onEditNote(editingNote, editText.trim())
       setEditingNote(null)
+    } catch (cause) {
+      setNoteError(cause instanceof Error ? cause.message : 'ذخیرهٔ ویرایش یادداشت ناموفق بود.')
+    } finally {
+      setNoteSaving(false)
+    }
+  }
+
+  const deleteNote = async (noteId: string) => {
+    setNoteSaving(true)
+    setNoteError('')
+    try {
+      await onDeleteNote(noteId)
+    } catch (cause) {
+      setNoteError(cause instanceof Error ? cause.message : 'حذف یادداشت ناموفق بود.')
+    } finally {
+      setNoteSaving(false)
     }
   }
 
@@ -113,12 +134,20 @@ export function PersonModal({
   const currentIndex = stages.findIndex(stage => stage.id === currentStageId)
   const ownsNote = (note: Note) => note.authorUsername === meUsername
 
-  const submitNote = () => {
+  const submitNote = async () => {
     const text = noteText.trim()
-    if (!text) return
-    onAddNote(person.id, text, replyTo ? { author: replyTo.author, text: replyTo.text } : undefined)
-    setNoteText('')
-    setReplyTo(null)
+    if (!text || noteSaving) return
+    setNoteSaving(true)
+    setNoteError('')
+    try {
+      await onAddNote(person.id, text, replyTo ? { author: replyTo.author, text: replyTo.text } : undefined)
+      setNoteText('')
+      setReplyTo(null)
+    } catch (cause) {
+      setNoteError(cause instanceof Error ? cause.message : 'ثبت یادداشت روی سرور ناموفق بود.')
+    } finally {
+      setNoteSaving(false)
+    }
   }
 
   const assignedUser = usersList.find(u => u.username === person.assignee)
@@ -247,6 +276,7 @@ export function PersonModal({
         </div>}
         {canViewPersonNotes && activeTab === 'chat' && (
           <>
+            {noteError && <p className="text-sm text-rose-700 dark:text-rose-300" role="alert">{noteError}</p>}
             <div className="chat" ref={chatRef}>
               {notes.map(note => (
                 <div className={`msg ${ownsNote(note) ? 'mine' : ''}`} key={note.id}>
@@ -260,7 +290,7 @@ export function PersonModal({
                     {(ownsNote(note) || canManageAnyNote) && (canEditNotes || canDeleteNotes) && (
                       <span className="msg-tools flex items-center gap-1">
                         {canEditNotes && <Button type="button" variant="ghost" size="xs" title="ویرایش یادداشت" aria-label="ویرایش یادداشت" onClick={() => { setEditingNote(note.id); setEditText(note.text) }}>ویرایش</Button>}
-                        {canDeleteNotes && <Button type="button" variant="dangerGhost" size="xs" title="حذف یادداشت" aria-label="حذف یادداشت" onClick={() => onDeleteNote(note.id)}>حذف</Button>}
+                        {canDeleteNotes && <Button type="button" variant="dangerGhost" size="xs" title="حذف یادداشت" aria-label="حذف یادداشت" disabled={noteSaving} onClick={() => void deleteNote(note.id)}>حذف</Button>}
                       </span>
                     )}
                   </header>
@@ -273,8 +303,8 @@ export function PersonModal({
                     <div className="note-edit">
                       <textarea value={editText} onChange={e => setEditText(e.target.value)} />
                       <div className="mt-2 flex flex-wrap justify-end gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => setEditingNote(null)}>انصراف</Button>
-                        <Button type="button" variant="primary" size="sm" disabled={!editText.trim()} onClick={saveNoteEdit}>ذخیره</Button>
+                        <Button type="button" variant="outline" size="sm" disabled={noteSaving} onClick={() => setEditingNote(null)}>انصراف</Button>
+                        <Button type="button" variant="primary" size="sm" loading={noteSaving} loadingText="در حال ذخیره…" disabled={!editText.trim()} onClick={() => void saveNoteEdit()}>ذخیره</Button>
                       </div>
                     </div>
                   ) : <p>{renderText(note.text)}</p>}
@@ -296,16 +326,17 @@ export function PersonModal({
             {canCreateNote && <div className="composer">
               <textarea
                 value={noteText}
+                disabled={noteSaving}
                 onChange={e => setNoteText(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
-                    submitNote()
+                    void submitNote()
                   }
                 }}
                 placeholder="نظر یا نکته‌ای بنویسید... (با @ کاربران را منشن کنید)"
               />
-              <Button type="button" variant="primary" size="sm" className="w-full sm:w-auto" disabled={!noteText.trim()} onClick={submitNote}>ارسال</Button>
+              <Button type="button" variant="primary" size="sm" className="w-full sm:w-auto" loading={noteSaving} loadingText="در حال ذخیره…" disabled={!noteText.trim()} onClick={() => void submitNote()}>ارسال</Button>
             </div>}
           </>
         )}

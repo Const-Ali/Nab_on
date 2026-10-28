@@ -60,10 +60,12 @@ export default function TasksApp() {
 
   const saveTasksOnHost = useCallback(async (nextTasks: WorkTask[]) => {
     try {
-      await syncTasks(nextTasks, user?.username ?? '')
+      const result = await syncTasks(nextTasks, user?.username ?? '')
       setSyncError('')
+      return result.tasks.map((task, index) => normalizeTask(task, index))
     } catch (cause) {
       setSyncError(cause instanceof Error ? cause.message : 'ذخیرهٔ کارها روی هاست ناموفق بود.')
+      throw cause
     }
   }, [user])
 

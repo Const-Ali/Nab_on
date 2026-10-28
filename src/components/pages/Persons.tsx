@@ -65,10 +65,11 @@ export function Persons({
   onImportExcel: () => void
   onExportExcel: () => void
   onSelect: (p: Person) => void
-  onBulkStatus: (ids: string[], targetStageId: string) => void
-  onBulkDelete: (ids: string[]) => boolean
+  onBulkStatus: (ids: string[], targetStageId: string) => boolean | Promise<boolean>
+  onBulkDelete: (ids: string[]) => boolean | Promise<boolean>
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
   const canSelect = canChange || canDelete || canExportCsv
   const [pageNo, setPageNo] = useState(0)
   const [pageSize, setPageSize] = useState<PersonPageSize>(() => {
@@ -269,11 +270,18 @@ export function Persons({
             {bulkOptions.length > 0 && (
               <select className={cn(selectCls, 'mt-0 sm:w-52')}
                 defaultValue=""
+                disabled={bulkBusy}
                 aria-label="انتقال گروهی به مرحلهٔ بعد مجاز"
                 onChange={e => {
-                  if (!e.target.value) return
-                  onBulkStatus([...selectedIds], e.target.value)
-                  setSelectedIds(new Set())
+                  const targetStageId = e.target.value
+                  if (!targetStageId || bulkBusy) return
+                  const target = e.currentTarget
+                  const ids = [...selectedIds]
+                  setBulkBusy(true)
+                  void Promise.resolve(onBulkStatus(ids, targetStageId)).then(changed => {
+                    if (changed) setSelectedIds(new Set())
+                    else target.value = ''
+                  }).catch(() => { target.value = '' }).finally(() => setBulkBusy(false))
                 }}
               >
                 <option value="" disabled>انتقال به مرحلهٔ بعد...</option>
@@ -288,8 +296,15 @@ export function Persons({
                 type="button"
                 variant="dangerGhost"
                 size="xs"
+                loading={bulkBusy}
+                loadingText="در حال حذف…"
+                disabled={bulkBusy}
                 onClick={() => {
-                  if (onBulkDelete([...selectedIds])) setSelectedIds(new Set())
+                  const ids = [...selectedIds]
+                  setBulkBusy(true)
+                  void Promise.resolve(onBulkDelete(ids)).then(deleted => {
+                    if (deleted) setSelectedIds(new Set())
+                  }).finally(() => setBulkBusy(false))
                 }}
               >
                  حذف گروهی
